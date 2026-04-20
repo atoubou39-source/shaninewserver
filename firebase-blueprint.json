@@ -1,0 +1,121 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "A spice product in the store",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number", "description": "Unique identifier" },
+        "name": { "type": "string", "description": "Product name" },
+        "description": { "type": "string", "description": "Detailed product description" },
+        "price": { "type": "string", "description": "Formatted price string" },
+        "image": { "type": "string", "description": "Image URL" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "price", "image"]
+    },
+    "SEO": {
+      "title": "SEO Settings",
+      "description": "SEO metadata for a page",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "keywords": { "type": "string" }
+      },
+      "required": ["title", "description", "keywords"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "A customer order",
+      "type": "object",
+      "properties": {
+        "customerName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phone1": { "type": "string" },
+        "phone2": { "type": "string" },
+        "address": { "type": "string" },
+        "city": { "type": "string" },
+        "district": { "type": "string" },
+        "paymentMethod": { "type": "string", "enum": ["cod", "bank_transfer"] },
+        "items": { 
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "number" },
+              "name": { "type": "string" },
+              "price": { "type": "string" },
+              "quantity": { "type": "number" }
+            }
+          }
+        },
+        "total": { "type": "number" },
+        "status": { 
+          "type": "string", 
+          "enum": ["pending_payment", "processing", "shipped", "completed", "cancelled", "refunded"] 
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["customerName", "phone1", "address", "city", "district", "paymentMethod", "items", "total", "status", "createdAt"]
+    },
+    "User": {
+      "title": "User",
+      "description": "A user profile (admin or customer)",
+      "type": "object",
+      "properties": {
+        "facilityName": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "address": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["admin", "customer"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["facilityName", "phoneNumber", "role"]
+    },
+    "Offer": {
+      "title": "Offer",
+      "description": "A promotional offer for customers",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "image": { "type": "string" },
+        "code": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "description", "active"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Collection of spice products"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Collection of customer orders"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Collection of user profiles"
+    },
+    "/offers/{offerId}": {
+      "schema": "Offer",
+      "description": "Collection of promotional offers"
+    },
+    "/settings/seo": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "home": { "$ref": "SEO" },
+          "collection": { "$ref": "SEO" },
+          "about": { "$ref": "SEO" }
+        }
+      },
+      "description": "Global SEO settings for the site"
+    }
+  }
+}

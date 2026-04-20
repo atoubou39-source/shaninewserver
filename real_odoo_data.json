@@ -1,0 +1,123 @@
+◇ injected env (5) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+[
+  {
+    "id": 23,
+    "name": "Acoustic Bloc Screens",
+    "list_price": 295,
+    "description_sale": false
+  },
+  {
+    "id": 37,
+    "name": "Booking Fees",
+    "list_price": 50,
+    "description_sale": false
+  },
+  {
+    "id": 15,
+    "name": "Cabinet with Doors",
+    "list_price": 140,
+    "description_sale": false
+  },
+  {
+    "id": 50,
+    "name": "Cable Management Box",
+    "list_price": 120,
+    "description_sale": false
+  },
+  {
+    "id": 49,
+    "name": "Cable Management Box",
+    "list_price": 100,
+    "description_sale": false
+  },
+  {
+    "id": 36,
+    "name": "Chair floor protection",
+    "list_price": 12,
+    "description_sale": "Office chairs can harm your floor: protect it."
+  },
+  {
+    "id": 16,
+    "name": "Conference Chair",
+    "list_price": 33,
+    "description_sale": false
+  },
+  {
+    "id": 18,
+    "name": "Corner Desk Left Sit",
+    "list_price": 85,
+    "description_sale": false
+  },
+  {
+    "id": 10,
+    "name": "Corner Desk Right Sit",
+    "list_price": 147,
+    "description_sale": false
+  },
+  {
+    "id": 9,
+    "name": "Customizable Desk",
+    "list_price": 750,
+    "description_sale": "160x80cm, with large legs."
+  },
+  {
+    "id": 52,
+    "name": "Customized Cabinet (Metric)",
+    "list_price": 210,
+    "description_sale": false
+  },
+  {
+    "id": 51,
+    "name": "Customized Cabinet (USA)",
+    "list_price": 200,
+    "description_sale": false
+  },
+  {
+    "id": 35,
+    "name": "Deposit",
+    "list_price": 150,
+    "description_sale": false
+  },
+  {
+    "id": 8,
+    "name": "Desk Combination",
+    "list_price": 450,
+    "description_sale": "Desk combination, black-brown: chair + desk + drawer."
+  },
+  {
+    "id": 31,
+    "name": "Desk Organizer",
+    "list_price": 5.1,
+    "description_sale": "The desk organiser is perfect for storing all kinds of small things and since the 5 boxes are loose, you can move and place them in the way that suits you and your things best."
+  },
+  {
+    "id": 32,
+    "name": "Desk Pad",
+    "list_price": 1.98,
+    "description_sale": false
+  },
+  {
+    "id": 21,
+    "name": "Desk Stand with Screen",
+    "list_price": 2100,
+    "description_sale": false
+  },
+  {
+    "id": 40,
+    "name": "Developer (Plan services)",
+    "list_price": 200,
+    "description_sale": false
+  },
+  {
+    "id": 42,
+    "name": "Digital Marketing Campaign (project)",
+    "list_price": 123,
+    "description_sale": false
+  },
+  {
+    "id": 24,
+    "name": "Drawer",
+    "list_price": 110.5,
+    "description_sale": false
+  }
+]

@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: shanis-flavor-lab-api
+    runtime: node
+    plan: starter
+    autoDeploy: true
+    rootDir: .
+    buildCommand: npm install
+    startCommand: npm run dev
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ODOO_URL
+        sync: false
+      - key: ODOO_DB
+        sync: false
+      - key: ODOO_USERNAME
+        sync: false
+      - key: ODOO_PASSWORD
+        sync: false
+      - key: ODOO_WEBHOOK_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        sync: false
