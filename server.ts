@@ -191,15 +191,16 @@ async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
-  // 1. Bulletproof CORS & Preflight Handler (The "Nuclear" Solution)
+  // 1. FINAL SOLUTION: Absolute top-level CORS & Preflight Handler
   app.use((req, res, next) => {
+    // Get the request origin
     const origin = req.headers.origin;
     
-    // Log the incoming request details for debugging in Railway Logs
+    // Log for Railway Logs (Critical for debugging)
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-    console.log(`[CORS DEBUG] Origin Header: ${origin || 'none'}`);
-    
-    // If there's an origin, echo it back. This is the most reliable way for CORS with credentials.
+    console.log(`[CORS] Request Origin: ${origin || 'none'}`);
+
+    // CORS Headers: Always echo the origin if it exists to satisfy browsers' security
     if (origin) {
       res.setHeader("Access-Control-Allow-Origin", origin);
     } else {
@@ -208,23 +209,20 @@ async function startServer() {
 
     res.setHeader("Access-Control-Allow-Credentials", "true");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH");
-    res.setHeader("Access-Control-Allow-Headers", "X-Requested-With, Content-Type, Accept, Authorization, x-odoo-secret, Cache-Control, Pragma, Origin, X-Custom-Header, X-Firebase-Auth, If-Modified-Since");
+    res.setHeader("Access-Control-Allow-Headers", "X-Requested-With, Content-Type, Accept, Authorization, x-odoo-secret, Cache-Control, Pragma, Origin, X-Custom-Header, X-Firebase-Auth, If-Modified-Since, Access-Control-Allow-Origin");
     res.setHeader("Access-Control-Max-Age", "86400"); // Cache preflight for 24h
 
-    // If this is a preflight request, stop here and return 204
+    // Handle Preflight (OPTIONS)
     if (req.method === 'OPTIONS') {
-      console.log(`[CORS DEBUG] Handled Preflight (OPTIONS) for Origin: ${origin || 'none'}`);
-      return res.sendStatus(204);
+      console.log(`[CORS] Sent 204 for OPTIONS preflight from: ${origin || 'none'}`);
+      return res.status(204).send();
     }
 
     next();
   });
 
-  // 2. Fallback CORS for any missed cases (using the cors package)
-  app.use(cors({
-    origin: true, // true echoes the origin back to the request
-    credentials: true
-  }));
+  // REMOVED redundant cors() middleware to avoid duplicate headers
+  // app.use(cors(...));
 
   // 3. Request Parsers
   app.use(express.json());

@@ -3157,13 +3157,32 @@ const OrderManager = ({ orders, setModalContent }: { orders: Order[], setModalCo
   const fetchOdooOrders = async () => {
     setLoadingOdoo(true);
     try {
-      const resp = await fetch(getApiUrl("/api/odoo/orders"));
+      const url = getApiUrl("/api/odoo/orders");
+      console.log(`[Odoo Sync] Fetching orders from: ${url}`);
+      
+      const resp = await fetch(url, {
+        method: "GET",
+        mode: "cors",
+        credentials: "include",
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json",
+          "X-Requested-With": "XMLHttpRequest"
+        }
+      });
+
+      if (!resp.ok) {
+        throw new Error(`HTTP Error: ${resp.status} ${resp.statusText}`);
+      }
+
       const data = await resp.json();
       if (data.success) {
         setOdooOrders(data.data);
+      } else {
+        console.error("[Odoo Sync] API returned success:false", data);
       }
     } catch (e) {
-      console.error(e);
+      console.error("[Odoo Sync] Fetch failed:", e);
     } finally {
       setLoadingOdoo(false);
     }
