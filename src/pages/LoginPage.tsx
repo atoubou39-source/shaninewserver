@@ -82,13 +82,13 @@ export const LoginPage = () => {
       >
         <button 
           onClick={toggleLang}
-          className="absolute top-6 left-6 flex items-center space-x-2 space-x-reverse text-brand-navy hover:text-brand-orange transition-colors z-10"
+          className="absolute top-6 start-6 flex items-center gap-2 text-brand-navy hover:text-brand-orange transition-colors z-10"
         >
           <Globe size={20} />
           <span className="text-[10px] font-bold tracking-widest">{lang === 'en' ? 'AR' : 'EN'}</span>
         </button>
 
-        <div className="absolute top-0 right-0 w-32 h-32 bg-brand-orange/5 rounded-full -mr-16 -mt-16" />
+        <div className="absolute top-0 end-0 w-32 h-32 bg-brand-orange/5 rounded-full -me-16 -mt-16" />
         
         <div className="text-center mb-10 relative">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-brand-navy/5 rounded-3xl mb-6">
@@ -117,17 +117,17 @@ export const LoginPage = () => {
 
         <form onSubmit={handleLogin} className="space-y-6 relative">
           <div className="space-y-2">
-            <label className={`text-[10px] font-bold text-gray-400 uppercase tracking-widest block ${lang === 'ar' ? 'mr-1' : 'ml-1'}`}>
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block ms-1">
               {t.auth.email}
             </label>
             <div className="relative">
-              <Mail className={`absolute ${lang === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-gray-400`} size={18} />
+              <Mail className="absolute end-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input 
                 type="email" 
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className={`w-full ${lang === 'ar' ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange focus:bg-white transition-all font-medium text-brand-navy`}
+                className="w-full pe-12 ps-4 py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange focus:bg-white transition-all font-medium text-brand-navy text-end"
                 placeholder="email@example.com"
               />
             </div>
@@ -147,13 +147,13 @@ export const LoginPage = () => {
               </button>
             </div>
             <div className="relative">
-              <Lock className={`absolute ${lang === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-gray-400`} size={18} />
+              <Lock className="absolute end-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input 
                 type="password" 
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className={`w-full ${lang === 'ar' ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange focus:bg-white transition-all font-medium text-brand-navy`}
+                className="w-full pe-12 ps-4 py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange focus:bg-white transition-all font-medium text-brand-navy"
                 placeholder="••••••••"
               />
             </div>
@@ -162,7 +162,7 @@ export const LoginPage = () => {
           <button 
             type="submit"
             disabled={loading}
-            className="w-full bg-brand-navy text-white py-5 rounded-2xl text-[11px] font-bold tracking-[0.2em] shadow-xl shadow-brand-navy/10 hover:bg-brand-orange transition-all duration-300 disabled:opacity-50"
+            className="w-full bg-brand-navy text-white py-5 rounded-2xl text-[11px] font-bold tracking-[0.2em] shadow-xl shadow-brand-navy/10 hover:bg-brand-orange transition-all duration-300 disabled:opacity-50 text-center"
           >
             {loading ? (lang === 'ar' ? 'جاري التحقق...' : 'VERIFYING...') : t.auth.loginBtn}
           </button>

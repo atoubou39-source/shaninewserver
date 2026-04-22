@@ -30,6 +30,33 @@ interface Customer {
   role: string;
 }
 
+const getApiUrl = (path: string) => {
+  const envBase = (import.meta as any).env?.VITE_API_BASE_URL;
+  if (!envBase) return path;
+
+  const cleanBase = envBase
+    .trim()
+    .replace(/^[/\)\s;`"']+/, "")
+    .replace(/[/\)\s;`"']+$/, "");
+  
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  
+  if (!cleanBase || cleanBase === "https://your-backend-domain.com") {
+    return cleanPath;
+  }
+
+  const finalBase = cleanBase.startsWith('http') ? cleanBase : `https://${cleanBase}`;
+
+  if (typeof window !== 'undefined') {
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (!isLocalhost) {
+      return `${finalBase}${cleanPath}`;
+    }
+  }
+  
+  return cleanPath; 
+};
+
 export const CustomerSyncDashboard = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [search, setSearch] = useState('');
@@ -48,12 +75,15 @@ export const CustomerSyncDashboard = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      const response = await fetch('/api/odoo/webhook', {
+      const response = await fetch(getApiUrl('/api/odoo/webhook'), {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
           'x-odoo-secret': 'manual-sync' // Special bypass or just use the real one if known
         },
+        mode: 'cors',
+        credentials: 'omit',
         body: JSON.stringify({
           odoo_id: parseInt(newCustomer.odooId),
           name: newCustomer.name,
@@ -94,7 +124,7 @@ export const CustomerSyncDashboard = () => {
   const handleActivate = async (uid: string) => {
     setActionLoading(uid);
     try {
-      const response = await fetch('/api/admin/activate-customer', {
+      const response = await fetch(getApiUrl('/api/admin/activate-customer'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ uid })

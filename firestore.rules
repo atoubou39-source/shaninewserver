@@ -102,10 +102,30 @@ service cloud.firestore {
 
     // Orders collection
     match /orders/{orderId} {
-      allow list: if isAdmin() || (isSignedIn() && resource.data.email == request.auth.token.email);
-      allow get: if isAdmin() || (isSignedIn() && resource.data.email == request.auth.token.email);
+      allow list: if isAdmin() || (isSignedIn() && (resource.data.userId == request.auth.uid || resource.data.email == request.auth.token.email));
+      allow get: if isAdmin() || (isSignedIn() && (resource.data.userId == request.auth.uid || resource.data.email == request.auth.token.email));
       allow create: if isSignedIn() && (isAdmin() || (request.auth.token.activated == true && request.auth.token.odooCustomer == true)) && isValidOrder(incoming());
-      allow update: if isAdmin();
+      
+      // Allow customers to update ONLY sync-related fields on their own orders
+      // so the UI can store the Odoo order number/status without exposing edits to the order content.
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        (resource.data.userId == request.auth.uid || resource.data.email == request.auth.token.email) &&
+        // Only these fields may change in a customer update
+        request.resource.data.diff(resource.data).changedKeys()
+          .hasOnly(['odooOrderName','odooOrderId','syncStatus','syncError','syncedAt','status']) &&
+        // Prevent tampering with order ownership/amount/items/etc
+        request.resource.data.customerName == resource.data.customerName &&
+        request.resource.data.email == resource.data.email &&
+        request.resource.data.phone1 == resource.data.phone1 &&
+        request.resource.data.address == resource.data.address &&
+        request.resource.data.city == resource.data.city &&
+        request.resource.data.district == resource.data.district &&
+        request.resource.data.paymentMethod == resource.data.paymentMethod &&
+        request.resource.data.items == resource.data.items &&
+        request.resource.data.total == resource.data.total &&
+        request.resource.data.createdAt == resource.data.createdAt
+      );
       allow delete: if isAdmin();
     }
 

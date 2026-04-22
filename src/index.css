@@ -1,9 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400;1,700&family=Cairo:wght@300;400;500;600;700;900&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Playfair Display", serif;
+  --font-arabic: "Cairo", sans-serif;
 
   --color-brand-navy: #1e293b;
   --color-brand-slate: #64748b;
@@ -15,6 +16,46 @@
 @layer base {
   body {
     @apply font-sans text-brand-navy bg-white antialiased;
+  }
+  
+  /* Arabic Typography Improvements */
+  html[dir="rtl"] body {
+    font-family: var(--font-arabic), var(--font-sans), sans-serif;
+    line-height: 1.8;
+    letter-spacing: -0.02em;
+  }
+  
+  html[dir="rtl"] {
+    text-align: right;
+  }
+  
+  /* Better Arabic text rendering */
+  html[dir="rtl"] * {
+    text-align: right;
+    font-family: var(--font-arabic), var(--font-sans), sans-serif;
+  }
+  
+  /* Fix Arabic numbers */
+  html[dir="rtl"] .font-mono {
+    font-family: 'Courier New', monospace;
+  }
+  
+  /* Improve Arabic line spacing */
+  html[dir="rtl"] p {
+    line-height: 1.8;
+    margin-bottom: 1.2rem;
+  }
+  
+  /* Better Arabic headings */
+  html[dir="rtl"] h1, 
+  html[dir="rtl"] h2, 
+  html[dir="rtl"] h3, 
+  html[dir="rtl"] h4, 
+  html[dir="rtl"] h5, 
+  html[dir="rtl"] h6 {
+    font-weight: 700;
+    line-height: 1.4;
+    letter-spacing: -0.03em;
   }
 }
 

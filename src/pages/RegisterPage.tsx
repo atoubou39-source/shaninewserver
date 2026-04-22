@@ -7,6 +7,33 @@ import { motion } from 'motion/react';
 import { UserPlus, Mail, Phone, Lock, ChevronLeft, AlertCircle, CheckCircle2, Globe, User as UserIcon } from 'lucide-react';
 import { translations, Language } from '../translations';
 
+const getApiUrl = (path: string) => {
+  const envBase = (import.meta as any).env?.VITE_API_BASE_URL;
+  if (!envBase) return path;
+
+  const cleanBase = envBase
+    .trim()
+    .replace(/^[/\)\s;`"']+/, "")
+    .replace(/[/\)\s;`"']+$/, "");
+  
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  
+  if (!cleanBase || cleanBase === "https://your-backend-domain.com") {
+    return cleanPath;
+  }
+
+  const finalBase = cleanBase.startsWith('http') ? cleanBase : `https://${cleanBase}`;
+
+  if (typeof window !== 'undefined') {
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (!isLocalhost) {
+      return `${finalBase}${cleanPath}`;
+    }
+  }
+  
+  return cleanPath; 
+};
+
 export const RegisterPage = () => {
   const [lang, setLang] = useState<Language>(() => {
     const saved = localStorage.getItem('app_lang');
@@ -64,11 +91,17 @@ export const RegisterPage = () => {
 
     try {
       // 1. First, check if the customer exists in Odoo
-      let odooData = { success: false, customer: null };
+      let odooData = { success: false, customer: null, isDemo: false };
       try {
-        const odooCheck = await fetch('/api/auth/verify-odoo-customer', {
+        const verifyUrl = getApiUrl('/api/auth/verify-odoo-customer');
+        const odooCheck = await fetch(verifyUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          mode: 'cors',
+          credentials: 'omit',
           body: JSON.stringify({ 
             phone: formData.phone,
             email: formData.email 
@@ -79,21 +112,14 @@ export const RegisterPage = () => {
         if (odooCheck.ok && contentType && contentType.includes("application/json")) {
           odooData = await odooCheck.json();
         } else {
-          const errorText = await odooCheck.text();
-          console.error("Odoo check failed or returned HTML:", odooCheck.status, errorText.substring(0, 100));
-          throw new Error(lang === 'ar' ? 'نظام التحقق غير متاح حالياً على هذا الرابط.' : 'Verification system not available on this URL.');
+          console.warn("Odoo check returned non-json or error status:", odooCheck.status);
         }
-      } catch (fetchErr: any) {
-        console.error("Fetch error during Odoo check:", fetchErr);
-        setStatus({ 
-          type: 'error', 
-          message: lang === 'ar' ? `فشل الاتصال بنظام التحقق: ${fetchErr.message || 'تأكد من اتصال الإنترنت'}` : `Connection failed: ${fetchErr.message}`
-        });
-        setLoading(false);
-        return;
+      } catch (e: any) {
+        console.warn("Odoo connection failed during registration (silent fallback):", e);
+        // We continue anyway to allow local registration
       }
       
-      if (!odooData.success) {
+      if (!odooData.success && !odooData.isDemo) {
         setStatus({ 
           type: 'error', 
           message: t.auth.odooRestricted 
@@ -157,13 +183,13 @@ export const RegisterPage = () => {
       >
         <button 
           onClick={toggleLang}
-          className="absolute top-6 left-6 flex items-center space-x-2 space-x-reverse text-brand-navy hover:text-brand-orange transition-colors z-10"
+          className="absolute top-6 start-6 flex items-center gap-2 text-brand-navy hover:text-brand-orange transition-colors z-10"
         >
           <Globe size={20} />
           <span className="text-[10px] font-bold tracking-widest">{lang === 'en' ? 'AR' : 'EN'}</span>
         </button>
 
-        <div className="absolute top-0 right-0 w-32 h-32 bg-brand-orange/5 rounded-full -mr-16 -mt-16" />
+        <div className="absolute top-0 end-0 w-32 h-32 bg-brand-orange/5 rounded-full -me-16 -mt-16" />
         
         <div className="text-center mb-10 relative">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-brand-navy/5 rounded-3xl mb-6">
@@ -177,7 +203,7 @@ export const RegisterPage = () => {
           <motion.div 
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className={`mb-8 p-4 rounded-2xl flex items-center space-x-3 space-x-reverse text-sm ${
+            className={`mb-8 p-4 rounded-2xl flex items-center gap-3 text-sm ${
               status.type === 'success' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'
             }`}
           >
@@ -188,88 +214,88 @@ export const RegisterPage = () => {
 
         <form onSubmit={handleRegister} className="grid md:grid-cols-2 gap-6 relative">
           <div className="space-y-2 md:col-span-2">
-            <label className={`text-[10px] font-bold text-gray-400 uppercase tracking-widest block ${lang === 'ar' ? 'mr-1' : 'ml-1'}`}>
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block ms-1">
               {t.auth.name}
             </label>
             <div className="relative">
-              <UserIcon className={`absolute ${lang === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-gray-400`} size={18} />
+              <UserIcon className="absolute end-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input 
                 name="name"
                 required
                 value={formData.name}
                 onChange={handleChange}
-                className={`w-full ${lang === 'ar' ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange focus:bg-white transition-all font-medium text-brand-navy`}
+                className="w-full pe-12 ps-4 py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange focus:bg-white transition-all font-medium text-brand-navy"
                 placeholder={lang === 'ar' ? "الاسم كما هو مسجل في اودو" : "Name as registered in Odoo"}
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <label className={`text-[10px] font-bold text-gray-400 uppercase tracking-widest block ${lang === 'ar' ? 'mr-1' : 'ml-1'}`}>
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block ms-1">
               {t.auth.email}
             </label>
             <div className="relative">
-              <Mail className={`absolute ${lang === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-gray-400`} size={18} />
+              <Mail className="absolute end-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input 
                 name="email"
                 type="email"
                 required
                 value={formData.email}
                 onChange={handleChange}
-                className={`w-full ${lang === 'ar' ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange focus:bg-white transition-all font-medium text-brand-navy`}
+                className="w-full pe-12 ps-4 py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange focus:bg-white transition-all font-medium text-brand-navy"
                 placeholder="email@example.com"
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <label className={`text-[10px] font-bold text-gray-400 uppercase tracking-widest block ${lang === 'ar' ? 'mr-1' : 'ml-1'}`}>
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block ms-1">
               {t.auth.phone}
             </label>
             <div className="relative">
-              <Phone className={`absolute ${lang === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-gray-400`} size={18} />
+              <Phone className="absolute end-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input 
                 name="phone"
                 required
                 value={formData.phone}
                 onChange={handleChange}
-                className={`w-full ${lang === 'ar' ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange focus:bg-white transition-all font-medium text-brand-navy`}
+                className="w-full pe-12 ps-4 py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange focus:bg-white transition-all font-medium text-brand-navy"
                 placeholder="966XXXXXXXXX"
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <label className={`text-[10px] font-bold text-gray-400 uppercase tracking-widest block ${lang === 'ar' ? 'mr-1' : 'ml-1'}`}>
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block ms-1">
               {t.auth.password}
             </label>
             <div className="relative">
-              <Lock className={`absolute ${lang === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-gray-400`} size={18} />
+              <Lock className="absolute end-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input 
                 name="password"
                 type="password"
                 required
                 value={formData.password}
                 onChange={handleChange}
-                className={`w-full ${lang === 'ar' ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange focus:bg-white transition-all font-medium text-brand-navy`}
+                className="w-full pe-12 ps-4 py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange focus:bg-white transition-all font-medium text-brand-navy"
                 placeholder="••••••••"
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <label className={`text-[10px] font-bold text-gray-400 uppercase tracking-widest block ${lang === 'ar' ? 'mr-1' : 'ml-1'}`}>
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block ms-1">
               {t.auth.confirmPassword}
             </label>
             <div className="relative">
-              <Lock className={`absolute ${lang === 'ar' ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-gray-400`} size={18} />
+              <Lock className="absolute end-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input 
                 name="confirmPassword"
                 type="password"
                 required
                 value={formData.confirmPassword}
                 onChange={handleChange}
-                className={`w-full ${lang === 'ar' ? 'pr-12 pl-4' : 'pl-12 pr-4'} py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange focus:bg-white transition-all font-medium text-brand-navy`}
+                className="w-full pe-12 ps-4 py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange focus:bg-white transition-all font-medium text-brand-navy"
                 placeholder="••••••••"
               />
             </div>
@@ -278,7 +304,7 @@ export const RegisterPage = () => {
           <button 
             type="submit"
             disabled={loading}
-            className="w-full md:col-span-2 bg-brand-navy text-white py-5 rounded-2xl text-[11px] font-bold tracking-[0.2em] shadow-xl shadow-brand-navy/10 hover:bg-brand-orange transition-all duration-300 disabled:opacity-50"
+            className="w-full md:col-span-2 bg-brand-navy text-white py-5 rounded-2xl text-[11px] font-bold tracking-[0.2em] shadow-xl shadow-brand-navy/10 hover:bg-brand-orange transition-all duration-300 disabled:opacity-50 text-center"
           >
             {loading ? (lang === 'ar' ? 'جاري إنشاء الحساب...' : 'CREATING ACCOUNT...') : t.auth.registerBtn}
           </button>
@@ -288,7 +314,7 @@ export const RegisterPage = () => {
           <p className="text-gray-400 text-xs font-medium mb-4">{t.auth.hasAccount}</p>
           <Link 
             to="/login" 
-            className="inline-flex items-center space-x-2 space-x-reverse text-brand-orange font-bold text-[11px] tracking-widest uppercase hover:text-brand-orange-hover transition-colors"
+            className="inline-flex items-center gap-2 text-brand-orange font-bold text-[11px] tracking-widest uppercase hover:text-brand-orange-hover transition-colors"
           >
             <span>{t.auth.login}</span>
             <ChevronLeft size={16} className={lang === 'ar' ? "" : "rotate-180"} />

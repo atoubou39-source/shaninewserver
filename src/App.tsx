@@ -43,7 +43,8 @@ import {
   Phone,
   Users,
   RefreshCw,
-  ArrowUpCircle
+  ArrowUpCircle,
+  Percent
 } from "lucide-react";
 import React, { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation, Navigate } from "react-router-dom";
@@ -59,7 +60,8 @@ import {
   query,
   orderBy,
   where,
-  or
+  or,
+  deleteField
 } from "firebase/firestore";
 import { 
   onAuthStateChanged, 
@@ -76,6 +78,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { PendingActivation } from "./pages/PendingActivation";
 import { CustomerSyncDashboard } from "./components/admin/CustomerSyncDashboard";
+import { DiscountsManager } from "./components/admin/DiscountsManager";
 import { useAuth } from "./hooks/useAuth";
 
 import { translations, Language } from "./translations";
@@ -138,6 +141,7 @@ interface Product {
   name: string;
   description: string;
   price: string;
+  discountPrice?: string;
   image: string;
   firebaseId?: string;
   isOdoo?: boolean;
@@ -318,9 +322,45 @@ const getStatusDetails = (status: string) => {
 };
 
 const getApiUrl = (path: string) => {
-  const base = (import.meta as any).env?.VITE_API_BASE_URL?.trim();
-  if (!base) return path;
-  return `${base.replace(/\/$/, "")}${path}`;
+  const envBase = (import.meta as any).env?.VITE_API_BASE_URL;
+  if (!envBase) return path;
+
+  // Extremely defensive cleaning:
+  // 1. Remove all quotes, backticks, and common typo characters from start and end
+  // 2. Trim all whitespace
+  const cleanBase = envBase
+    .trim()
+    .replace(/^[/\)\s;`"']+/, "")
+    .replace(/[/\)\s;`"']+$/, "");
+  
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  
+  // If the cleaned base is empty or just a placeholder, use relative path
+  if (!cleanBase || cleanBase === "https://your-backend-domain.com") {
+    return cleanPath;
+  }
+
+  // Ensure cleanBase starts with http/https
+  const finalBase = cleanBase.startsWith('http') ? cleanBase : `https://${cleanBase}`;
+
+  if (typeof window !== 'undefined') {
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    
+    // In production, use the absolute URL to reach the backend on Railway
+    if (!isLocalhost) {
+      return `${finalBase}${cleanPath}`;
+    }
+  }
+  
+  return cleanPath; 
+};
+
+// Helper to get full URL for logging/debugging
+const getFullUrl = (path: string) => {
+  const apiUrl = getApiUrl(path);
+  if (apiUrl.startsWith('http')) return apiUrl;
+  if (typeof window === 'undefined') return apiUrl;
+  return `${window.location.origin}${apiUrl}`;
 };
 
 
@@ -717,7 +757,7 @@ const Products = ({
                     className="inline-flex items-center space-x-2 space-x-reverse bg-brand-orange text-white px-6 py-3 rounded-xl text-[10px] font-bold tracking-widest hover:bg-brand-orange-hover transition-all shadow-lg shadow-brand-orange/20"
                   >
                     <RefreshCw size={14} />
-                    <span>SYNC FROM ODOO NOW</span>
+                    <span>{t.products.syncFromOdoo}</span>
                   </Link>
                 )}
               </div>
@@ -740,6 +780,11 @@ const Products = ({
                       className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
                       referrerPolicy="no-referrer"
                     />
+                    {p.discountPrice && (
+                      <div className="absolute top-3 start-3 bg-red-500 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-lg">
+                        {Math.round((1 - parseFloat(p.discountPrice.replace(/[^\d.]/g, '')) / parseFloat(p.price.replace(/[^\d.]/g, ''))) * 100)}% {t.products.off || 'OFF'}
+                      </div>
+                    )}
                     <div className="absolute inset-0 bg-brand-navy/0 group-hover:bg-brand-navy/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
                       <div className="bg-white text-brand-navy p-4 rounded-full shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform">
                         <Eye size={20} />
@@ -757,9 +802,22 @@ const Products = ({
                     <div className="mt-auto">
                       {user ? (
                         <>
-                          <p className="text-brand-orange font-serif font-bold text-lg mb-6">
-                            {t.products.pricePrefix}{p.price.replace(/[^\d.]/g, '')}
-                          </p>
+                          <div className="mb-6">
+                            {p.discountPrice ? (
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-brand-orange font-serif font-bold text-lg">
+                                  {t.products.pricePrefix}{p.discountPrice.replace(/[^\d.]/g, '')}
+                                </span>
+                                <span className="text-gray-400 font-serif text-sm line-through">
+                                  {t.products.pricePrefix}{p.price.replace(/[^\d.]/g, '')}
+                                </span>
+                              </div>
+                            ) : (
+                              <p className="text-brand-orange font-serif font-bold text-lg">
+                                {t.products.pricePrefix}{p.price.replace(/[^\d.]/g, '')}
+                              </p>
+                            )}
+                          </div>
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
@@ -1008,7 +1066,7 @@ const CustomerLoginPage = () => {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch("/api/send-otp", {
+      const response = await fetch(getApiUrl("/api/send-otp"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone }),
@@ -1034,7 +1092,7 @@ const CustomerLoginPage = () => {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch("/api/verify-otp", {
+      const response = await fetch(getApiUrl("/api/verify-otp"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone, otp }),
@@ -1067,7 +1125,7 @@ const CustomerLoginPage = () => {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch("/api/set-password", {
+      const response = await fetch(getApiUrl("/api/set-password"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ uid: tempUid, password: newPassword }),
@@ -1110,13 +1168,13 @@ const CustomerLoginPage = () => {
           <div className="space-y-4">
             <Link 
               to="/"
-              className="w-full bg-brand-navy text-white py-4 rounded-2xl text-xs font-bold tracking-widest hover:bg-brand-orange transition-all flex items-center justify-center space-x-2"
+              className="w-full bg-brand-navy text-white py-4 rounded-2xl text-xs font-bold tracking-widest hover:bg-brand-orange transition-all flex items-center justify-center gap-2"
             >
               <span>BACK TO SHOPPING</span>
             </Link>
             <button 
               onClick={() => signOut(auth)}
-              className="w-full bg-red-50 text-red-500 py-4 rounded-2xl text-xs font-bold tracking-widest hover:bg-red-100 transition-all flex items-center justify-center space-x-2"
+              className="w-full bg-red-50 text-red-500 py-4 rounded-2xl text-xs font-bold tracking-widest hover:bg-red-100 transition-all flex items-center justify-center gap-2"
             >
               <LogOut size={16} />
               <span>LOGOUT</span>
@@ -1357,10 +1415,12 @@ const CustomerLoginPage = () => {
 
 const AuthModal = ({ 
   isOpen, 
-  onClose 
+  onClose,
+  t
 }: { 
   isOpen: boolean, 
-  onClose: () => void 
+  onClose: () => void,
+  t: any
 }) => {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -1384,9 +1444,9 @@ const AuthModal = ({
     } catch (err: any) {
       console.error("Login error:", err);
       if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        setError("Invalid username or password.");
+        setError(t.auth.invalidCredentials);
       } else {
-        setError("Authentication failed.");
+        setError(t.auth.authFailed);
       }
     } finally {
       setLoading(false);
@@ -1426,14 +1486,14 @@ const AuthModal = ({
             <div className="w-20 h-20 bg-brand-orange/10 rounded-full flex items-center justify-center mx-auto mb-6">
               <UserIcon size={40} className="text-brand-orange" />
             </div>
-            <h2 className="text-2xl font-serif text-brand-navy mb-2">Welcome Back</h2>
+            <h2 className="text-2xl font-serif text-brand-navy mb-2">{t.auth.welcomeBack}</h2>
             <p className="text-gray-500 text-sm mb-8">{user.email || user.phoneNumber}</p>
             <button 
               onClick={handleLogout}
-              className="w-full bg-red-50 text-red-500 py-4 rounded-2xl text-xs font-bold tracking-widest hover:bg-red-100 transition-all flex items-center justify-center space-x-2"
+              className="w-full bg-red-50 text-red-500 py-4 rounded-2xl text-xs font-bold tracking-widest hover:bg-red-100 transition-all flex items-center justify-center gap-2"
             >
               <LogOut size={16} />
-              <span>LOGOUT</span>
+              <span>{t.auth.logout}</span>
             </button>
           </div>
         ) : (
@@ -1442,15 +1502,15 @@ const AuthModal = ({
               <div className="inline-flex items-center justify-center w-16 h-16 bg-brand-orange/10 rounded-2xl mb-6">
                 <Lock className="text-brand-orange" size={32} />
               </div>
-              <h2 className="text-3xl font-serif text-brand-navy mb-2">Login</h2>
-              <p className="text-gray-400 text-sm">Enter your credentials to access your account</p>
+              <h2 className="text-3xl font-serif text-brand-navy mb-2">{t.auth.login}</h2>
+              <p className="text-gray-400 text-sm">{t.auth.enterCredentials}</p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-6">
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center">
-                  <UserIcon size={12} className="mr-2" />
-                  Username or Email
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                  <UserIcon size={12} />
+                  {t.auth.usernameOrEmail}
                 </label>
                 <input 
                   type="text" 
@@ -1458,14 +1518,14 @@ const AuthModal = ({
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange transition-all"
-                  placeholder="Username"
+                  placeholder={t.auth.usernamePlaceholder}
                 />
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center">
-                  <Key size={12} className="mr-2" />
-                  Password
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                  <Key size={12} />
+                  {t.auth.password}
                 </label>
                 <input 
                   type="password" 
@@ -1492,7 +1552,7 @@ const AuthModal = ({
                 disabled={loading}
                 className="w-full bg-brand-navy text-white py-4 rounded-2xl text-[11px] tracking-[0.2em] font-bold hover:bg-brand-orange transition-all disabled:opacity-50"
               >
-                {loading ? "Verifying..." : "Login"}
+                {loading ? t.auth.verifying : t.auth.login}
               </button>
 
               <div className="text-center">
@@ -1501,7 +1561,7 @@ const AuthModal = ({
                   onClick={onClose}
                   className="text-brand-orange text-[10px] font-bold tracking-widest uppercase hover:underline"
                 >
-                  First time? Or forgot password?
+                  {t.auth.firstTimeOrForgot}
                 </Link>
               </div>
             </form>
@@ -1530,7 +1590,8 @@ const CartDrawer = ({
   t: any
 }) => {
   const total = items.reduce((sum, item) => {
-    const price = parseFloat(item.price.replace(/[^\d.]/g, ''));
+    const priceStr = item.discountPrice || item.price;
+    const price = parseFloat(priceStr.replace(/[^\d.]/g, ''));
     return sum + (price * item.quantity);
   }, 0);
 
@@ -1578,18 +1639,24 @@ const CartDrawer = ({
               ) : (
                 <div className="space-y-6">
                   {items.map((item) => (
-                    <div key={item.id} className="flex space-x-4 space-x-reverse group">
+                    <div key={item.id} className="flex gap-4 group">
                       <div className="w-20 h-20 bg-gray-50 rounded-xl overflow-hidden flex-shrink-0">
                         <img src={item.image} alt={item.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex justify-between items-start mb-1">
-                          <h3 className="text-brand-navy font-bold text-sm truncate pr-4">{item.name}</h3>
+                          <h3 className="text-brand-navy font-bold text-sm truncate pe-4">{item.name}</h3>
                           <button onClick={() => onRemove(item.id)} className="text-gray-300 hover:text-red-500 transition-colors">
                             <Trash2 size={16} />
                           </button>
                         </div>
-                        <p className="text-gray-400 text-[10px] mb-3">{t.products.pricePrefix}{item.price.replace(/[^\d,.]/g, '')} {t.products.priceSuffix || ''}</p>
+                        <p className="text-gray-400 text-[10px] mb-3">
+                          {item.discountPrice ? (
+                            <><span className="text-brand-orange font-bold">{t.products.pricePrefix}{item.discountPrice.replace(/[^\d,.]/g, '')}</span> <span className="line-through">{t.products.pricePrefix}{item.price.replace(/[^\d,.]/g, '')}</span></>
+                          ) : (
+                            <>{t.products.pricePrefix}{item.price.replace(/[^\d,.]/g, '')} {t.products.priceSuffix || ''}</>
+                          )}
+                        </p>
                         <div className="flex justify-between items-center">
                           <div className="flex items-center border border-gray-100 rounded-lg overflow-hidden">
                             <button 
@@ -1606,7 +1673,7 @@ const CartDrawer = ({
                               <Plus size={14} />
                             </button>
                           </div>
-                          <span className="text-brand-orange font-bold text-sm">{t.products.pricePrefix}{item.price.replace(/[^\d.]/g, '')}</span>
+                          <span className="text-brand-orange font-bold text-sm">{t.products.pricePrefix}{(item.discountPrice || item.price).replace(/[^\d.]/g, '')}</span>
                         </div>
                       </div>
                     </div>
@@ -1626,7 +1693,7 @@ const CartDrawer = ({
                 </div>
                 <button 
                   onClick={onCheckout}
-                  className="w-full bg-brand-orange text-white py-5 rounded-2xl text-[11px] tracking-[0.2em] font-bold flex items-center justify-center space-x-3 space-x-reverse hover:bg-brand-orange-hover transition-all shadow-lg shadow-brand-orange/20"
+                  className="w-full bg-brand-orange text-white py-5 rounded-2xl text-[11px] tracking-[0.2em] font-bold flex items-center justify-center gap-3 hover:bg-brand-orange-hover transition-all shadow-lg shadow-brand-orange/20"
                 >
                   <span>{t.cart.checkout}</span>
                   <ArrowRight size={16} />
@@ -1643,7 +1710,7 @@ const CartDrawer = ({
   );
 };
 
-const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalContent }: { isOpen: boolean, onClose: () => void, items: CartItem[], onClearCart: () => void, user: User | null, setModalContent: (content: { title: string; message: string; type: 'success' | 'error' } | null) => void }) => {
+const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalContent, t }: { isOpen: boolean, onClose: () => void, items: CartItem[], onClearCart: () => void, user: User | null, setModalContent: (content: { title: string; message: string; type: 'success' | 'error' } | null) => void, t: any }) => {
   const [formData, setFormData] = useState({
     customerName: "",
     email: "",
@@ -1652,58 +1719,131 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
     address: "",
     city: "",
     district: "",
-    paymentMethod: "cod" as "cod" | "bank_transfer",
+    salesRep: "",
+    paymentMethod: "deferred_invoice" as string,
     agreed: false
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [blockedMsg, setBlockedMsg] = useState("");
 
-  // Fetch user profile data if logged in
+  // Fetch user profile data from Firestore + Odoo
   useEffect(() => {
-    if (user) {
+    if (user && isOpen) {
+      const val = (v: any) => (v && v !== false && v !== "false") ? String(v) : "";
+      
+      // Step 1: Immediately populate from Firebase Auth
+      setFormData(prev => ({
+        ...prev,
+        customerName: user.displayName || "",
+        email: user.email || "",
+        phone1: user.phoneNumber || "",
+      }));
+
       const fetchProfile = async () => {
+        // Step 2: Enrich from Firestore
+        let firestoreData: any = {};
         try {
-          const userDoc = await getDoc(doc(db, "users", user.uid));
-          if (userDoc.exists()) {
-            const data = userDoc.data();
+          const userDocSnap = await getDoc(doc(db, "users", user.uid));
+          if (userDocSnap.exists()) {
+            firestoreData = userDocSnap.data();
             setFormData(prev => ({
               ...prev,
-              customerName: data.facilityName || user.displayName || "",
-              phone1: data.phoneNumber || user.phoneNumber || "",
-              address: data.address || "",
-              email: data.email || user.email || ""
+              customerName: firestoreData.facilityName || prev.customerName,
+              email: firestoreData.email || prev.email,
+              phone1: firestoreData.phoneNumber || prev.phone1,
+              address: firestoreData.address || prev.address,
+              city: firestoreData.city || prev.city,
+              district: firestoreData.district || prev.district,
+              phone2: firestoreData.phone2 || prev.phone2,
             }));
           }
-        } catch (error) {
-          console.error("Error fetching profile:", error);
+        } catch (e) {
+          console.error("[Checkout] Firestore error:", e);
+        }
+
+        // Step 3: Enrich from Odoo
+        const email = firestoreData.email || user.email || "";
+        const phone = firestoreData.phoneNumber || user.phoneNumber || "";
+        
+        if (email || phone) {
+          try {
+            console.log("[Checkout] Fetching Odoo data for:", { email, phone });
+            const odooRes = await fetch(getApiUrl("/api/auth/verify-odoo-customer"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ phone, email })
+            });
+            const odooResult = await odooRes.json();
+            console.log("[Checkout] Odoo result:", odooResult);
+            
+            if (odooResult.success && odooResult.customer) {
+              const c = odooResult.customer;
+              setFormData(prev => ({
+                ...prev,
+                customerName: val(c.name) || prev.customerName,
+                email: val(c.email) || prev.email,
+                phone1: val(c.phone) || prev.phone1,
+                phone2: val(c.mobile) || prev.phone2,
+                address: val(c.street) || prev.address,
+                city: val(c.city) || prev.city,
+              }));
+              
+              // Check if customer is blocked in Odoo
+              if (c.sale_warn === 'block') {
+                setIsBlocked(true);
+                setBlockedMsg(val(c.sale_warn_msg) || "");
+                console.log("[Checkout] Customer is BLOCKED:", c.sale_warn_msg);
+              } else {
+                setIsBlocked(false);
+                setBlockedMsg("");
+              }
+              
+              console.log("[Checkout] Form enriched with Odoo data");
+            }
+          } catch (e) {
+            console.error("[Checkout] Odoo fetch error:", e);
+          }
         }
       };
       fetchProfile();
     }
-  }, [user]);
+  }, [user, isOpen]);
 
   if (items.length === 0 && !isSuccess) return null;
 
   const total = items.reduce((sum, item) => {
-    const price = parseFloat(item.price.replace(/[^\d.]/g, ''));
+    const priceStr = item.discountPrice || item.price;
+    const price = parseFloat(priceStr.replace(/[^\d.]/g, ''));
     return sum + (price * item.quantity);
   }, 0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.agreed) {
+    
+    if (isBlocked) {
       setModalContent({
-        title: "Alert",
-        message: "Please agree to the terms and conditions.",
+        title: t.checkout.customerBlocked,
+        message: blockedMsg || t.checkout.customerBlockedMsg,
         type: 'error'
       });
       return;
     }
     
-    if (!formData.customerName || !formData.email || !formData.phone1 || !formData.address) {
+    if (!formData.agreed) {
       setModalContent({
-        title: "تنبيه",
-        message: "يرجى ملء جميع الحقول المطلوبة (الاسم، البريد الإلكتروني، رقم الجوال، والعنوان).",
+        title: t.checkout.alert,
+        message: t.checkout.agreeTerms,
+        type: 'error'
+      });
+      return;
+    }
+    
+    if (!formData.customerName || !formData.email) {
+      setModalContent({
+        title: t.checkout.alert,
+        message: t.checkout.fillRequired,
         type: 'error'
       });
       return;
@@ -1720,16 +1860,18 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
         address: formData.address,
         city: formData.city || "N/A",
         district: formData.district || "N/A",
+        salesRep: formData.salesRep || "",
         paymentMethod: formData.paymentMethod,
         items: items.map(item => ({
           id: item.id,
           name: item.name,
           price: item.price,
+          discountPrice: item.discountPrice || null,
           quantity: item.quantity,
           isOdoo: item.isOdoo
         })),
         total,
-        status: formData.paymentMethod === 'bank_transfer' ? 'pending_payment' : 'pending_approval',
+        status: 'pending_approval',
         createdAt: new Date().toISOString()
       };
 
@@ -1739,11 +1881,43 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
       
       // Trigger Odoo Order Creation
       let odooOrderName = "";
+      
+      // Try to sync to Odoo, but don't let it block the success flow if it fails
       try {
-        console.log("Triggering Odoo sync for order:", docRef.id);
-        const odooResponse = await fetch(getApiUrl("/api/odoo/orders"), {
+        const syncUrl = getApiUrl("/api/odoo/orders");
+        const pingUrl = getApiUrl("/api/ping");
+        console.log("Pre-sync connectivity check at:", pingUrl);
+        
+        // Quick check if API is alive before sending data
+        try {
+          const pingController = new AbortController();
+          const pingTimeout = setTimeout(() => pingController.abort(), 5000);
+          const pingRes = await fetch(pingUrl, { 
+            mode: 'cors',
+            signal: pingController.signal
+          });
+          clearTimeout(pingTimeout);
+          if (pingRes.ok) {
+            console.log("API connectivity confirmed.");
+          }
+        } catch (pingE) {
+          console.warn("API pre-check failed, proceeding anyway:", pingE);
+        }
+
+        console.log("Attempting Odoo sync at URL:", syncUrl);
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout for Odoo
+        
+        const odooResponse = await fetch(syncUrl, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+          },
+          mode: "cors", 
+          credentials: "include", // Use include to match server-side Access-Control-Allow-Credentials: true
+          signal: controller.signal,
           body: JSON.stringify({
             customerEmail: formData.email,
             customerName: formData.customerName,
@@ -1753,52 +1927,83 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
           })
         });
         
-        const odooResult = await odooResponse.json();
-        console.log("Odoo sync result:", odooResult);
+        clearTimeout(timeoutId);
         
-        if (odooResult.success) {
-          odooOrderName = odooResult.orderName;
-          await updateDoc(docRef, { 
-            odooOrderName,
-            odooOrderId: odooResult.orderId,
-            syncStatus: 'success',
-            syncedAt: new Date().toISOString()
-          });
+        if (odooResponse.ok) {
+          const odooResult = await odooResponse.json();
+          console.log("Odoo sync result:", odooResult);
           
-          setModalContent({
-            title: "تم استلام طلبك",
-            message: `تم إنشاء الطلب بنجاح برقم: ${odooOrderName}. يمكنك متابعة حالة الطلب من لوحة التحكم.`,
-            type: 'success'
-          });
+          if (odooResult.success) {
+            odooOrderName = odooResult.orderName;
+            const updateData: any = { 
+              odooOrderName,
+              syncStatus: 'success',
+              syncedAt: new Date().toISOString()
+            };
+            if (odooResult.orderId) {
+              updateData.odooOrderId = odooResult.orderId;
+            }
+            await updateDoc(docRef, updateData);
+            
+            setModalContent({
+              title: t.checkout.orderReceived,
+              message: t.checkout.orderCreatedSuccess.replace('{orderName}', odooOrderName) + "\n\n" + t.checkout.orderReviewNotice,
+              type: 'success'
+            });
+          } else {
+            console.error("Odoo sync returned failure:", odooResult.error);
+            await updateDoc(docRef, { 
+              syncStatus: 'failed',
+              syncError: odooResult.error
+            });
+            // Show success for website but warning for Odoo
+            setModalContent({
+              title: t.checkout.orderReceived,
+              message: t.checkout.orderSentMessage + "\n\n(Odoo Sync: " + (odooResult.error || "Failed") + ")",
+              type: 'success'
+            });
+          }
         } else {
-          console.error("Odoo sync failed with error:", odooResult.error);
-          await updateDoc(docRef, { 
-            syncStatus: 'failed',
-            syncError: odooResult.error
-          });
-          setModalContent({
-            title: "تنبيه مهم",
-            message: "تم حفظ الطلب في الموقع ولكن لم يتم إرساله إلى اودو. يرجى التواصل مع الإدارة أو إعادة المحاولة لاحقاً.",
-            type: 'error'
-          });
+          const errorText = await odooResponse.text().catch(() => "Unknown error");
+          console.error("Odoo API returned non-ok status:", odooResponse.status, errorText);
+          throw new Error(`Server Error (${odooResponse.status}): ${errorText.slice(0, 50)}`);
         }
       } catch (e: any) {
-        console.error("Failed to sync order to Odoo:", e);
+        const isTimeout = e.name === 'AbortError';
+        const errorMsg = isTimeout ? "Request Timeout" : (e.message || "Connection Failed");
+        const fullSyncUrl = getFullUrl("/api/odoo/orders");
+        
+        console.error("Failed to sync order to Odoo:", {
+          error: e,
+          message: e.message,
+          name: e.name,
+          url: fullSyncUrl,
+          stack: e.stack
+        });
+        
+        // Detailed error analysis
+        let detailedError = errorMsg;
+        if (errorMsg === "Failed to fetch") {
+          detailedError = "Failed to fetch (Network Error or CORS). Please check if the backend is running and allows requests from this origin.";
+        }
+        
         await updateDoc(docRef, { 
           syncStatus: 'failed',
-          syncError: e.message
+          syncError: `${detailedError} | URL: ${fullSyncUrl}`
         });
+        
+        // We still show success for the website order even if Odoo sync fails
         setModalContent({
-          title: "فشل الربط مع اودو",
-          message: "تعذر الوصول إلى واجهة اودو من هذا النشر. الطلب محفوظ محلياً فقط حتى يتم ربط خادم API.",
-          type: 'error'
+          title: t.checkout.orderReceived,
+          message: t.checkout.orderSentMessage + "\n\nOdoo Sync Status: " + detailedError + "\nAPI URL: `" + fullSyncUrl + "`",
+          type: 'success'
         });
       }
 
       // Trigger email notification
       try {
         console.log("Sending email request to server for order:", docRef.id);
-        await fetch("/api/send-email", {
+        await fetch(getApiUrl("/api/send-email"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1819,8 +2024,8 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
     } catch (error) {
       console.error("CRITICAL: Firestore Save Failed:", error);
       setModalContent({
-        title: "خطأ في الطلب",
-        message: "حدث خطأ أثناء حفظ الطلب في النظام. يرجى المحاولة لاحقاً.",
+        title: t.checkout.orderError,
+        message: t.checkout.orderSaveError,
         type: 'error'
       });
       handleFirestoreError(error, OperationType.CREATE, "orders");
@@ -1850,12 +2055,12 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
             <div className="p-8 pb-0 flex justify-between items-start">
               <div>
                 <h2 className="text-3xl font-serif text-brand-navy mb-1">
-                  {isSuccess ? "Order Placed!" : "Checkout"}
+                  {isSuccess ? t.checkout.orderPlaced : t.checkout.title}
                 </h2>
                 <p className="text-gray-400 text-sm">
                   {isSuccess 
-                    ? "Thank you for your order. We will contact you soon." 
-                    : "Review your order and complete your details below."}
+                    ? t.checkout.thankYou
+                    : t.checkout.reviewOrder}
                 </p>
               </div>
               <button 
@@ -1872,23 +2077,23 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
                   <div className="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
                     <Check size={40} />
                   </div>
-                  <h3 className="text-2xl font-serif text-brand-navy mb-4">Order Placed!</h3>
+                  <h3 className="text-2xl font-serif text-brand-navy mb-4">{t.checkout.orderPlaced}</h3>
                   <p className="text-gray-500 mb-8 max-w-sm mx-auto font-medium">
-                    Your order has been sent and will be reviewed for approval. Our representative will contact you as soon as possible.
+                    {t.checkout.orderSentMessage}
                   </p>
                   <button 
                     onClick={onClose}
                     className="bg-brand-navy text-white px-10 py-4 rounded-xl text-[10px] tracking-[0.2em] font-bold hover:bg-brand-orange transition-all"
                   >
-                    BACK TO STORE
+                    {t.checkout.backToStore}
                   </button>
                 </div>
               ) : (
                 <form onSubmit={handleSubmit}>
                   {/* Order Summary */}
                   <div className="mb-8">
-                    <div className="flex items-center space-x-3 mb-4">
-                      <span className="text-[10px] tracking-[0.3em] uppercase font-bold text-brand-orange">Order Summary</span>
+                    <div className="flex items-center gap-3 mb-4">
+                      <span className="text-[10px] tracking-[0.3em] uppercase font-bold text-brand-orange">{t.checkout.orderSummary}</span>
                       <div className="h-[1px] flex-1 bg-gray-100" />
                     </div>
                     <div className="bg-brand-cream/50 rounded-2xl p-6">
@@ -1901,130 +2106,120 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
                         ))}
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-[10px] tracking-[0.2em] font-bold text-brand-navy uppercase">Total Amount</span>
-                        <span className="text-2xl font-serif font-bold text-brand-orange">SAR {total.toLocaleString()}</span>
+                        <span className="text-[10px] tracking-[0.2em] font-bold text-brand-navy uppercase">{t.checkout.totalAmount}</span>
+                        <span className="text-2xl font-serif font-bold text-brand-orange">{t.products.pricePrefix}{total.toLocaleString()}</span>
                       </div>
                     </div>
                   </div>
 
                   {/* Your Details */}
                   <div className="mb-8">
-                    <div className="flex items-center space-x-3 mb-6">
-                      <span className="text-[10px] tracking-[0.3em] uppercase font-bold text-brand-orange">Your Details</span>
+                    <div className="flex items-center gap-3 mb-6">
+                      <span className="text-[10px] tracking-[0.3em] uppercase font-bold text-brand-orange">{t.checkout.yourDetails}</span>
                       <div className="h-[1px] flex-1 bg-gray-100" />
                     </div>
                     <div className="space-y-4">
                       <div>
-                        <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ml-1">Facility Name *</label>
+                        <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.facilityName}</label>
                         <input 
-                          required
+                          readOnly
                           type="text" 
-                          placeholder="Enter facility name" 
+                          placeholder={t.checkout.facilityPlaceholder} 
                           value={formData.customerName}
-                          onChange={e => setFormData({...formData, customerName: e.target.value})}
-                          className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange transition-all" 
+                          className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-gray-600 cursor-not-allowed" 
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ml-1">Email Address *</label>
+                        <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.emailLabel}</label>
                         <input 
-                          required
+                          readOnly
                           type="email" 
-                          placeholder="your@email.com" 
+                          placeholder={t.checkout.emailPlaceholder} 
                           value={formData.email}
-                          onChange={e => setFormData({...formData, email: e.target.value})}
-                          className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange transition-all" 
+                          className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-gray-600 cursor-not-allowed" 
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ml-1">Phone Number *</label>
+                          <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.phoneLabel}</label>
                           <input 
-                            required
+                            readOnly
                             type="text" 
-                            placeholder="+94 7X XXX XXXX" 
+                            placeholder={t.checkout.phonePlaceholder}
                             value={formData.phone1}
-                            onChange={e => setFormData({...formData, phone1: e.target.value})}
-                            className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange transition-all" 
+                            className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-gray-600 cursor-not-allowed" 
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ml-1">Secondary Phone (Optional)</label>
+                          <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.secondaryPhone}</label>
                           <input 
+                            readOnly
                             type="text" 
-                            placeholder="+94 7X XXX XXXX" 
+                            placeholder={t.checkout.phonePlaceholder}
                             value={formData.phone2}
-                            onChange={e => setFormData({...formData, phone2: e.target.value})}
-                            className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange transition-all" 
+                            className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-gray-600 cursor-not-allowed" 
                           />
                         </div>
                       </div>
                       <div>
-                        <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ml-1">Address *</label>
+                        <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.addressLabel}</label>
                         <input 
-                          required
+                          readOnly
                           type="text" 
-                          placeholder="Street, District, City" 
+                          placeholder={t.checkout.addressPlaceholder} 
                           value={formData.address}
-                          onChange={e => setFormData({...formData, address: e.target.value})}
-                          className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange transition-all" 
+                          className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-gray-600 cursor-not-allowed" 
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ml-1">City *</label>
+                          <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.cityLabel}</label>
                           <input 
-                            required
+                            readOnly
                             type="text" 
-                            placeholder="City" 
+                            placeholder={t.checkout.cityPlaceholder} 
                             value={formData.city}
-                            onChange={e => setFormData({...formData, city: e.target.value})}
-                            className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange transition-all" 
+                            className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-gray-600 cursor-not-allowed" 
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ml-1">District *</label>
+                          <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.districtLabel}</label>
                           <input 
-                            required
+                            readOnly
                             type="text" 
-                            placeholder="District" 
+                            placeholder={t.checkout.districtPlaceholder} 
                             value={formData.district}
-                            onChange={e => setFormData({...formData, district: e.target.value})}
-                            className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange transition-all" 
+                            className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-gray-600 cursor-not-allowed" 
                           />
                         </div>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.salesRepLabel}</label>
+                        <input 
+                          type="text" 
+                          placeholder={t.checkout.salesRepPlaceholder}
+                          value={formData.salesRep}
+                          onChange={e => setFormData({...formData, salesRep: e.target.value})}
+                          className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange transition-all" 
+                        />
                       </div>
                     </div>
                   </div>
 
                   {/* Payment Method */}
                   <div className="mb-8">
-                    <div className="flex items-center space-x-3 mb-6">
-                      <span className="text-[10px] tracking-[0.3em] uppercase font-bold text-brand-orange">Payment Method</span>
+                    <div className="flex items-center gap-3 mb-6">
+                      <span className="text-[10px] tracking-[0.3em] uppercase font-bold text-brand-orange">{t.checkout.paymentMethod}</span>
                       <div className="h-[1px] flex-1 bg-gray-100" />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <button 
-                        type="button"
-                        onClick={() => setFormData({...formData, paymentMethod: 'cod'})}
-                        className={`flex items-center justify-center space-x-3 p-4 border-2 rounded-xl transition-all ${formData.paymentMethod === 'cod' ? 'border-brand-orange bg-brand-orange/5' : 'border-gray-100 bg-white'}`}
-                      >
-                        <Truck size={20} className={formData.paymentMethod === 'cod' ? 'text-brand-orange' : 'text-gray-400'} />
-                        <span className={`text-xs font-bold ${formData.paymentMethod === 'cod' ? 'text-brand-navy' : 'text-gray-400'}`}>Cash on Delivery</span>
-                      </button>
-                      <button 
-                        type="button"
-                        onClick={() => setFormData({...formData, paymentMethod: 'bank_transfer'})}
-                        className={`flex items-center justify-center space-x-3 p-4 border-2 rounded-xl transition-all ${formData.paymentMethod === 'bank_transfer' ? 'border-brand-orange bg-brand-orange/5' : 'border-gray-100 bg-white'}`}
-                      >
-                        <Building2 size={20} className={formData.paymentMethod === 'bank_transfer' ? 'text-brand-orange' : 'text-gray-400'} />
-                        <span className={`text-xs font-bold ${formData.paymentMethod === 'bank_transfer' ? 'text-brand-navy' : 'text-gray-400'}`}>Bank Deposit</span>
-                      </button>
+                    <div className="flex items-center justify-center gap-3 p-4 border-2 border-brand-orange bg-brand-orange/5 rounded-xl">
+                      <Building2 size={20} className="text-brand-orange" />
+                      <span className="text-xs font-bold text-brand-navy">{t.checkout.deferredInvoice}</span>
                     </div>
                   </div>
 
                   {/* Terms */}
-                  <div className="mb-8 flex items-start space-x-3 p-4 bg-gray-50 rounded-xl">
+                  <div className="mb-8 flex items-start gap-3 p-4 bg-gray-50 rounded-xl">
                     <input 
                       required
                       type="checkbox" 
@@ -2033,7 +2228,7 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
                       className="mt-1 w-4 h-4 rounded border-gray-300 text-brand-orange focus:ring-brand-orange" 
                     />
                     <p className="text-[10px] text-gray-500 leading-relaxed">
-                      I have read and agree to the <span className="text-brand-orange underline">Terms & Conditions</span>, <span className="text-brand-orange underline">Privacy Policy</span>, and <span className="text-brand-orange underline">Refund & Return Policy</span> of Shani's Flavor Lab.
+                      {t.checkout.termsAgree} <span className="text-brand-orange underline">{t.checkout.termsLink}</span>, <span className="text-brand-orange underline">{t.checkout.privacyLink}</span>, <span className="text-brand-orange underline">{t.checkout.refundLink}</span> {t.checkout.ofBrand}
                     </p>
                   </div>
 
@@ -2041,7 +2236,7 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
                   <button 
                     disabled={isSubmitting}
                     type="submit"
-                    className="w-full bg-brand-navy text-white py-5 rounded-2xl text-[11px] tracking-[0.2em] font-bold flex items-center justify-center space-x-3 hover:bg-brand-orange transition-all shadow-lg shadow-brand-navy/10 disabled:opacity-50"
+                    className="w-full bg-brand-navy text-white py-5 rounded-2xl text-[11px] tracking-[0.2em] font-bold flex items-center justify-center gap-3 hover:bg-brand-orange transition-all shadow-lg shadow-brand-navy/10 disabled:opacity-50"
                   >
                     {isSubmitting ? (
                       <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -2050,7 +2245,7 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
                         <div className="bg-green-500 rounded-full p-0.5">
                           <Check size={14} className="text-white" />
                         </div>
-                        <span>CONFIRM ORDER ({formData.paymentMethod === 'cod' ? 'COD' : 'BANK'})</span>
+                        <span>{t.checkout.confirmOrder}</span>
                       </>
                     )}
                   </button>
@@ -2123,14 +2318,28 @@ const ProductDetailModal = ({
               <div className="mb-8">
                 <div className="flex items-center space-x-3 space-x-reverse mb-4">
                   <div className="h-[1px] w-8 bg-brand-orange" />
-                  <span className="text-brand-orange text-[10px] tracking-[0.3em] uppercase font-bold">Premium Selection</span>
+                  <span className="text-brand-orange text-[10px] tracking-[0.3em] uppercase font-bold">{t.products.premiumSelection}</span>
                 </div>
                 <h2 className="text-brand-navy text-4xl font-serif font-bold mb-4 leading-tight">
                   {product.name}
                 </h2>
-                <p className="text-brand-orange font-serif font-bold text-2xl mb-6">
-                  {t.products.pricePrefix}{product.price.replace(/[^\d.]/g, '')}
-                </p>
+                {product.discountPrice ? (
+                  <div className="flex items-center gap-3 mb-6 flex-wrap">
+                    <span className="text-brand-orange font-serif font-bold text-2xl">
+                      {t.products.pricePrefix}{product.discountPrice.replace(/[^\d.]/g, '')}
+                    </span>
+                    <span className="text-gray-400 font-serif text-lg line-through">
+                      {t.products.pricePrefix}{product.price.replace(/[^\d.]/g, '')}
+                    </span>
+                    <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      {Math.round((1 - parseFloat(product.discountPrice.replace(/[^\d.]/g, '')) / parseFloat(product.price.replace(/[^\d.]/g, ''))) * 100)}% {t.products.off}
+                    </span>
+                  </div>
+                ) : (
+                  <p className="text-brand-orange font-serif font-bold text-2xl mb-6">
+                    {t.products.pricePrefix}{product.price.replace(/[^\d.]/g, '')}
+                  </p>
+                )}
                 <div className="h-[1px] w-full bg-gray-100 mb-6" />
                 <p className="text-brand-navy/70 text-sm leading-relaxed mb-8">
                   {product.description}
@@ -2176,7 +2385,7 @@ const ProductDetailModal = ({
   );
 };
 
-const TermsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
+const TermsModal = ({ isOpen, onClose, t }: { isOpen: boolean, onClose: () => void, t: any }) => {
   return (
     <AnimatePresence>
       {isOpen && (
@@ -2197,7 +2406,7 @@ const TermsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void 
             {/* Header */}
             <div className="p-8 pb-4 border-b border-gray-100 flex justify-between items-center">
               <div>
-                <h2 className="text-2xl font-serif text-brand-navy font-bold">Terms & Conditions</h2>
+                <h2 className="text-2xl font-serif text-brand-navy font-bold">{t.modals.termsTitle}</h2>
                 <p className="text-brand-orange text-[10px] tracking-[0.2em] font-bold uppercase mt-1">Shani's Flavor Lab</p>
               </div>
               <button 
@@ -2212,77 +2421,77 @@ const TermsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void 
             <div className="p-8 overflow-y-auto custom-scrollbar">
               <div className="prose prose-sm max-w-none text-brand-navy/80">
                 <p className="mb-6 leading-relaxed">
-                  Welcome to Shani's Flavor Lab! By using this website and purchasing our products, you agree to the following terms and conditions.
+                  {t.modals.termsIntro}
                 </p>
 
                 <div className="space-y-8">
                   <section>
                     <h3 className="text-brand-navy font-bold text-lg mb-3 flex items-center">
-                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs mr-3">1</span>
-                      General
+                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs me-3">1</span>
+                      {t.modals.general}
                     </h3>
-                    <p className="pl-11">All content on this website is the property of Shani's Flavor Lab.</p>
+                    <p className="ps-11">{t.modals.generalText}</p>
                   </section>
 
                   <section>
                     <h3 className="text-brand-navy font-bold text-lg mb-3 flex items-center">
-                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs mr-3">2</span>
-                      Orders
+                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs me-3">2</span>
+                      {t.modals.orders}
                     </h3>
-                    <p className="pl-11">Orders are subject to availability and confirmation via email or WhatsApp.</p>
+                    <p className="ps-11">{t.modals.ordersText}</p>
                   </section>
 
                   <section>
                     <h3 className="text-brand-navy font-bold text-lg mb-3 flex items-center">
-                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs mr-3">3</span>
-                      Pricing
+                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs me-3">3</span>
+                      {t.modals.pricing}
                     </h3>
-                    <p className="pl-11">All prices are in Saudi Riyal (SAR).</p>
+                    <p className="ps-11">{t.modals.pricingText}</p>
                   </section>
 
                   <section>
                     <h3 className="text-brand-navy font-bold text-lg mb-3 flex items-center">
-                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs mr-3">4</span>
-                      Payment
+                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs me-3">4</span>
+                      {t.modals.payment}
                     </h3>
-                    <p className="pl-11">Accepted methods: bank transfer, online payment, or cash on delivery (COD).</p>
+                    <p className="ps-11">{t.modals.paymentText}</p>
                   </section>
 
                   <section>
                     <h3 className="text-brand-navy font-bold text-lg mb-3 flex items-center">
-                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs mr-3">5</span>
-                      Delivery & Shipping
+                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs me-3">5</span>
+                      {t.modals.deliveryShipping}
                     </h3>
-                    <p className="pl-11">Delivery is within Saudi Arabia. Times vary by location.</p>
+                    <p className="ps-11">{t.modals.deliveryShippingText}</p>
                   </section>
 
                   <section>
                     <h3 className="text-brand-navy font-bold text-lg mb-3 flex items-center">
-                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs mr-3">6</span>
-                      Returns & Refunds
+                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs me-3">6</span>
+                      {t.modals.returnsRefunds}
                     </h3>
-                    <div className="pl-11 space-y-2">
-                      <p>Sales of perishable food products are final.</p>
-                      <p>Damaged or incorrect items must be reported within 48 hours.</p>
+                    <div className="ps-11 space-y-2">
+                      <p>{t.modals.returnsRefundsText1}</p>
+                      <p>{t.modals.returnsRefundsText2}</p>
                     </div>
                   </section>
 
                   <section>
                     <h3 className="text-brand-navy font-bold text-lg mb-3 flex items-center">
-                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs mr-3">7</span>
-                      Allergens
+                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs me-3">7</span>
+                      {t.modals.allergens}
                     </h3>
-                    <p className="pl-11">Products may contain nuts, seeds, or other allergens.</p>
+                    <p className="ps-11">{t.modals.allergensText}</p>
                   </section>
 
                   <section className="bg-brand-cream p-6 rounded-2xl border border-brand-navy/5">
-                    <h3 className="text-brand-navy font-bold text-lg mb-4">Contact</h3>
+                    <h3 className="text-brand-navy font-bold text-lg mb-4">{t.footer.contact}</h3>
                     <div className="space-y-3 text-sm">
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">📧</div>
                         <span className="font-medium">info@shanisflavorlab.com</span>
                       </div>
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">📞</div>
                         <span className="font-medium">WhatsApp: +94 71 764 7799</span>
                       </div>
@@ -2298,7 +2507,7 @@ const TermsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void 
                 onClick={onClose}
                 className="bg-brand-navy text-white px-10 py-4 rounded-xl text-[10px] tracking-[0.2em] font-bold hover:bg-brand-orange transition-all"
               >
-                I UNDERSTAND
+                {t.modals.iUnderstand}
               </button>
             </div>
           </motion.div>
@@ -2308,7 +2517,7 @@ const TermsModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void 
   );
 };
 
-const PrivacyModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
+const PrivacyModal = ({ isOpen, onClose, t }: { isOpen: boolean, onClose: () => void, t: any }) => {
   return (
     <AnimatePresence>
       {isOpen && (
@@ -2329,7 +2538,7 @@ const PrivacyModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => voi
             {/* Header */}
             <div className="p-8 pb-4 border-b border-gray-100 flex justify-between items-center">
               <div>
-                <h2 className="text-2xl font-serif text-brand-navy font-bold">Privacy Policy</h2>
+                <h2 className="text-2xl font-serif text-brand-navy font-bold">{t.modals.privacyTitle}</h2>
                 <p className="text-brand-orange text-[10px] tracking-[0.2em] font-bold uppercase mt-1">Shani's Flavor Lab</p>
               </div>
               <button 
@@ -2344,24 +2553,18 @@ const PrivacyModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => voi
             <div className="p-8 overflow-y-auto custom-scrollbar">
               <div className="prose prose-sm max-w-none text-brand-navy/80">
                 <div className="space-y-8">
-                  <p className="leading-relaxed">
-                    We collect name, phone, address and payment details solely to process and fulfill orders.
-                  </p>
-                  <p className="leading-relaxed">
-                    We do not sell or rent your personal information.
-                  </p>
-                  <p className="leading-relaxed">
-                    Data may be shared with couriers or legal authorities if required.
-                  </p>
+                  <p className="leading-relaxed">{t.modals.privacyText1}</p>
+                  <p className="leading-relaxed">{t.modals.privacyText2}</p>
+                  <p className="leading-relaxed">{t.modals.privacyText3}</p>
 
                   <section className="bg-brand-cream p-6 rounded-2xl border border-brand-navy/5">
-                    <h3 className="text-brand-navy font-bold text-lg mb-4">Contact</h3>
+                    <h3 className="text-brand-navy font-bold text-lg mb-4">{t.footer.contact}</h3>
                     <div className="space-y-3 text-sm">
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">📧</div>
                         <span className="font-medium">info@shanisflavorlab.com</span>
                       </div>
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">📞</div>
                         <span className="font-medium">WhatsApp: +94 71 764 7799</span>
                       </div>
@@ -2377,7 +2580,7 @@ const PrivacyModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => voi
                 onClick={onClose}
                 className="bg-brand-navy text-white px-10 py-4 rounded-xl text-[10px] tracking-[0.2em] font-bold hover:bg-brand-orange transition-all"
               >
-                I UNDERSTAND
+                {t.modals.iUnderstand}
               </button>
             </div>
           </motion.div>
@@ -2387,7 +2590,7 @@ const PrivacyModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => voi
   );
 };
 
-const RefundModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
+const RefundModal = ({ isOpen, onClose, t }: { isOpen: boolean, onClose: () => void, t: any }) => {
   return (
     <AnimatePresence>
       {isOpen && (
@@ -2408,7 +2611,7 @@ const RefundModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void
             {/* Header */}
             <div className="p-8 pb-4 border-b border-gray-100 flex justify-between items-center">
               <div>
-                <h2 className="text-2xl font-serif text-brand-navy font-bold">Refund & Return Policy</h2>
+                <h2 className="text-2xl font-serif text-brand-navy font-bold">{t.modals.refundTitle}</h2>
                 <p className="text-brand-orange text-[10px] tracking-[0.2em] font-bold uppercase mt-1">Shani's Flavor Lab</p>
               </div>
               <button 
@@ -2425,36 +2628,36 @@ const RefundModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void
                 <div className="space-y-8">
                   <section>
                     <h3 className="text-brand-navy font-bold text-lg mb-3 flex items-center">
-                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs mr-3">1</span>
-                      Final Sales
+                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs me-3">1</span>
+                      {t.modals.finalSales}
                     </h3>
-                    <p className="pl-11">All sales of food products are final.</p>
+                    <p className="ps-11">{t.modals.finalSalesText}</p>
                   </section>
 
                   <section>
                     <h3 className="text-brand-navy font-bold text-lg mb-3 flex items-center">
-                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs mr-3">2</span>
-                      Reporting Issues
+                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs me-3">2</span>
+                      {t.modals.reportingIssues}
                     </h3>
-                    <p className="pl-11">Damaged or incorrect items must be reported within 48 hours of delivery.</p>
+                    <p className="ps-11">{t.modals.reportingIssuesText}</p>
                   </section>
 
                   <section>
                     <h3 className="text-brand-navy font-bold text-lg mb-3 flex items-center">
-                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs mr-3">3</span>
-                      Verification
+                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs me-3">3</span>
+                      {t.modals.verification}
                     </h3>
-                    <p className="pl-11">Photos may be requested to verify the issue.</p>
+                    <p className="ps-11">{t.modals.verificationText}</p>
                   </section>
 
                   <section className="bg-brand-cream p-6 rounded-2xl border border-brand-navy/5">
-                    <h3 className="text-brand-navy font-bold text-lg mb-4">Contact</h3>
+                    <h3 className="text-brand-navy font-bold text-lg mb-4">{t.footer.contact}</h3>
                     <div className="space-y-3 text-sm">
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">📧</div>
                         <span className="font-medium">info@shanisflavorlab.com</span>
                       </div>
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">📞</div>
                         <span className="font-medium">WhatsApp: +94 71 764 7799</span>
                       </div>
@@ -2470,7 +2673,7 @@ const RefundModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void
                 onClick={onClose}
                 className="bg-brand-navy text-white px-10 py-4 rounded-xl text-[10px] tracking-[0.2em] font-bold hover:bg-brand-orange transition-all"
               >
-                I UNDERSTAND
+                {t.modals.iUnderstand}
               </button>
             </div>
           </motion.div>
@@ -2618,6 +2821,7 @@ const CustomerOrders = ({ orders, user }: { orders: Order[], user: User | null }
   useEffect(() => {
     const syncStatuses = async () => {
       for (const order of customerOrders) {
+        // Case 1: Order has Odoo name, just sync status
         if (order.odooOrderName && (order.status === 'pending_approval' || order.status === 'processing')) {
           try {
             const safeOdooOrderName = encodeURIComponent(order.odooOrderName);
@@ -2639,6 +2843,35 @@ const CustomerOrders = ({ orders, user }: { orders: Order[], user: User | null }
             }
           } catch (e) {
             console.error("Status sync error:", e);
+          }
+        } 
+        // Case 2: Order is missing Odoo name, try to look it up
+        else if (!order.odooOrderName && order.status === 'pending_approval') {
+          try {
+            console.log(`Looking up missing Odoo ID for order: ${order.firebaseId}`);
+            const lookupResp = await fetch(getApiUrl("/api/odoo/order-lookup"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                email: order.email,
+                total: order.total,
+                createdAt: order.createdAt
+              })
+            });
+            const lookupData = await lookupResp.json();
+            
+            if (lookupData.success && lookupData.data) {
+              const odooOrder = lookupData.data;
+              console.log(`Found matching Odoo order: ${odooOrder.name} for Firestore order ${order.firebaseId}`);
+              await updateDoc(doc(db, "orders", order.firebaseId), {
+                odooOrderName: odooOrder.name,
+                odooOrderId: odooOrder.id,
+                syncStatus: 'success',
+                syncedAt: new Date().toISOString()
+              });
+            }
+          } catch (e) {
+            console.error("Order lookup error:", e);
           }
         }
       }
@@ -2796,6 +3029,7 @@ const DashboardLayout = ({ children, user, role }: { children: React.ReactNode, 
     { name: "Orders", icon: <ShoppingBag size={20} />, path: "/admin/orders" },
     { name: "Customers", icon: <Users size={20} />, path: "/admin/customers" },
     { name: "Products", icon: <Package size={20} />, path: "/admin/products" },
+    { name: "Discounts", icon: <Percent size={20} />, path: "/admin/discounts" },
     { name: "Odoo Sync", icon: <RefreshCw size={20} />, path: "/admin/odoo" },
     { name: "SEO Settings", icon: <Search size={20} />, path: "/admin/seo" },
     { name: "Blog (Coming Soon)", icon: <FileText size={20} />, path: "/admin/blog" },
@@ -2946,7 +3180,7 @@ const OrderManager = ({ orders, setModalContent }: { orders: Order[], setModalCo
       // Trigger status update email
       try {
         console.log("Sending status update email request...");
-        const response = await fetch("/api/send-email", {
+        const response = await fetch(getApiUrl("/api/send-email"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -3364,7 +3598,7 @@ const CustomerManager = ({ setModalContent }: { setModalContent: (content: { tit
           <button 
             onClick={async () => {
               try {
-                const response = await fetch("/api/seed-demo", { method: "POST" });
+                const response = await fetch(getApiUrl("/api/seed-demo"), { method: "POST" });
                 const data = await response.json();
                 if (data.success) {
                   setModalContent({
@@ -3771,6 +4005,32 @@ const DashboardOverview = ({ products, orders }: { products: Product[], orders: 
 const ProductManager = ({ products, setModalContent }: { products: Product[], setModalContent: (content: { title: string; message: string; type: 'success' | 'error' } | null) => void }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newProduct, setNewProduct] = useState<Partial<Product>>({ name: "", description: "", price: "", image: "" });
+  const [editingDiscount, setEditingDiscount] = useState<string | null>(null);
+  const [discountValue, setDiscountValue] = useState("");
+
+  const handleSaveDiscount = async (product: Product) => {
+    try {
+      const fbId = product.firebaseId;
+      if (!fbId) return;
+      const trimmed = discountValue.trim();
+      if (trimmed === "" || trimmed === "0") {
+        await updateDoc(doc(db, "products", fbId), { discountPrice: deleteField() });
+        setModalContent({ title: "Updated", message: `Discount removed from ${product.name}`, type: 'success' });
+      } else {
+        const numVal = parseFloat(trimmed.replace(/[^\d.]/g, ''));
+        if (isNaN(numVal) || numVal <= 0) {
+          setModalContent({ title: "Error", message: "Invalid discount price", type: 'error' });
+          return;
+        }
+        await updateDoc(doc(db, "products", fbId), { discountPrice: `SAR ${numVal.toLocaleString()}` });
+        setModalContent({ title: "Updated", message: `Discount set for ${product.name}: SAR ${numVal.toLocaleString()}`, type: 'success' });
+      }
+      setEditingDiscount(null);
+      setDiscountValue("");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `products/${product.firebaseId}`);
+    }
+  };
 
   const handleSeed = async () => {
     if (confirm("This will upload sample data to help you see the layout. If you want only Odoo data, don't use this. Continue?")) {
@@ -3910,6 +4170,7 @@ const ProductManager = ({ products, setModalContent }: { products: Product[], se
             <tr>
               <th className="px-8 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Product</th>
               <th className="px-8 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Price</th>
+              <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Discount Price</th>
               <th className="px-8 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Status</th>
               <th className="px-8 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider text-right">Actions</th>
             </tr>
@@ -3924,6 +4185,32 @@ const ProductManager = ({ products, setModalContent }: { products: Product[], se
                   </div>
                 </td>
                 <td className="px-8 py-4 text-sm text-gray-600 font-medium">{p.price}</td>
+                <td className="px-6 py-4">
+                  {editingDiscount === (p.firebaseId || String(p.id)) ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={discountValue}
+                        onChange={(e) => setDiscountValue(e.target.value)}
+                        placeholder="e.g. 1200"
+                        className="w-24 p-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-brand-orange"
+                        autoFocus
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleSaveDiscount(p); if (e.key === 'Escape') setEditingDiscount(null); }}
+                      />
+                      <button onClick={() => handleSaveDiscount(p)} className="text-green-500 hover:text-green-700"><Check size={16} /></button>
+                      <button onClick={() => setEditingDiscount(null)} className="text-gray-400 hover:text-red-500"><X size={16} /></button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setEditingDiscount(p.firebaseId || String(p.id)); setDiscountValue(p.discountPrice ? p.discountPrice.replace(/[^\d.]/g, '') : ''); }}>
+                      {p.discountPrice ? (
+                        <span className="text-sm font-bold text-red-500">{p.discountPrice}</span>
+                      ) : (
+                        <span className="text-xs text-gray-400 italic">No discount</span>
+                      )}
+                      <Edit size={12} className="text-gray-300" />
+                    </div>
+                  )}
+                </td>
                 <td className="px-8 py-4">
                   <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${p.isOdoo ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
                     {p.isOdoo ? 'Odoo ERP' : 'Manual'}
@@ -4400,60 +4687,40 @@ const SEOManager = ({ seo, setModalContent }: { seo: SiteSettings["seo"], setMod
   );
 };
 
-const Testimonials = () => {
+const Testimonials = ({ t }: { t: any }) => {
   const reviews = [
-    {
-      stars: 5,
-      text: "Exceptional quality and authentic flavour — my go-to spices for every meal!",
-      author: "Sumudu Aththanayake"
-    },
-    {
-      stars: 5,
-      text: "Shani's blends make home cooking feel like a restaurant experience.",
-      author: "Shyamali Perera"
-    },
-    {
-      stars: 5,
-      text: "The Royal Biryani Mix is a game changer! The aroma is exactly like the traditional ones we find in high-end restaurants.",
-      author: "Priyantha Perera"
-    },
-    {
-      stars: 5,
-      text: "High quality Pink Salt. Use it daily now for all my cooking. Highly recommended for health-conscious people.",
-      author: "Nilanthi Silva"
-    },
-    {
-      stars: 5,
-      text: "The Island Fire Chili mix has the perfect kick. Authentic Sri Lankan taste at its best. Simply amazing!",
-      author: "Saman Kumara"
-    }
+    { stars: 5, text: t.testimonials.review1, author: "Sumudu Aththanayake" },
+    { stars: 5, text: t.testimonials.review2, author: "Shyamali Perera" },
+    { stars: 5, text: t.testimonials.review3, author: "Priyantha Perera" },
+    { stars: 5, text: t.testimonials.review4, author: "Nilanthi Silva" },
+    { stars: 5, text: t.testimonials.review5, author: "Saman Kumara" }
   ];
 
   return (
     <section className="py-24 bg-brand-cream relative overflow-hidden">
       {/* Quote marks background */}
-      <div className="absolute top-10 left-10 text-brand-navy/5 font-serif text-[200px] leading-none pointer-events-none">“</div>
+      <div className="absolute top-10 left-10 text-brand-navy/5 font-serif text-[200px] leading-none pointer-events-none">"</div>
       
       <div className="max-w-7xl mx-auto px-6 relative z-10">
         <div className="text-center mb-16">
-          <div className="flex items-center justify-center space-x-3 mb-4">
+          <div className="flex items-center justify-center gap-3 mb-4">
             <div className="h-[1px] w-8 bg-brand-orange" />
-            <span className="text-brand-orange text-[10px] tracking-[0.3em] uppercase font-bold">Testimonials</span>
+            <span className="text-brand-orange text-[10px] tracking-[0.3em] uppercase font-bold">{t.testimonials.subtitle}</span>
             <div className="h-[1px] w-8 bg-brand-orange" />
           </div>
-          <h2 className="text-brand-navy text-5xl font-serif">What Our Customers Say</h2>
+          <h2 className="text-brand-navy text-5xl font-serif">{t.testimonials.title}</h2>
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-20">
           {reviews.slice(0, 4).map((r, i) => (
             <div key={i} className="bg-white p-8 rounded-2xl shadow-sm border border-brand-navy/5">
-              <div className="flex space-x-1 mb-6">
+              <div className="flex gap-1 mb-6">
                 {[...Array(r.stars)].map((_, i) => (
                   <Star key={i} size={12} className="fill-brand-orange text-brand-orange" />
                 ))}
               </div>
               <p className="text-brand-navy/80 text-sm leading-relaxed mb-8 italic">"{r.text}"</p>
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center gap-3">
                 <div className="h-[1px] w-4 bg-brand-orange" />
                 <span className="text-brand-navy text-[10px] tracking-widest font-bold">{r.author}</span>
               </div>
@@ -4462,20 +4729,20 @@ const Testimonials = () => {
         </div>
 
         <div className="max-w-xl mx-auto bg-white p-10 rounded-2xl shadow-sm border border-brand-navy/5">
-          <h3 className="text-brand-navy text-2xl font-serif mb-8 text-center">Share Your Experience</h3>
+          <h3 className="text-brand-navy text-2xl font-serif mb-8 text-center">{t.testimonials.shareTitle}</h3>
           <form className="space-y-4">
             <input 
               type="text" 
-              placeholder="Your Name" 
+              placeholder={t.testimonials.namePlaceholder}
               className="w-full bg-gray-50 border border-gray-100 p-4 text-brand-navy text-sm focus:outline-none focus:border-brand-orange transition-colors rounded-xl"
             />
             <textarea 
-              placeholder="Your Review" 
+              placeholder={t.testimonials.reviewPlaceholder}
               rows={4}
               className="w-full bg-gray-50 border border-gray-100 p-4 text-brand-navy text-sm focus:outline-none focus:border-brand-orange transition-colors rounded-xl"
             />
-            <button className="w-full bg-brand-orange hover:bg-brand-orange-hover text-white py-4 text-[10px] tracking-[0.3em] font-bold transition-all rounded-xl shadow-lg shadow-brand-orange/20">
-              POST REVIEW
+            <button className="w-full bg-brand-orange hover:bg-brand-orange-hover text-white py-4 text-[10px] tracking-[0.3em] font-bold transition-all rounded-xl shadow-lg shadow-brand-orange/20 text-center">
+              {t.testimonials.postReview}
             </button>
           </form>
         </div>
@@ -4484,45 +4751,33 @@ const Testimonials = () => {
   );
 };
 
-const About = () => {
+const About = ({ t }: { t: any }) => {
   return (
     <section id="about" className="py-24 bg-white">
       <div className="max-w-4xl mx-auto px-6 text-center">
         <div className="flex flex-col items-center mb-12">
           <span className="text-brand-navy font-serif text-3xl tracking-widest font-bold">SHANI'S</span>
           <span className="text-brand-navy text-sm tracking-[0.4em] -mt-1 font-medium">FLAVOR LAB</span>
-          <span className="text-brand-navy text-[8px] tracking-[0.2em] opacity-60">DESIGNED TO DELIGHT</span>
+          <span className="text-brand-navy text-[8px] tracking-[0.2em] opacity-60">{t.about.brandTagline}</span>
         </div>
 
         <h2 className="text-brand-navy text-4xl md:text-5xl font-serif mb-10 leading-tight">
-          Shani's Flavor Lab – Where Authentic Sri <br />
-          Lankan Flavours Meet Refined Culinary <br />
-          Craftsmanship
+          {t.about.title}
         </h2>
 
         <div className="space-y-6 text-brand-navy/70 text-sm leading-relaxed mb-16">
-          <p>
-            Welcome to Shani's Flavor Lab, where authentic Sri Lankan flavours meet refined culinary craftsmanship. Founded and led by Chef Shani, a professional chef and culinary content creator, our brand is built on a deep passion for celebrating the rich heritage of Sri Lankan cuisine while presenting it with a modern, premium touch.
-          </p>
-          <p>
-            At Shani's Flavor Lab, we carefully craft premium spice blends and specialty products designed to bring bold, vibrant flavour to every kitchen. Each product is thoughtfully developed using high-quality ingredients to ensure exceptional aroma, authentic taste, and consistent quality.
-          </p>
-          <p>
-            Our mission is to transform everyday cooking into a memorable culinary experience. From signature spice blends to distinctive condiments, each product is crafted with precision and passion, bringing the essence of Sri Lankan cooking to food lovers who appreciate authenticity, quality, and sophistication.
-          </p>
+          <p>{t.about.paragraph1}</p>
+          <p>{t.about.paragraph2}</p>
+          <p>{t.about.paragraph3}</p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-12 text-left">
+        <div className="grid md:grid-cols-2 gap-12">
           <div>
-            <h3 className="text-brand-navy font-serif text-2xl mb-8 text-center md:text-left">Our Commitments</h3>
+            <h3 className="text-brand-navy font-serif text-2xl mb-8 text-center md:text-start">{t.about.commitmentsTitle}</h3>
             <ul className="space-y-6">
-              {[
-                "Supporting Local Farmers — We work hand-in-hand with small Sri Lankan farmers, ensuring they are fairly compensated and that their communities thrive through sustainable, ethical practices.",
-                "100% Natural & Artisanal — Every product is free from artificial additives and carefully hand-selected, delivering the authentic flavours of Sri Lanka in every spice, blend, and creation.",
-                "Committed to Sustainability — From farm to kitchen, we prioritize eco-conscious sourcing and packaging, making sure every step is responsible, sustainable, and kind to the planet."
-              ].map((item, i) => (
-                <li key={i} className="flex items-start space-x-4">
-                  <div className="mt-1 text-brand-orange">
+              {[t.about.commitment1, t.about.commitment2, t.about.commitment3].map((item: string, i: number) => (
+                <li key={i} className="flex items-start gap-4">
+                  <div className="mt-1 text-brand-orange flex-shrink-0">
                     <Check size={16} />
                   </div>
                   <span className="text-brand-navy/80 text-xs leading-relaxed">{item}</span>
@@ -4532,16 +4787,10 @@ const About = () => {
           </div>
 
           <div>
-            <h3 className="text-brand-navy font-serif text-2xl mb-8 text-center md:text-left">Why Choose Shani's Flavor Lab?</h3>
+            <h3 className="text-brand-navy font-serif text-2xl mb-8 text-center md:text-start">{t.about.whyChooseTitle}</h3>
             <ul className="space-y-4">
-              {[
-                "Authentic Sri Lankan spice blends",
-                "High-quality, natural ingredients",
-                "Crafted by a professional chef",
-                "Easy-to-use cooking solutions",
-                "Islandwide free delivery in Sri Lanka"
-              ].map((item, i) => (
-                <li key={i} className="flex items-center space-x-4">
+              {[t.about.why1, t.about.why2, t.about.why3, t.about.why4, t.about.why5].map((item: string, i: number) => (
+                <li key={i} className="flex items-center gap-4">
                   <div className="text-brand-orange">
                     <Check size={16} />
                   </div>
@@ -4554,7 +4803,7 @@ const About = () => {
 
         <div className="mt-20 bg-brand-cream p-12 rounded-2xl border border-brand-navy/5">
           <p className="text-brand-navy font-serif text-xl italic">
-            "Shani's Flavor Lab is more than just a spice brand — It's where passion for cooking meets authentic Sri Lankan flavor."
+            {t.about.quote}
           </p>
         </div>
       </div>
@@ -4562,7 +4811,7 @@ const About = () => {
   );
 };
 
-const Chef = () => {
+const Chef = ({ t }: { t: any }) => {
   return (
     <section id="chef" className="py-24 bg-brand-cream">
       <div className="max-w-7xl mx-auto px-6 grid md:grid-cols-2 gap-16 items-center">
@@ -4586,24 +4835,16 @@ const Chef = () => {
           whileInView={{ opacity: 1, x: 0 }}
           viewport={{ once: true }}
         >
-          <h2 className="text-brand-navy text-6xl font-serif mb-2">Meet Chef Shani</h2>
+          <h2 className="text-brand-navy text-6xl font-serif mb-2">{t.chef.title}</h2>
           <p className="text-brand-orange text-[10px] tracking-[0.3em] font-bold mb-10 uppercase">
-            CHEF, RESTAURATEUR & CULINARY ARTIST
+            {t.chef.subtitle}
           </p>
           
           <div className="space-y-6 text-brand-navy/70 text-sm leading-relaxed mb-10">
-            <p>
-              For over 20 years, Chef Shani has been immersed in the art of cooking, blending the rich traditions of Sri Lankan cuisine with the inspiration of global culinary experiences. A professional chef, restaurateur, and graduate in Commercial Cookery and Hospitality Management, she has explored flavors from every corner of the world, yet remains deeply connected to the dishes of her heritage.
-            </p>
-            <p>
-              At the heart of Shani's approach is a love for authenticity and craftsmanship. Every spice blend, every jar of sauce, and every creation from Shani's Flavor Lab reflects a careful balance of traditional techniques, premium ingredients, and contemporary culinary artistry.
-            </p>
-            <p>
-              More than a chef, Shani is a curator of flavour experiences. Her mission: to help every home cook discover the beauty, aroma, and passion of authentic Sri Lankan cuisine, transforming everyday meals into extraordinary experiences.
-            </p>
-            <p>
-              With Shani's Flavor Lab, luxury is in every detail — from the hand-selected ingredients to the artisanal care in every blend — offering a culinary journey that is as refined as it is unforgettable.
-            </p>
+            <p>{t.chef.paragraph1}</p>
+            <p>{t.chef.paragraph2}</p>
+            <p>{t.chef.paragraph3}</p>
+            <p>{t.chef.paragraph4}</p>
           </div>
         </motion.div>
       </div>
@@ -4611,19 +4852,19 @@ const Chef = () => {
   );
 };
 
-const SocialSection = () => {
+const SocialSection = ({ t }: { t: any }) => {
   return (
     <section className="bg-white py-12 border-t border-brand-navy/5">
       <div className="max-w-7xl mx-auto px-6 flex flex-wrap justify-center md:justify-end gap-4">
         {/* Simplified and cleaner social buttons */}
         <button className="bg-[#2d79f3] text-white px-8 py-4 text-[10px] tracking-wider font-bold rounded-xl hover:bg-opacity-90 transition-all shadow-lg shadow-blue-500/10">
-          Chef Shani FB
+          {t.social.chefFB}
         </button>
         <button className="bg-[#2d79f3] text-white px-8 py-4 text-[10px] tracking-wider font-bold rounded-xl hover:bg-opacity-90 transition-all shadow-lg shadow-blue-500/10">
-          Shanis Flavor Lab FB
+          {t.social.brandFB}
         </button>
         <button className="bg-[#ff0000] text-white px-8 py-4 text-[10px] tracking-wider font-bold rounded-xl hover:bg-opacity-90 transition-all shadow-lg shadow-red-500/10">
-          YouTube Channel
+          {t.social.youtube}
         </button>
       </div>
     </section>
@@ -4652,7 +4893,7 @@ const Footer = ({ onOpenTerms, onOpenPrivacy, onOpenRefund, t }: {
               </div>
             </div>
             <p className="text-brand-slate text-sm leading-relaxed mb-8 font-medium">
-              Premium Sri Lankan flavors and signature blends crafted with precision. Delivering trusted quality for every kitchen.
+              {t.footer.description}
             </p>
           </div>
 
@@ -4666,25 +4907,25 @@ const Footer = ({ onOpenTerms, onOpenPrivacy, onOpenRefund, t }: {
               <li>
                 <button 
                   onClick={onOpenTerms}
-                  className="hover:text-brand-orange transition-colors text-left"
+                  className="hover:text-brand-orange transition-colors text-start"
                 >
-                  Terms & Conditions
+                  {t.footer.termsConditions}
                 </button>
               </li>
               <li>
                 <button 
                   onClick={onOpenPrivacy}
-                  className="hover:text-brand-orange transition-colors text-left"
+                  className="hover:text-brand-orange transition-colors text-start"
                 >
-                  Privacy Policy
+                  {t.footer.privacyPolicy}
                 </button>
               </li>
               <li>
                 <button 
                   onClick={onOpenRefund}
-                  className="hover:text-brand-orange transition-colors text-left"
+                  className="hover:text-brand-orange transition-colors text-start"
                 >
-                  Refund & Return Policy
+                  {t.footer.refundPolicy}
                 </button>
               </li>
             </ul>
@@ -4692,7 +4933,7 @@ const Footer = ({ onOpenTerms, onOpenPrivacy, onOpenRefund, t }: {
 
           {/* Column 3 */}
           <div>
-            <h4 className="text-brand-navy font-serif text-xl font-bold mb-10">Contact</h4>
+            <h4 className="text-brand-navy font-serif text-xl font-bold mb-10">{t.footer.contact}</h4>
             <div className="space-y-6 text-brand-slate text-sm font-medium">
               <p><span className="text-brand-navy font-bold">WhatsApp:</span> +94 77 000 0000</p>
               <p><span className="text-brand-navy font-bold">Email:</span> info@shanisflavorlab.com</p>
@@ -4706,7 +4947,7 @@ const Footer = ({ onOpenTerms, onOpenPrivacy, onOpenRefund, t }: {
 
         <div className="pt-10 border-t border-brand-navy/5 text-center">
           <p className="text-brand-navy/40 text-[10px] tracking-widest font-bold">
-            © 2026 SHANI'S FLAVOR LAB. ALL RIGHTS RESERVED.
+            {t.footer.copyright}
           </p>
         </div>
       </div>
@@ -4771,10 +5012,10 @@ const Home = ({
       <Hero t={t} />
       <FeaturesBar t={t} />
       <Products products={products} onOrder={onAddToCart} onViewProduct={onViewProduct} user={user} userRole={userRole} onOpenAuth={onOpenAuth} t={t} />
-      <Testimonials />
-      <About />
-      <Chef />
-      <SocialSection />
+      <Testimonials t={t} />
+      <About t={t} />
+      <Chef t={t} />
+      <SocialSection t={t} />
       <Footer onOpenTerms={onOpenTerms} onOpenPrivacy={onOpenPrivacy} onOpenRefund={onOpenRefund} t={t} />
     </>
   );
@@ -5106,6 +5347,13 @@ export default function App() {
             </DashboardLayout>
           </ProtectedRoute>
         } />
+        <Route path="/admin/discounts" element={
+          <ProtectedRoute>
+            <DashboardLayout user={user} role={userRole}>
+              <DiscountsManager />
+            </DashboardLayout>
+          </ProtectedRoute>
+        } />
         <Route path="/admin/odoo" element={
           <ProtectedRoute>
             <DashboardLayout user={user} role={userRole}>
@@ -5201,18 +5449,22 @@ export default function App() {
         onClearCart={() => setCart([])}
         user={user}
         setModalContent={setModalContent}
+        t={t}
       />
       <TermsModal 
         isOpen={isTermsOpen} 
-        onClose={() => setIsTermsOpen(false)} 
+        onClose={() => setIsTermsOpen(false)}
+        t={t}
       />
       <PrivacyModal 
         isOpen={isPrivacyOpen} 
-        onClose={() => setIsPrivacyOpen(false)} 
+        onClose={() => setIsPrivacyOpen(false)}
+        t={t}
       />
       <RefundModal 
         isOpen={isRefundOpen} 
-        onClose={() => setIsRefundOpen(false)} 
+        onClose={() => setIsRefundOpen(false)}
+        t={t}
       />
       <ProductDetailModal 
         isOpen={isProductModalOpen} 
@@ -5223,7 +5475,8 @@ export default function App() {
       />
       <AuthModal 
         isOpen={isAuthModalOpen} 
-        onClose={() => setIsAuthModalOpen(false)} 
+        onClose={() => setIsAuthModalOpen(false)}
+        t={t}
       />
 
       {/* Global Message Modal */}
