@@ -32,6 +32,17 @@ export const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const translateError = (error: string) => {
+    if (lang !== 'ar') return error;
+    const lower = error.toLowerCase();
+    if (lower.includes('no user record') || lower.includes('user-not-found')) return 'بيانات الدخول غير صحيحة.';
+    if (lower.includes('wrong-password')) return 'كلمة المرور غير صحيحة.';
+    if (lower.includes('invalid-email')) return 'بيانات الدخول غير صحيحة.';
+    if (lower.includes('too-many-requests')) return 'محاولات كثيرة جداً. يرجى المحاولة لاحقاً.';
+    if (lower.includes('network-request-failed')) return 'فشل في الاتصال بالشبكة.';
+    return error;
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -77,15 +88,7 @@ export const LoginPage = () => {
       navigate(from);
     } catch (err: any) {
       console.error(err);
-      if (err.code === 'auth/wrong-password') {
-        setError(t.auth.incorrectPassword);
-      } else if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-email') {
-        setError(lang === 'ar' ? 'بيانات الدخول غير صحيحة' : 'Invalid login credentials');
-      } else if (err.code === 'auth/too-many-requests') {
-        setError(t.auth.tooManyAttempts);
-      } else {
-        setError(t.auth.loginError);
-      }
+      setError(translateError(err.code || err.message || t.auth.loginError));
     } finally {
       setLoading(false);
     }
