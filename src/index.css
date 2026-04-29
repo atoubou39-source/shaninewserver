@@ -59,6 +59,10 @@
   }
 }
 
+.font-action-arabic {
+  font-family: "Cairo", sans-serif !important;
+}
+
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;
 }

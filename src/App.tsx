@@ -721,6 +721,7 @@ const Products = ({
   user,
   userRole,
   onOpenAuth,
+  lang,
   t
 }: { 
   products: Product[], 
@@ -729,6 +730,7 @@ const Products = ({
   user: User | null,
   userRole: string | null,
   onOpenAuth: () => void,
+  lang: Language,
   t: any
 }) => {
   const [showAll, setShowAll] = useState(true);
@@ -840,7 +842,7 @@ const Products = ({
                             className="w-full bg-[#0f172a] text-white py-4 rounded-xl text-[11px] tracking-[0.1em] font-bold flex items-center justify-center space-x-2 space-x-reverse hover:bg-brand-orange transition-all duration-300"
                           >
                             <ShoppingBag size={16} />
-                            <span>{t.products.addToCart}</span>
+                            <span className={lang === 'ar' ? "font-action-arabic" : ""}>{t.products.addToCart}</span>
                           </button>
                         </>
                       ) : (
@@ -2507,12 +2509,14 @@ const ProductDetailModal = ({
   onClose, 
   product, 
   onAddToCart,
+  lang,
   t
 }: { 
   isOpen: boolean, 
   onClose: () => void, 
   product: Product | null, 
   onAddToCart: (p: Product) => void,
+  lang: Language,
   t: any
 }) => {
   if (!product) return null;
@@ -2613,7 +2617,7 @@ const ProductDetailModal = ({
                   className="flex-1 bg-brand-navy text-white py-5 rounded-2xl text-[11px] tracking-[0.2em] font-bold flex items-center justify-center space-x-3 space-x-reverse hover:bg-brand-orange transition-all duration-300 shadow-lg shadow-brand-navy/10"
                 >
                   <ShoppingBag size={18} />
-                  <span>{t.products.addToCart}</span>
+                  <span className={lang === 'ar' ? "font-action-arabic" : ""}>{t.products.addToCart}</span>
                 </button>
               </div>
               
@@ -6390,7 +6394,7 @@ const Home = ({
       />
       <Hero t={t} />
       <FeaturesBar t={t} />
-      <Products products={products} onOrder={onAddToCart} onViewProduct={onViewProduct} user={user} userRole={userRole} onOpenAuth={onOpenAuth} t={t} />
+      <Products products={products} onOrder={onAddToCart} onViewProduct={onViewProduct} user={user} userRole={userRole} onOpenAuth={onOpenAuth} lang={lang} t={t} />
       
       <Testimonials t={t} />
       <About t={t} />
@@ -7011,6 +7015,7 @@ export default function App() {
         onClose={() => setIsProductModalOpen(false)} 
         product={selectedProduct}
         onAddToCart={addToCart}
+        lang={lang}
         t={t}
       />
       <AuthModal 
