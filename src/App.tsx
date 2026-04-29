@@ -6392,27 +6392,6 @@ const Home = ({
       <FeaturesBar t={t} />
       <Products products={products} onOrder={onAddToCart} onViewProduct={onViewProduct} user={user} userRole={userRole} onOpenAuth={onOpenAuth} t={t} />
       
-      {/* Auto-sliding Image Banner */}
-      <section className="py-12 bg-white overflow-hidden">
-        <div className="max-w-7xl mx-auto px-6">
-          <motion.div 
-            animate={{ x: [0, -1000] }}
-            transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-            className="flex space-x-6 space-x-reverse"
-          >
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="flex-shrink-0 w-64 md:w-96 h-40 md:h-60 rounded-3xl overflow-hidden bg-gray-100 shadow-lg">
-                <img 
-                  src={`https://picsum.photos/seed/hakkal_${i}/800/400`} 
-                  alt="Hakkal Gallery" 
-                  className="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-500"
-                />
-              </div>
-            ))}
-          </motion.div>
-        </div>
-      </section>
-
       <Testimonials t={t} />
       <About t={t} />
       <Chef t={t} />
