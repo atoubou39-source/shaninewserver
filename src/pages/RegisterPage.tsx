@@ -64,9 +64,20 @@ export const RegisterPage = () => {
   const [status, setStatus] = useState<{ type: 'idle' | 'success' | 'error', message: string }>({ type: 'idle', message: '' });
   const [loading, setLoading] = useState(false);
   const [timer, setTimer] = useState(0);
+  const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const navigate = useNavigate();
+
+  const translateError = (error: string) => {
+    if (lang !== 'ar') return error;
+    const lower = error.toLowerCase();
+    if (lower.includes('no user record')) return 'لا يوجد سجل مستخدم بهذا الرقم.';
+    if (lower.includes('already in use')) return 'رقم الجوال أو البريد الإلكتروني مسجل بالفعل.';
+    if (lower.includes('invalid-email')) return 'بيانات الدخول غير صحيحة.';
+    if (lower.includes('network-request-failed')) return 'فشل في الاتصال بالشبكة.';
+    if (lower.includes('otp')) return 'رمز التحقق غير صحيح أو منتهي.';
+    return error;
+  };
 
   useEffect(() => {
     let interval: any;
@@ -173,7 +184,7 @@ export const RegisterPage = () => {
       } else {
         setStatus({ 
           type: 'error', 
-          message: data.error || (lang === 'ar' ? 'رمز التحقق غير صحيح أو منتهي' : 'Invalid or expired code')
+          message: translateError(data.error || (lang === 'ar' ? 'رمز التحقق غير صحيح أو منتهي' : 'Invalid or expired code'))
         });
         // If OTP fails, maybe go back to OTP step
         if (data.error?.includes('رمز') || data.error?.includes('كود') || data.error?.includes('OTP')) {
