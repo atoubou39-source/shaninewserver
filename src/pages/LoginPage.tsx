@@ -175,7 +175,7 @@ export const LoginPage = () => {
                 value={loginInput}
                 onChange={(e) => setLoginInput(e.target.value)}
                 className="w-full pe-12 ps-4 py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange focus:bg-white transition-all font-medium text-brand-navy text-start"
-                placeholder={lang === 'ar' ? "9665XXXXXXXX" : "email@example.com"}
+                placeholder={lang === 'ar' ? "05XXXXXXXX" : "email@example.com"}
               />
             </div>
           </div>
