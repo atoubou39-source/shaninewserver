@@ -51,8 +51,10 @@
   html[dir="rtl"] h3, 
   html[dir="rtl"] h4, 
   html[dir="rtl"] h5, 
-  html[dir="rtl"] h6 {
-    font-family: "Almarai", sans-serif;
+  html[dir="rtl"] h6,
+  html[dir="rtl"] .font-serif,
+  html[dir="rtl"] .font-sans {
+    font-family: "Almarai", "IBM Plex Sans Arabic", sans-serif !important;
     font-weight: 800;
     line-height: 1.3;
     letter-spacing: normal;
