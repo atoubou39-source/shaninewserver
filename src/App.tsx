@@ -623,9 +623,9 @@ const Hero = ({ t }: { t: any }) => {
             </span>
           </div>
           
-          <h1 className="text-brand-navy text-5xl md:text-8xl font-serif leading-tight mb-8">
+          <h1 className={`text-brand-navy ${t.hero.titleMain.includes('تحفة') ? 'text-6xl md:text-9xl font-bold leading-[1.2]' : 'text-5xl md:text-8xl font-serif leading-tight'} mb-8`}>
             {t.hero.titleMain} <br />
-            {t.hero.titleSub}<span className="text-brand-orange italic">{t.hero.titleItalic}</span>
+            {t.hero.titleSub}<span className={`${t.hero.titleMain.includes('تحفة') ? 'text-brand-orange' : 'text-brand-orange italic'}`}>{t.hero.titleItalic}</span>
           </h1>
           
           <p className="text-brand-slate text-base md:text-lg max-w-md mb-10 leading-relaxed font-medium">
