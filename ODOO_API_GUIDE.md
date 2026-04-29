@@ -2,50 +2,25 @@
 
 ## Current Configuration
 Your Odoo is already configured:
-- **URL:** https://co.hakkal-est.com/
-- **Database:** test
-- **Username:** aburiyad
-- **Password:** test
+- **URL:** https://co.haqqal-est.com/
+- **DB:** test
+- **API Key:** b1624329dc9a6ba356f92d9e76eabab105479791
 
-## Odoo API Access Methods
+### Accessing the Odoo Instance
+1. Go to: https://co.haqqal-est.com/web
+2. Log in with:
+   - **Username:** aburiyad
+   - **Password:** test
 
-### Method 1: XML-RPC API (Currently Used)
-This is what your application uses now.
+---
 
-**API Endpoints:**
-- `/xmlrpc/2/common` - Authentication
-- `/xmlrpc/2/object` - Data operations
+## API Endpoints (via Proxy)
 
-**No API Key Needed!**
-Odoo XML-RPC uses username/password authentication, not API keys.
+Since the Odoo instance doesn't have native REST API endpoints enabled, we use the `api/index.ts` server as a proxy that communicates with Odoo via XML-RPC.
 
-### Method 2: REST API (Alternative)
-If you want to use REST API instead of XML-RPC.
-
-## How to Get API Credentials
-
-### Step 1: Access Odoo Admin
-1. Go to: https://co.hakkal-est.com/web
-2. Login with admin credentials
-
-### Step 2: Check User Permissions
-1. Go to **Settings** > **Users & Companies** > **Users**
-2. Find your user: `aburiyad`
-3. Ensure user has **Technical Features** enabled
-
-### Step 3: Enable API Access
-1. Edit user `aburiyad`
-2. Go to **Access Rights** tab
-3. Enable necessary permissions:
-   - Sales > Sales User
-   - Inventory > Inventory User
-   - Technical Features (for API access)
-
-### Step 4: Test API Access
-Your current configuration should work:
+### 1. Common XML-RPC Authentication
 ```bash
-# Test XML-RPC connection
-curl -X POST https://co.hakkal-est.com/xmlrpc/2/common \
+curl -X POST https://co.haqqal-est.com/xmlrpc/2/common \
   -H "Content-Type: text/xml" \
   -d '<?xml version="1.0"?>
 <methodCall>

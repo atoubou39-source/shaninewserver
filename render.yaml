@@ -1,15 +1,17 @@
 services:
   - type: web
-    name: shanis-flavor-lab-api
+    name: hakkal-trading-api
     runtime: node
     plan: starter
     autoDeploy: true
     rootDir: .
     buildCommand: npm install
-    startCommand: npm run dev
+    startCommand: npx tsx api/index.ts
     envVars:
       - key: NODE_ENV
         value: production
+      - key: TSX_COMPILE
+        value: "false"
       - key: ODOO_URL
         sync: false
       - key: ODOO_DB

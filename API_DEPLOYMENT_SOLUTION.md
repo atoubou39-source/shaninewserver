@@ -1,7 +1,7 @@
 # API Deployment Solution
 
 ## Problem Identified
-`https://co.hakkal-est.com/` is an **Odoo instance**, not a Node.js API server.
+`https://co.haqqal-est.com/` is an **Odoo instance**, not a Node.js API server.
 That's why `/api/ping` and other API endpoints return 404.
 
 ## Solutions
@@ -98,7 +98,7 @@ VITE_API_BASE_URL=https://your-backend-url.railway.app/
 ## Current Status
 - Frontend: Deployed to Netlify
 - Backend: Needs deployment
-- Odoo: Running at co.hakkal-est.com (separate service)
+- Odoo: Running at co.haqqal-est.com (separate service)
 
 ---
 

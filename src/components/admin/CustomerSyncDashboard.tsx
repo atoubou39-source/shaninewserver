@@ -31,30 +31,31 @@ interface Customer {
 }
 
 const getApiUrl = (path: string) => {
+  const isLocalhost = typeof window !== 'undefined' && 
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
   const envBase = (import.meta as any).env?.VITE_API_BASE_URL;
-  if (!envBase) return path;
-
-  const cleanBase = envBase
-    .trim()
-    .replace(/^[/\)\s;`"']+/, "")
-    .replace(/[/\)\s;`"']+$/, "");
   
+  // Clean the path
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  
-  if (!cleanBase || cleanBase === "https://your-backend-domain.com") {
-    return cleanPath;
-  }
 
-  const finalBase = cleanBase.startsWith('http') ? cleanBase : `https://${cleanBase}`;
+  // If VITE_API_BASE_URL is set and not the placeholder, use it
+  if (envBase && envBase !== "https://your-backend-domain.com") {
+    const cleanBase = envBase
+      .trim()
+      .replace(/^[\/\)\s;`"']+/ , "")
+      .replace(/[\/\)\s;`"']+$/, "");
+    
+    const finalBase = cleanBase.startsWith('http') ? cleanBase : `https://${cleanBase}`;
 
-  if (typeof window !== 'undefined') {
-    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    if (!isLocalhost) {
-      return `${finalBase}${cleanPath}`;
+    // Logic to prevent double /api or handle /api correctly
+    if (finalBase.endsWith('/api') && cleanPath.startsWith('/api')) {
+      return `${finalBase}${cleanPath.substring(4)}`;
     }
+    return `${finalBase}${cleanPath}`;
   }
-  
-  return cleanPath; 
+
+  // Fallback to relative path
+  return cleanPath;
 };
 
 export const CustomerSyncDashboard = () => {
@@ -104,6 +105,12 @@ export const CustomerSyncDashboard = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const refreshData = () => {
+    setLoading(true);
+    // onSnapshot handles the real-time update, but we can manually trigger a small delay to show feedback
+    setTimeout(() => setLoading(false), 500);
   };
 
   useEffect(() => {
@@ -312,7 +319,11 @@ export const CustomerSyncDashboard = () => {
       <div className="bg-white rounded-[2.5rem] shadow-sm border border-brand-navy/5 overflow-hidden">
         <div className="p-8 border-b border-gray-50 flex items-center justify-between">
           <h3 className="text-lg font-serif text-brand-navy font-bold">كل العملاء</h3>
-          <button className="text-gray-400 hover:text-brand-navy transition-colors">
+          <button 
+            onClick={refreshData}
+            className={`text-gray-400 hover:text-brand-navy transition-colors ${loading ? 'animate-spin' : ''}`}
+            title="تحديث البيانات"
+          >
             <RefreshCw size={18} />
           </button>
         </div>

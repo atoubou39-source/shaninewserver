@@ -8,3 +8,5 @@ coverage/
 !.env.example
 .npm-cache/
 src.zip
+.vercel
+.env*.local

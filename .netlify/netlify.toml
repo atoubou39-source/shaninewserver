@@ -6,7 +6,7 @@ headers = []
 [functions."*"]
 
 [build]
-publish = "/Users/kokyaziz/Downloads/shani's-flavor-lab (8)/dist"
+publish = "dist"
 publishOrigin = "ui"
 commandOrigin = "ui"
 command = "npm run build"

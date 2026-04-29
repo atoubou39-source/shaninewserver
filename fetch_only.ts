@@ -7,9 +7,12 @@ dotenv.config();
 const odooConfig = {
   url: process.env.ODOO_URL || "",
   db: process.env.ODOO_DB || "",
-  username: process.env.ODOO_USERNAME || "",
-  password: process.env.ODOO_PASSWORD || "",
+  apiKey: (process.env.ODOO_API_KEY || "").trim(),
+  username: (process.env.ODOO_USERNAME || "").trim(),
+  password: (process.env.ODOO_PASSWORD || "").trim(),
 };
+
+const getOdooCredential = () => odooConfig.apiKey || odooConfig.password;
 
 const callOdoo = (service: string, method: string, ...args: any[]): Promise<any> => {
   return new Promise((resolve, reject) => {
@@ -31,10 +34,10 @@ const callOdoo = (service: string, method: string, ...args: any[]): Promise<any>
 
 async function fetch() {
   try {
-    const uid = await callOdoo("common", "authenticate", odooConfig.db, odooConfig.username, odooConfig.password, {});
+    const uid = await callOdoo("common", "authenticate", odooConfig.db, odooConfig.username, getOdooCredential(), {});
     if (!uid) throw new Error("Auth failed");
     
-    const products = await callOdoo("object", "execute_kw", odooConfig.db, uid, odooConfig.password, "product.template", "search_read", 
+    const products = await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "product.template", "search_read", 
       [[["sale_ok", "=", true]]], 
       { fields: ["id", "name", "list_price", "description_sale"], limit: 20 }
     );

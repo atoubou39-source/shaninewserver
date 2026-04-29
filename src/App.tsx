@@ -44,9 +44,10 @@ import {
   Users,
   RefreshCw,
   ArrowUpCircle,
-  Percent
+  Percent,
+  ShoppingCart
 } from "lucide-react";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation, Navigate } from "react-router-dom";
 import { 
   collection, 
@@ -173,6 +174,11 @@ interface Order {
   status: string;
   createdAt: string;
   odooOrderName?: string;
+  odooState?: string;
+  invoiceName?: string;
+  lastSyncAt?: string;
+  salesRep?: string;
+  salespersonId?: number | null;
 }
 
 interface Offer {
@@ -253,7 +259,7 @@ const INITIAL_PRODUCTS: Product[] = [
   {
     "id": 16,
     "name": "Conference Chair",
-    "description": "Premium Sri Lankan Selection.",
+    "description": "Premium Selection.",
     "price": "SAR 33",
     "image": "https://picsum.photos/seed/16/400/400",
     "isOdoo": true
@@ -261,7 +267,7 @@ const INITIAL_PRODUCTS: Product[] = [
   {
     "id": 18,
     "name": "Corner Desk Left Sit",
-    "description": "Premium Sri Lankan Selection.",
+    "description": "Premium Selection.",
     "price": "SAR 85",
     "image": "https://picsum.photos/seed/18/400/400",
     "isOdoo": true
@@ -269,7 +275,7 @@ const INITIAL_PRODUCTS: Product[] = [
   {
     "id": 10,
     "name": "Corner Desk Right Sit",
-    "description": "Premium Sri Lankan Selection.",
+    "description": "Premium Selection.",
     "price": "SAR 147",
     "image": "https://picsum.photos/seed/10/400/400",
     "isOdoo": true
@@ -286,73 +292,82 @@ const INITIAL_PRODUCTS: Product[] = [
 
 const INITIAL_SEO: SiteSettings["seo"] = {
   home: {
-    title: "شاني فليفر لاب | اختيار متميز",
-    description: "اكتشف منتجات عالية الجودة يتم توصيلها في جميع أنحاء المملكة العربية السعودية.",
-    keywords: "منتجات، عضوي، زعفران، نكهات متميزة",
+    title: "Hakkal Trading Company | شركة حقال للتجارة",
+    description: "شركة حقال للتجارة - وجهتك الأولى للمنتجات عالية الجودة.",
+    keywords: "حقال, شركة حقال للتجارة, أدوات صحية, منتجات, متجر الكتروني",
   },
   collection: {
-    title: "مجموعتنا | شاني فليفر لاب",
-    description: "استكشف مجموعتنا المتميزة من خلطات التوابل، من مزيج البرياني الملكي إلى مزيج نار الجزيرة.",
-    keywords: "مجموعة توابل، شراء توابل عبر الإنترنت، توابل سريلانكية",
+    title: "المجموعات | Hakkal Trading Company",
+    description: "استكشف مجموعتنا المتميزة من المنتجات عالية الجودة.",
+    keywords: "مجموعة حقال، شراء منتجات عبر الإنترنت",
   },
   about: {
-    title: "من نحن | شاني فليفر لاب",
-    description: "تعرف على رحلة الشيف شاني والتزامنا بالحرفية الطهوية السريلانكية الأصيلة.",
-    keywords: "شيف شاني، فنان طهي، حرفة التوابل",
+    title: "من نحن | Hakkal Trading Company",
+    description: "تعرف على رحلة شركة حقال للتجارة والتزامنا بالجودة والتميز.",
+    keywords: "شركة حقال للتجارة، عن حقال، الجودة والتميز",
   }
 };
 
 // --- Helpers ---
 
-const getStatusDetails = (status: string) => {
+const getStatusDetails = (status: string, t: any) => {
+  const statusKey = status as keyof typeof t.orders.statuses;
+  const label = t.orders.statuses[statusKey] || status;
+  
   switch (status) {
     case 'pending_approval': 
-      return { label: 'قيد المعالجة', color: 'bg-orange-100 text-orange-700 border-orange-200' };
+      return { label, color: 'bg-orange-50 text-orange-700 border-orange-200' };
     case 'approved': 
-      return { label: 'تم الموافقة', color: 'bg-green-100 text-green-700 border-green-200' };
+    case 'sale':
+      return { label: t.orders.statuses.approved || label, color: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
     case 'rejected': 
-      return { label: 'تم الرفض', color: 'bg-red-100 text-red-700 border-red-200' };
+    case 'cancel':
+      return { label: t.orders.statuses.rejected || label, color: 'bg-red-50 text-red-700 border-red-200' };
+    case 'shipped':
+    case 'done':
+      return { label: t.orders.statuses.shipped || label, color: 'bg-purple-50 text-purple-700 border-purple-200' };
     case 'completed': 
-      return { label: 'مكتمل', color: 'bg-blue-100 text-blue-700 border-blue-200' };
+      return { label: t.orders.statuses.completed || label, color: 'bg-blue-50 text-blue-700 border-blue-200' };
     case 'pending_payment':
-      return { label: 'في انتظار الدفع', color: 'bg-yellow-100 text-yellow-700 border-yellow-200' };
+      return { label, color: 'bg-amber-50 text-amber-700 border-amber-200' };
+    case 'processing':
+      return { label, color: 'bg-indigo-50 text-indigo-700 border-indigo-200' };
     default: 
-      return { label: status, color: 'bg-gray-100 text-gray-700 border-gray-200' };
+      return { label, color: 'bg-gray-50 text-gray-700 border-gray-200' };
   }
 };
 
 const getApiUrl = (path: string) => {
+  const isLocalhost = typeof window !== 'undefined' && 
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
   const envBase = (import.meta as any).env?.VITE_API_BASE_URL;
-  if (!envBase) return path;
-
-  // Extremely defensive cleaning:
-  // 1. Remove all quotes, backticks, and common typo characters from start and end
-  // 2. Trim all whitespace
-  const cleanBase = envBase
-    .trim()
-    .replace(/^[/\)\s;`"']+/, "")
-    .replace(/[/\)\s;`"']+$/, "");
-  
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  
-  // If the cleaned base is empty or just a placeholder, use relative path
-  if (!cleanBase || cleanBase === "https://your-backend-domain.com") {
-    return cleanPath;
-  }
 
-  // Ensure cleanBase starts with http/https
-  const finalBase = cleanBase.startsWith('http') ? cleanBase : `https://${cleanBase}`;
-
-  if (typeof window !== 'undefined') {
-    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  // If VITE_API_BASE_URL is set and not the placeholder, use it
+  if (envBase && envBase !== "https://your-backend-domain.com") {
+    const cleanBase = envBase
+      .trim()
+      .replace(/^[/\)\s;`"']+/, "")
+      .replace(/[/\)\s;`"']+$/, "");
     
-    // In production, use the absolute URL to reach the backend on Railway
-    if (!isLocalhost) {
-      return `${finalBase}${cleanPath}`;
-    }
+    const finalBase = cleanBase.startsWith('http') ? cleanBase : `https://${cleanBase}`;
+    const finalUrl = finalBase.endsWith('/api') && cleanPath.startsWith('/api') 
+      ? `${finalBase}${cleanPath.substring(4)}` 
+      : `${finalBase}${cleanPath}`;
+    
+    console.log(`[API URL] Using ENV base: ${finalUrl}`);
+    return finalUrl;
   }
-  
-  return cleanPath; 
+
+  // If localhost and no base URL, default to port 3001
+  if (isLocalhost) {
+    const url = `http://localhost:3001${cleanPath}`;
+    console.log(`[API URL] Localhost detected, using: ${url}`);
+    return url;
+  }
+
+  console.log(`[API URL] Fallback to relative: ${cleanPath}`);
+  return cleanPath;
 };
 
 // Helper to get full URL for logging/debugging
@@ -485,19 +500,12 @@ const Navbar = ({
       }`}
     >
       <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
-        <div className="flex items-center space-x-3 space-x-reverse group cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-          <div className="relative">
-            <div className="w-10 h-10 md:w-12 md:h-12 bg-brand-navy rounded-2xl flex items-center justify-center text-white transform group-hover:rotate-12 transition-all duration-500 shadow-xl shadow-brand-navy/10">
-              <Leaf size={24} className="group-hover:scale-110 transition-transform" />
-            </div>
-            <div className={`absolute -bottom-1 ${lang === 'ar' ? '-left-1' : '-right-1'} w-4 h-4 md:w-5 md:h-5 bg-brand-orange rounded-lg flex items-center justify-center text-white border-2 border-white`}>
-              <div className="w-1 h-1 bg-white rounded-full" />
-            </div>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-brand-navy font-serif font-bold text-lg md:text-xl leading-none tracking-tight">SHANI'S</span>
-            <span className="text-brand-orange text-[7px] md:text-[9px] font-bold tracking-[0.4em] uppercase mt-1">Flavor Lab</span>
-          </div>
+        <div className="flex items-center group cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+          <img
+            src="https://i.ibb.co/xKkzXtmz/Untitled-design-1.png"
+            alt="Hakkal Logo"
+            className="h-16 md:h-20 w-auto object-contain group-hover:scale-105 transition-transform duration-300 mix-blend-multiply"
+          />
         </div>
 
         <div className="hidden md:flex items-center space-x-10 space-x-reverse">
@@ -551,7 +559,7 @@ const Navbar = ({
           )}
           {!user && (
             <Link 
-              to="/login" 
+              to="/admin/login" 
               className="hidden md:flex items-center space-x-2 space-x-reverse text-brand-navy/60 hover:text-brand-navy transition-colors text-[10px] tracking-widest font-bold border border-brand-navy/10 px-4 py-2 rounded-full"
             >
               <LayoutDashboard size={14} />
@@ -649,7 +657,7 @@ const Hero = ({ t }: { t: any }) => {
           <div className="absolute inset-0 bg-brand-orange/5 rounded-full blur-[80px]" />
           <img 
             src="https://i.postimg.cc/rshF2439/6.png" 
-            alt="Spice Collection Banner" 
+            alt="Product Collection Banner" 
             className="w-full h-auto object-contain relative z-10"
             referrerPolicy="no-referrer"
           />
@@ -790,6 +798,14 @@ const Products = ({
                         <Eye size={20} />
                       </div>
                     </div>
+                    {/* Brand Logo */}
+                    <div className="absolute bottom-3 start-3 bg-white/90 backdrop-blur-sm rounded-xl shadow-sm px-2.5 py-1.5 flex items-center justify-center border border-brand-navy/5">
+                      <img
+                        src="https://i.ibb.co/FTqMcyG/Untitled-design.png"
+                        alt="Brand Logo"
+                        className="h-10 w-auto object-contain mix-blend-multiply contrast-125"
+                      />
+                    </div>
                   </div>
                   <div className="px-1 text-left flex flex-col flex-1">
                     <h3 className="text-brand-navy font-serif text-lg font-bold mb-1 leading-tight h-12 line-clamp-2">
@@ -872,7 +888,7 @@ const Products = ({
 
 // --- Dashboard Components ---
 
-const Login = () => {
+const AdminLogin = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -1015,7 +1031,7 @@ const Login = () => {
 };
 
 const CustomerLoginPage = () => {
-  const [step, setStep] = useState<'login' | 'phone' | 'otp' | 'set-password'>('login');
+  const [step, setStep] = useState<'login' | 'phone' | 'otp' | 'set-password'>('phone');
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
@@ -1039,30 +1055,50 @@ const CustomerLoginPage = () => {
     setLoading(true);
     setError("");
     try {
-      // Clean identifier (remove spaces)
-      const cleanIdentifier = identifier.trim();
-      const email = cleanIdentifier.includes("@") ? cleanIdentifier : `${cleanIdentifier}@customer.com`;
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, identifier, password);
       const userDoc = await getDoc(doc(db, "users", userCredential.user.uid));
+      
       if (userDoc.exists() && userDoc.data().role === 'admin') {
         navigate("/admin");
       } else {
-        navigate("/dashboard");
+        await auth.signOut();
+        setError("Access denied. Admin privileges required.");
       }
     } catch (err: any) {
-      console.error("Login error:", err);
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        setError("Invalid username or password. Please try again.");
-      } else {
-        setError("Login failed. Please check your credentials.");
-      }
+      console.error("Admin Login error:", err);
+      setError("Invalid admin credentials. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSendOTP = async (e: React.FormEvent) => {
+  const [checking, setChecking] = useState(false);
+
+  const handleNext = async (e: React.FormEvent) => {
     e.preventDefault();
+    setChecking(true);
+    setError("");
+    try {
+      // Step 1: Check if phone exists in Firebase
+      const response = await fetch(getApiUrl(`/api/check-phone?phone=${encodeURIComponent(phone)}`));
+      const data = await response.json();
+      
+      if (data.exists) {
+        // User exists, ask for password
+        setStep('login');
+      } else {
+        // User not in Firebase, check Odoo and send OTP
+        handleSendOTP(e);
+      }
+    } catch (err) {
+      setError("Connection error. Please try again.");
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const handleSendOTP = async (e: React.FormEvent) => {
+    if (e) e.preventDefault();
     setLoading(true);
     setError("");
     try {
@@ -1074,14 +1110,34 @@ const CustomerLoginPage = () => {
       const data = await response.json();
       if (data.success) {
         setStep('otp');
-        if (data.testCode) {
-          setTestCode(data.testCode);
-        }
       } else {
-        setError(data.error || "Failed to send verification code");
+        const errorMsg = data.debug ? `${data.error} (Debug: ${data.debug})` : (data.error || "Failed to send verification code");
+        setError(errorMsg);
       }
     } catch (err) {
-      setError("Connection error. Please try again.");
+      setError("Connection error. Please check your Render server.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLoginWithPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      // Sanitize phone for email
+      const justDigits = phone.replace(/\D/g, "");
+      const email = `${justDigits}@customer.com`;
+      await signInWithEmailAndPassword(auth, email, password);
+      navigate("/dashboard");
+    } catch (err: any) {
+      console.error("Login Error:", err);
+      let msg = "فشل تسجيل الدخول. تأكد من بياناتك.";
+      if (err.code === 'auth/wrong-password') msg = "كلمة المرور غير صحيحة";
+      if (err.code === 'auth/user-not-found') msg = "هذا الحساب غير موجود. يرجى تفعيل جوالك أولاً.";
+      
+      setError(`${msg} (Debug: ${err.code || err.message})`);
     } finally {
       setLoading(false);
     }
@@ -1102,50 +1158,43 @@ const CustomerLoginPage = () => {
         setTempUid(data.uid);
         setStep('set-password');
       } else {
-        setError(data.error || "Invalid verification code");
+        setError(data.error || "كود التحقق غير صحيح");
       }
     } catch (err) {
-      setError("Verification failed. Please try again.");
+      setError("فشل التحقق. حاول مرة أخرى.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSetPassword = async (e: React.FormEvent) => {
+  const handleVerifyAndSetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword !== confirmPassword) {
-      setError("Passwords do not match");
+      setError("كلمات المرور غير متطابقة");
       return;
     }
     if (newPassword.length < 6) {
-      setError("Password must be at least 6 characters");
+      setError("يجب أن تكون كلمة المرور 6 أحرف على الأقل");
       return;
     }
 
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(getApiUrl("/api/set-password"), {
+      const response = await fetch(getApiUrl("/api/verify-otp"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid: tempUid, password: newPassword }),
+        body: JSON.stringify({ phone, otp, password: newPassword }),
       });
       const data = await response.json();
-      if (data.success && data.customToken) {
-        if (data.isMockAuth) {
-          console.warn("MOCK AUTH: Login simulated. Firebase Identity Toolkit API is disabled.");
-          // In mock mode, we just navigate to dashboard and let the app handle the "no user" state
-          // or we can show a success message.
-          navigate("/dashboard");
-        } else {
-          await signInWithCustomToken(auth, data.customToken);
-          navigate("/dashboard");
-        }
+      if (data.success && data.uid && data.customToken) {
+        await signInWithCustomToken(auth, data.customToken);
+        navigate("/dashboard");
       } else {
-        setError(data.error || "Failed to set password");
+        setError(data.error || "حدث خطأ أثناء الحفظ");
       }
     } catch (err) {
-      setError("Something went wrong. Please try again.");
+      setError("فشلت العملية. حاول مرة أخرى.");
     } finally {
       setLoading(false);
     }
@@ -1192,48 +1241,26 @@ const CustomerLoginPage = () => {
         animate={{ opacity: 1, y: 0 }}
         className="max-w-md w-full bg-white rounded-[2.5rem] p-10 shadow-2xl"
       >
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-brand-orange/10 rounded-3xl mb-6">
-            {step === 'login' ? <UserIcon className="text-brand-orange" size={40} /> : 
-             step === 'phone' ? <Phone className="text-brand-orange" size={40} /> :
-             step === 'otp' ? <Key className="text-brand-orange" size={40} /> :
-             <Lock className="text-brand-orange" size={40} />}
-          </div>
-          <h2 className="text-3xl font-serif text-brand-navy mb-2">
-            {step === 'login' ? 'Customer Login' : 
-             step === 'phone' ? 'تفعيل حساب عملاء اودو' :
-             step === 'otp' ? 'Verify Code' :
-             'Set New Password'}
-          </h2>
-          <p className="text-gray-400 text-sm">
-            {step === 'login' ? 'Please enter your credentials to access your account' :
-             step === 'phone' ? 'خاص بعملاء المتجر الحاليين: أدخل رقم الجوال المسجل في نظام اودو لتفعيل حسابك.' :
-             step === 'otp' ? `Code sent to ${phone}` :
-             'Create a strong password for your account'}
-          </p>
+        <div className="text-center mb-8">
+           <div className="inline-flex items-center justify-center w-20 h-20 bg-brand-orange/10 rounded-3xl mb-6">
+             {step === 'login' ? <UserIcon className="text-brand-orange" size={40} /> : 
+              step === 'phone' ? <Phone className="text-brand-orange" size={40} /> :
+              step === 'otp' ? <Key className="text-brand-orange" size={40} /> :
+              <Lock className="text-brand-orange" size={40} />}
+           </div>
         </div>
 
         {step === 'login' && (
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] flex items-center">
-                <UserIcon size={12} className="mr-2" />
-                Username or Email
-              </label>
-              <input 
-                type="text" 
-                required
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange transition-all"
-                placeholder="Enter username"
-              />
+          <form onSubmit={handleLoginWithPassword} className="space-y-6">
+            <div className="text-center p-4 bg-brand-navy/5 rounded-2xl mb-6">
+              <p className="text-[10px] font-bold text-brand-navy uppercase tracking-widest mb-1">تسجيل الدخول لـ</p>
+              <p className="text-lg font-serif text-brand-orange">{phone}</p>
+              <button onClick={() => setStep('phone')} className="text-[10px] text-gray-400 underline uppercase mt-2 font-bold hover:text-brand-orange transition-colors">تغيير الرقم</button>
             </div>
-
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] flex items-center">
-                <Lock size={12} className="mr-2" />
-                Password
+                <Lock size={12} className="mr-2 text-brand-orange" />
+                كلمة المرور
               </label>
               <input 
                 type="password" 
@@ -1244,96 +1271,64 @@ const CustomerLoginPage = () => {
                 placeholder="••••••••"
               />
             </div>
-
-            {error && (
-              <motion.p 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="text-red-500 text-[10px] font-bold bg-red-50 p-4 rounded-xl text-center uppercase tracking-wider"
-              >
-                {error}
-              </motion.p>
-            )}
-
+            {error && <p className="text-red-500 text-xs text-center font-bold bg-red-50 p-3 rounded-xl">{error}</p>}
             <button 
               type="submit"
               disabled={loading}
-              className="w-full bg-brand-navy text-white py-5 rounded-2xl text-[11px] tracking-[0.2em] font-bold hover:bg-brand-orange transition-all disabled:opacity-50 shadow-xl shadow-brand-navy/10"
+              className="w-full bg-brand-navy text-white py-5 rounded-2xl text-[11px] font-bold hover:bg-brand-orange transition-all shadow-xl shadow-brand-navy/10"
             >
-              {loading ? "Verifying..." : "Login"}
+              {loading ? "جاري التحقق..." : "تسجيل الدخول"}
             </button>
-
-            <button 
-              type="button"
-              onClick={() => setStep('phone')}
-              className="w-full text-brand-orange text-[10px] font-bold tracking-widest uppercase hover:underline"
-            >
-              Don't have an account or joining for the first time?
+            <button type="button" onClick={() => handleSendOTP(null as any)} className="w-full text-brand-orange text-[10px] font-bold uppercase tracking-widest hover:underline text-center">
+              نسيت كلمة المرور؟ الدخول عبر SMS
             </button>
-            <div className="bg-orange-50 p-4 rounded-xl">
-              <p className="text-[9px] text-brand-orange font-bold uppercase tracking-wider text-center">
-                Note: Registration is only open for existing Odoo customers.
-              </p>
-            </div>
-
-            <div className="pt-4 border-t border-gray-100">
-              <button 
-                type="button"
-                onClick={async () => {
-                  setLoading(true);
-                  try {
-                    await signInWithEmailAndPassword(auth, "966500000000@customer.com", "password123");
-                    navigate("/dashboard");
-                  } catch (e) {
-                    setError("Demo account login failed. Please ensure Firebase is ready.");
-                  } finally {
-                    setLoading(false);
-                  }
-                }}
-                className="w-full text-gray-400 text-[9px] font-bold tracking-[0.2em] uppercase hover:text-brand-navy transition-colors"
-              >
-                Use Demo Account (For Testing)
-              </button>
-            </div>
           </form>
         )}
 
         {step === 'phone' && (
           <form onSubmit={handleSendOTP} className="space-y-6">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-serif text-brand-navy mb-2">تسجيل الدخول عبر الجوال</h2>
+              <p className="text-[10px] text-gray-400 uppercase tracking-widest">أدخل رقم جوالك لتصلك رسالة كود التحقق</p>
+            </div>
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] flex items-center">
                 <Phone size={12} className="mr-2" />
-                Phone Number
+                رقم الجوال
               </label>
               <input 
                 type="tel" 
                 required
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange transition-all text-lg"
+                className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange transition-all"
                 placeholder="966XXXXXXXXX"
               />
             </div>
-            {error && <p className="text-red-500 text-xs text-center">{error}</p>}
+            {error && <p className="text-red-500 text-xs text-center font-bold">{error}</p>}
             <button 
               type="submit"
               disabled={loading}
               className="w-full bg-brand-navy text-white py-5 rounded-2xl text-[11px] tracking-[0.2em] font-bold hover:bg-brand-orange transition-all"
             >
-              {loading ? "Sending..." : "Send Verification Code"}
+              {loading ? "جاري التحقق من الرقم..." : "متابعة"}
             </button>
-            <button type="button" onClick={() => setStep('login')} className="w-full text-gray-400 text-[10px] font-bold uppercase">
-              Back to Login
-            </button>
+            <div className="bg-brand-cream/30 p-4 rounded-xl text-center">
+              <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">ملاحظة: الدخول متاح فقط لعملاء شركة حقال المسجلين مسبقاً</p>
+            </div>
           </form>
         )}
 
         {step === 'otp' && (
           <form onSubmit={handleVerifyOTP} className="space-y-6">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-serif text-brand-navy mb-2">تأكيد الرمز</h2>
+              <p className="text-[10px] text-gray-400 uppercase tracking-widest">أدخل الكود المرسل لجوالك</p>
+            </div>
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] flex items-center">
                 <Key size={12} className="mr-2" />
-                Verification Code
+                كود التحقق
               </label>
               <input 
                 type="text" 
@@ -1345,60 +1340,62 @@ const CustomerLoginPage = () => {
                 placeholder="000000"
               />
             </div>
-            {testCode && (
-              <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-                <p className="text-[10px] text-blue-600 font-bold uppercase tracking-wider text-center">
-                  Test Mode: Your code is {testCode}
-                </p>
-                {testCode === '123456' && (
-                  <p className="text-[8px] text-blue-400 text-center mt-1">
-                    (Identity Toolkit API is disabled - using Mock Auth)
-                  </p>
-                )}
-              </div>
-            )}
             {error && <p className="text-red-500 text-xs text-center">{error}</p>}
             <button 
               type="submit"
               disabled={loading}
               className="w-full bg-brand-navy text-white py-5 rounded-2xl text-[11px] tracking-[0.2em] font-bold hover:bg-brand-orange transition-all"
             >
-              {loading ? "Verifying..." : "Verify & Continue"}
+              {loading ? "جاري التأكد..." : "تحقق من الكود"}
             </button>
+            <button type="button" onClick={() => setStep('phone')} className="w-full text-brand-orange text-[10px] font-bold uppercase tracking-widest hover:underline">تغيير الرقم</button>
           </form>
         )}
 
         {step === 'set-password' && (
-          <form onSubmit={handleSetPassword} className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">New Password</label>
-              <input 
-                type="password" 
-                required
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange transition-all"
-                placeholder="••••••••"
-              />
+          <form onSubmit={handleVerifyAndSetPassword} className="space-y-6">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-serif text-brand-navy mb-2">إنشاء كلمة المرور</h2>
+              <p className="text-[10px] text-gray-400 uppercase tracking-widest">حدد كلمة مرور لحسابك الجديد</p>
             </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">Confirm Password</label>
-              <input 
-                type="password" 
-                required
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange transition-all"
-                placeholder="••••••••"
-              />
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] flex items-center">
+                  <Lock size={12} className="mr-2" />
+                  كلمة المرور الجديدة
+                </label>
+                <input 
+                  type="password" 
+                  required
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange transition-all"
+                  placeholder="••••••••"
+                  minLength={6}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] flex items-center">
+                  <Lock size={12} className="mr-2" />
+                  تأكيد كلمة المرور
+                </label>
+                <input 
+                  type="password" 
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange transition-all"
+                  placeholder="••••••••"
+                />
+              </div>
             </div>
             {error && <p className="text-red-500 text-xs text-center">{error}</p>}
             <button 
               type="submit"
               disabled={loading}
-              className="w-full bg-brand-navy text-white py-5 rounded-2xl text-[11px] tracking-[0.2em] font-bold hover:bg-brand-orange transition-all"
+              className="w-full bg-brand-navy text-white py-5 rounded-2xl text-[11px] tracking-[0.2em] font-bold hover:bg-brand-orange transition-all shadow-xl shadow-brand-navy/10"
             >
-              {loading ? "Saving..." : "Save Password & Login"}
+              {loading ? "جاري الحفظ والمزامنة..." : "إكمال التسجيل ودخول الموقع"}
             </button>
           </form>
         )}
@@ -1710,7 +1707,7 @@ const CartDrawer = ({
   );
 };
 
-const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalContent, t }: { isOpen: boolean, onClose: () => void, items: CartItem[], onClearCart: () => void, user: User | null, setModalContent: (content: { title: string; message: string; type: 'success' | 'error' } | null) => void, t: any }) => {
+const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalContent, t, lang }: { isOpen: boolean, onClose: () => void, items: CartItem[], onClearCart: () => void, user: User | null, setModalContent: (content: { title: string; message: string; type: 'success' | 'error' } | null) => void, t: any, lang: string }) => {
   const [formData, setFormData] = useState({
     customerName: "",
     email: "",
@@ -1720,6 +1717,7 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
     city: "",
     district: "",
     salesRep: "",
+    salespersonId: null as number | null,
     paymentMethod: "deferred_invoice" as string,
     agreed: false
   });
@@ -1733,21 +1731,30 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
     if (user && isOpen) {
       const val = (v: any) => (v && v !== false && v !== "false") ? String(v) : "";
       
-      // Step 1: Immediately populate from Firebase Auth
-      setFormData(prev => ({
-        ...prev,
-        customerName: user.displayName || "",
-        email: user.email || "",
-        phone1: user.phoneNumber || "",
-      }));
-
       const fetchProfile = async () => {
+        console.log("[Checkout] fetchProfile START", { uid: user.uid, email: user.email });
+        
+        // Step 1: Initial population from Auth
+        setFormData(prev => {
+          console.log("[Checkout] Step 1: Initial population", { currentSalesRep: prev.salesRep });
+          if (prev.customerName && prev.salesRep && prev.salesRep !== t.orders.dashboard.loading) return prev;
+          return {
+            ...prev,
+            customerName: prev.customerName || user.displayName || "",
+            email: prev.email || user.email || "",
+            phone1: prev.phone1 || user.phoneNumber || "",
+            salesRep: prev.salesRep || (lang === 'ar' ? "جاري التحميل..." : "Loading..."),
+          };
+        });
+
         // Step 2: Enrich from Firestore
         let firestoreData: any = {};
         try {
+          console.log("[Checkout] Step 2: Fetching Firestore user doc...");
           const userDocSnap = await getDoc(doc(db, "users", user.uid));
           if (userDocSnap.exists()) {
             firestoreData = userDocSnap.data();
+            console.log("[Checkout] Firestore data found:", firestoreData);
             setFormData(prev => ({
               ...prev,
               customerName: firestoreData.facilityName || prev.customerName,
@@ -1758,28 +1765,60 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
               district: firestoreData.district || prev.district,
               phone2: firestoreData.phone2 || prev.phone2,
             }));
+          } else {
+            console.log("[Checkout] No Firestore user doc found");
           }
         } catch (e) {
           console.error("[Checkout] Firestore error:", e);
         }
 
         // Step 3: Enrich from Odoo
-        const email = firestoreData.email || user.email || "";
-        const phone = firestoreData.phoneNumber || user.phoneNumber || "";
+        const email = (firestoreData.email || user.email || "").toLowerCase().trim();
+        const phone = (firestoreData.phoneNumber || user.phoneNumber || "").trim();
+        
+        console.log("[Checkout] Step 3: Odoo enrichment starting...", { email, phone });
         
         if (email || phone) {
+          console.log("[Checkout] Initiating Odoo enrichment...", { email, phone });
+          setFormData(prev => ({ ...prev, salesRep: t.orders.dashboard.loading }));
           try {
-            console.log("[Checkout] Fetching Odoo data for:", { email, phone });
-            const odooRes = await fetch(getApiUrl("/api/auth/verify-odoo-customer"), {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => {
+              console.warn("[Checkout] Odoo fetch timed out after 15s");
+              controller.abort();
+            }, 15000); 
+            
+            const apiUrl = getApiUrl("/api/auth/verify-odoo-customer");
+            console.log("[Checkout] Calling API:", apiUrl);
+            
+            const odooRes = await fetch(apiUrl, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: { 
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+              },
+              mode: "cors",
+              cache: "no-cache",
+              signal: controller.signal,
               body: JSON.stringify({ phone, email })
             });
+            
+            clearTimeout(timeoutId);
+            console.log("[Checkout] API Response status:", odooRes.status);
+            
             const odooResult = await odooRes.json();
-            console.log("[Checkout] Odoo result:", odooResult);
+            console.log("[Checkout] API Result success:", odooResult.success);
             
             if (odooResult.success && odooResult.customer) {
               const c = odooResult.customer;
+              console.log("[Checkout] Customer found:", c.name, "Salesperson:", c.salesperson_name);
+              
+              // Map salesperson name to Arabic if needed
+              let salesRepDisplay = val(c.salesperson_name);
+              if (!salesRepDisplay || salesRepDisplay === "Not Assigned") {
+                salesRepDisplay = lang === 'ar' ? "غير معين" : "Not Assigned";
+              }
+
               setFormData(prev => ({
                 ...prev,
                 customerName: val(c.name) || prev.customerName,
@@ -1788,23 +1827,40 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
                 phone2: val(c.mobile) || prev.phone2,
                 address: val(c.street) || prev.address,
                 city: val(c.city) || prev.city,
+                district: val(c.district) || prev.district,
+                salesRep: salesRepDisplay,
+                salespersonId: c.salesperson_id || null,
               }));
               
-              // Check if customer is blocked in Odoo
               if (c.sale_warn === 'block') {
                 setIsBlocked(true);
                 setBlockedMsg(val(c.sale_warn_msg) || "");
-                console.log("[Checkout] Customer is BLOCKED:", c.sale_warn_msg);
+                console.log("[Checkout] BLOCKED:", c.sale_warn_msg);
               } else {
                 setIsBlocked(false);
                 setBlockedMsg("");
               }
-              
-              console.log("[Checkout] Form enriched with Odoo data");
+            } else {
+              console.log("[Checkout] No customer data returned from Odoo or search failed");
+              setFormData(prev => ({ 
+                ...prev, 
+                salesRep: lang === 'ar' ? "غير معين" : "Not Assigned" 
+              }));
             }
-          } catch (e) {
+          } catch (e: any) {
             console.error("[Checkout] Odoo fetch error:", e);
+            const errorDetail = e.name === 'AbortError' ? (lang === 'ar' ? "انتهت المهلة" : "Timeout") : (e.message || "Unknown");
+            setFormData(prev => ({ 
+              ...prev, 
+              salesRep: lang === 'ar' ? `غير متوفر (${errorDetail})` : `Not Available (${errorDetail})` 
+            }));
           }
+        } else {
+          console.log("[Checkout] No email or phone to search Odoo with");
+          setFormData(prev => ({ 
+            ...prev, 
+            salesRep: lang === 'ar' ? "غير معين" : "Not Assigned" 
+          }));
         }
       };
       fetchProfile();
@@ -1840,7 +1896,7 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
       return;
     }
     
-    if (!formData.customerName || !formData.email) {
+    if (!formData.customerName?.trim() || !formData.email?.trim() || !formData.phone1?.trim() || !formData.address?.trim()) {
       setModalContent({
         title: t.checkout.alert,
         message: t.checkout.fillRequired,
@@ -1850,34 +1906,127 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
     }
     
     setIsSubmitting(true);
+    const orderStart = Date.now();
+    console.log("[Checkout] START order submission...");
+    
+    let cleanOrderData: any = null;
     try {
+      // Validate required fields before creating order
+      if (!formData.customerName?.trim() || !formData.email?.trim() || !formData.phone1?.trim() || !formData.address?.trim()) {
+        throw new Error("Missing required fields: customerName, email, phone1, or address");
+      }
+
+      // Robust total calculation to avoid NaN
+      const safeTotal = items.reduce((sum, item) => {
+        try {
+          const priceStr = String(item.discountPrice || item.price || "0");
+          const price = parseFloat(priceStr.replace(/[^\d.]/g, '')) || 0;
+          return sum + (price * (item.quantity || 1));
+        } catch (e) {
+          console.warn("[Checkout] Error calculating item price:", item.name, e);
+          return sum;
+        }
+      }, 0);
+
       const orderData = {
         userId: user?.uid || null,
-        customerName: formData.customerName,
-        email: formData.email,
-        phone1: formData.phone1,
-        phone2: formData.phone2 || "",
-        address: formData.address,
-        city: formData.city || "N/A",
-        district: formData.district || "N/A",
-        salesRep: formData.salesRep || "",
-        paymentMethod: formData.paymentMethod,
+        customerName: formData.customerName.trim(),
+        email: formData.email.trim(),
+        phone1: formData.phone1.trim(),
+        phone2: (formData.phone2 || "").trim(),
+        address: formData.address.trim(),
+        city: formData.city?.trim() || "Not Provided",
+        district: formData.district?.trim() || "Not Provided",
+        salesRep: (formData.salesRep === t.orders.dashboard.loading || formData.salesRep === (lang === 'ar' ? "جاري التحميل..." : "Loading...")) 
+          ? (lang === 'ar' ? "غير معين" : "Not Assigned") 
+          : (formData.salesRep || ""),
+        salespersonId: formData.salespersonId || null,
+        paymentMethod: formData.paymentMethod || "deferred_invoice",
         items: items.map(item => ({
-          id: item.id,
-          name: item.name,
-          price: item.price,
-          discountPrice: item.discountPrice || null,
-          quantity: item.quantity,
-          isOdoo: item.isOdoo
+          id: item.id || 0,
+          name: item.name || "Unknown Product",
+          price: String(item.price || "0"),
+          discountPrice: item.discountPrice ? String(item.discountPrice) : null,
+          quantity: item.quantity || 1,
+          isOdoo: !!item.isOdoo
         })),
-        total,
+        total: safeTotal,
         status: 'pending_approval',
         createdAt: new Date().toISOString()
       };
 
-      console.log("[Firestore] Attempting to save order:", orderData);
-      const docRef = await addDoc(collection(db, "orders"), orderData);
-      console.log("[Firestore] Order saved successfully. ID:", docRef.id);
+      // Final sanitization: Remove any accidental undefined values that might crash Firestore
+      cleanOrderData = JSON.parse(JSON.stringify(orderData, (key, value) => 
+        value === undefined ? null : value
+      ));
+
+      // Check network status
+      if (!window.navigator.onLine) {
+        throw new Error("Offline: Please check your internet connection.");
+      }
+
+      console.log("[Firebase] Project ID being used:", db.app.options.projectId);
+      console.log("[Checkout] Final sanitized data to send:", JSON.stringify(cleanOrderData, null, 2));
+      // Use setDoc instead of addDoc for better reliability
+      const ordersCol = collection(db, "orders");
+      const docRef = doc(ordersCol); // Manually create a doc reference with a new ID
+
+      try {
+        console.log(`[Checkout] [${Date.now() - orderStart}ms] Saving to Firestore (5s timeout)...`);
+        
+        // Wrap setDoc in a 5-second timeout to trigger Emergency Mode if it hangs
+        const savePromise = setDoc(docRef, cleanOrderData);
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("quota-exceeded-timeout")), 5000)
+        );
+
+        await Promise.race([savePromise, timeoutPromise]);
+        console.log(`[Checkout] [${Date.now() - orderStart}ms] Saved to Firestore successfully. ID: ${docRef.id}`);
+      } catch (saveError: any) {
+        const errorMsg = saveError.message || String(saveError);
+        const isQuota = errorMsg.includes("resource-exhausted") || 
+                        errorMsg.includes("quota-exceeded") || 
+                        errorMsg === "quota-exceeded-timeout";
+
+        if (isQuota) {
+          console.warn("[Checkout] Firestore Quota Exceeded or Timeout! Using Emergency Mode...");
+          // Emergency Odoo Sync...
+          const syncUrl = getApiUrl("/api/odoo/orders");
+          try {
+            const odooResponse = await fetch(syncUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                customerEmail: formData.email,
+                customerName: formData.customerName,
+                phone: formData.phone1,
+                items: cleanOrderData.items,
+                address: `${formData.address}, ${formData.city}, ${formData.district}`,
+                salespersonId: formData.salespersonId,
+                salesRepName: formData.salesRep || ""
+              })
+            });
+
+            if (odooResponse.ok) {
+              const odooResult = await odooResponse.json();
+              if (odooResult.success) {
+                setModalContent({
+                  title: t.checkout.orderReceived + " (Emergency Mode)",
+                  message: t.checkout.orderCreatedSuccess.replace('{orderName}', odooResult.orderName || "NEW") + "\n\n(ملاحظة: تم إرسال الطلب مباشرة لنظام Odoo بسبب امتلاء حصة Firebase)",
+                  type: 'success'
+                });
+                setIsSuccess(true);
+                onClearCart();
+                setIsSubmitting(false);
+                return; 
+              }
+            }
+          } catch (e) {
+            console.error("[Emergency Mode] Sync failed:", e);
+          }
+        }
+        throw saveError;
+      }
       
       // Trigger Odoo Order Creation
       let odooOrderName = "";
@@ -1885,29 +2034,13 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
       // Try to sync to Odoo, but don't let it block the success flow if it fails
       try {
         const syncUrl = getApiUrl("/api/odoo/orders");
-        const pingUrl = getApiUrl("/api/ping");
-        console.log("Pre-sync connectivity check at:", pingUrl);
-        
-        // Quick check if API is alive before sending data
-        try {
-          const pingController = new AbortController();
-          const pingTimeout = setTimeout(() => pingController.abort(), 5000);
-          const pingRes = await fetch(pingUrl, { 
-            mode: 'cors',
-            signal: pingController.signal
-          });
-          clearTimeout(pingTimeout);
-          if (pingRes.ok) {
-            console.log("API connectivity confirmed.");
-          }
-        } catch (pingE) {
-          console.warn("API pre-check failed, proceeding anyway:", pingE);
-        }
-
-        console.log("Attempting Odoo sync at URL:", syncUrl);
+        console.log(`[Checkout] [${Date.now() - orderStart}ms] Syncing to Odoo...`, syncUrl);
         
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout for Odoo
+        const timeoutId = setTimeout(() => {
+          console.warn("[Checkout] Odoo sync timed out after 60s");
+          controller.abort();
+        }, 60000); 
         
         const odooResponse = await fetch(syncUrl, {
           method: "POST",
@@ -1916,34 +2049,44 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
             "Accept": "application/json"
           },
           mode: "cors", 
-          credentials: "include", // Use include to match server-side Access-Control-Allow-Credentials: true
+          cache: "no-cache",
           signal: controller.signal,
           body: JSON.stringify({
             customerEmail: formData.email,
             customerName: formData.customerName,
             phone: formData.phone1,
-            items: orderData.items,
-            address: `${formData.address}, ${formData.city}, ${formData.district}`
+            items: cleanOrderData.items,
+            address: `${formData.address}, ${formData.city}, ${formData.district}`,
+            salespersonId: formData.salespersonId,
+            salesRepName: formData.salesRep || ""
           })
         });
         
         clearTimeout(timeoutId);
+        console.log(`[Checkout] [${Date.now() - orderStart}ms] Odoo sync response status: ${odooResponse.status}`);
         
         if (odooResponse.ok) {
           const odooResult = await odooResponse.json();
-          console.log("Odoo sync result:", odooResult);
+          console.log(`[Checkout] [${Date.now() - orderStart}ms] Odoo sync result success: ${odooResult.success}`);
           
           if (odooResult.success) {
-            odooOrderName = odooResult.orderName;
+            odooOrderName = odooResult.orderName || `SO-${odooResult.orderId || 'NEW'}`;
             const updateData: any = { 
               odooOrderName,
+              invoiceName: odooResult.invoiceName || null,
               syncStatus: 'success',
               syncedAt: new Date().toISOString()
             };
             if (odooResult.orderId) {
               updateData.odooOrderId = odooResult.orderId;
             }
-            await updateDoc(docRef, updateData);
+            
+            // Filter out undefined values to prevent Firestore crash
+            const cleanUpdateData = Object.fromEntries(
+              Object.entries(updateData).filter(([_, v]) => v !== undefined)
+            );
+            
+            await updateDoc(docRef, cleanUpdateData);
             
             setModalContent({
               title: t.checkout.orderReceived,
@@ -1963,6 +2106,24 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
               type: 'success'
             });
           }
+        } else if (odooResponse.status === 403) {
+          // Blocked or Not Found in Odoo - This is a hard failure for the user
+          const odooResult = await odooResponse.json().catch(() => ({ message: "عذراً، لا يمكن إتمام الطلب في الوقت الحالي." }));
+          console.error("Odoo sync blocked (403):", odooResult);
+          
+          // DO NOT delete from Firestore anymore - keep the record locally
+          await updateDoc(docRef, { 
+            syncStatus: 'failed',
+            syncError: odooResult.message || 'Odoo 403 Access Denied'
+          });
+          
+          setModalContent({
+            title: "تنبيه من النظام",
+            message: odooResult.message || "عذراً، حسابك محظور من إنشاء طلبات جديدة في النظام. يرجى التواصل مع الإدارة.",
+            type: 'error'
+          });
+          setIsSubmitting(false);
+          return; // Stop the flow here
         } else {
           const errorText = await odooResponse.text().catch(() => "Unknown error");
           console.error("Odoo API returned non-ok status:", odooResponse.status, errorText);
@@ -2011,8 +2172,8 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
             type: "order_confirmation",
             customerEmail: formData.email,
             customerName: formData.customerName,
-            total,
-            items: orderData.items
+            total: safeTotal,
+            items: cleanOrderData.items
           })
         });
       } catch (e) {
@@ -2021,14 +2182,72 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
 
       setIsSuccess(true);
       onClearCart();
-    } catch (error) {
-      console.error("CRITICAL: Firestore Save Failed:", error);
+    } catch (error: any) {
+      console.error("CRITICAL: Order Save Failed:", error);
+      
+      const firestoreError = error.message || String(error);
+      const isQuotaExceeded = firestoreError.includes("resource-exhausted") || firestoreError.includes("quota-exceeded");
+
+      // --- EMERGENCY MODE ---
+      // If Firestore is full (quota exceeded), try to send DIRECTLY to Odoo anyway
+      if (isQuotaExceeded) {
+        console.warn("[Checkout] Firestore Quota Exceeded. Entering EMERGENCY MODE (Direct Odoo Sync)...");
+        try {
+          const syncUrl = getApiUrl("/api/odoo/orders");
+          const odooResponse = await fetch(syncUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              customerEmail: formData.email,
+              customerName: formData.customerName,
+              phone: formData.phone1,
+              items: cleanOrderData.items,
+              address: `${formData.address}, ${formData.city}, ${formData.district}`,
+              salespersonId: formData.salespersonId,
+              salesRepName: formData.salesRep || ""
+            })
+          });
+
+          if (odooResponse.ok) {
+            const odooResult = await odooResponse.json();
+            if (odooResult.success) {
+              setModalContent({
+                title: t.checkout.orderReceived + " (Emergency Mode)",
+                message: t.checkout.orderCreatedSuccess.replace('{orderName}', odooResult.orderName || "NEW") + "\n\n(ملاحظة: تم إرسال الطلب مباشرة لنظام Odoo بسبب امتلاء حصة Firebase)",
+                type: 'success'
+              });
+              setIsSuccess(true);
+              onClearCart();
+              setIsSubmitting(false);
+              return; // Success in emergency mode!
+            }
+          }
+        } catch (e) {
+          console.error("[Emergency Mode] Direct Odoo sync failed too:", e);
+        }
+      }
+      
+      // Original error handling if not quota or if emergency mode fails
+      let errorMessage = t.checkout.orderSaveError;
+      if (isQuotaExceeded) {
+        errorMessage = lang === 'ar' 
+          ? "عذراً، تم تجاوز الحصة المجانية لليوم في Firebase. يرجى التواصل مع الإدارة لترقية الحساب." 
+          : "Firebase Quota Exceeded. Please upgrade your plan or wait until tomorrow.";
+      } else if (firestoreError.includes("permission-denied")) {
+        errorMessage = lang === 'ar' 
+          ? "عذراً، ليس لديك صلاحية لإتمام الطلب." 
+          : "Permission Denied: You don't have permission to place this order.";
+      }
+
       setModalContent({
         title: t.checkout.orderError,
-        message: t.checkout.orderSaveError,
+        message: errorMessage,
         type: 'error'
       });
-      handleFirestoreError(error, OperationType.CREATE, "orders");
+      
+      try {
+        handleFirestoreError(error, OperationType.CREATE, "orders");
+      } catch (e) {}
     } finally {
       setIsSubmitting(false);
     }
@@ -2196,11 +2415,11 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
                       <div>
                         <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.salesRepLabel}</label>
                         <input 
+                          readOnly
                           type="text" 
                           placeholder={t.checkout.salesRepPlaceholder}
-                          value={formData.salesRep}
-                          onChange={e => setFormData({...formData, salesRep: e.target.value})}
-                          className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange transition-all" 
+                          value={formData.salesRep || (lang === 'ar' ? "غير معين" : "Not Assigned")}
+                          className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-brand-navy font-bold cursor-not-allowed" 
                         />
                       </div>
                     </div>
@@ -2232,14 +2451,40 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
                     </p>
                   </div>
 
+                  {/* Blocked Status Warning - Moved here to be near the submit button */}
+                  {isBlocked && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mb-8 p-6 bg-red-50 border border-red-100 rounded-3xl flex items-start gap-4"
+                    >
+                      <div className="w-12 h-12 bg-red-100 rounded-2xl flex items-center justify-center flex-shrink-0">
+                        <Lock className="text-red-500" size={24} />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="text-red-900 font-bold text-sm mb-1">
+                          {t.orders.dashboard.accountBlocked}
+                        </h4>
+                        <p className="text-red-700 text-xs leading-relaxed">
+                          {blockedMsg || t.orders.dashboard.accountBlockedDescription}
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
+
                   {/* Confirm Button */}
                   <button 
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || isBlocked}
                     type="submit"
-                    className="w-full bg-brand-navy text-white py-5 rounded-2xl text-[11px] tracking-[0.2em] font-bold flex items-center justify-center gap-3 hover:bg-brand-orange transition-all shadow-lg shadow-brand-navy/10 disabled:opacity-50"
+                    className={`w-full ${isBlocked ? 'bg-gray-400 cursor-not-allowed' : 'bg-brand-navy hover:bg-brand-orange shadow-brand-navy/10'} text-white py-5 rounded-2xl text-[11px] tracking-[0.2em] font-bold flex items-center justify-center gap-3 transition-all shadow-lg disabled:opacity-50`}
                   >
                     {isSubmitting ? (
                       <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : isBlocked ? (
+                      <>
+                        <Lock size={14} className="text-white" />
+                        <span>{t.orders.dashboard.accountBlockedBadge}</span>
+                      </>
                     ) : (
                       <>
                         <div className="bg-green-500 rounded-full p-0.5">
@@ -2407,7 +2652,7 @@ const TermsModal = ({ isOpen, onClose, t }: { isOpen: boolean, onClose: () => vo
             <div className="p-8 pb-4 border-b border-gray-100 flex justify-between items-center">
               <div>
                 <h2 className="text-2xl font-serif text-brand-navy font-bold">{t.modals.termsTitle}</h2>
-                <p className="text-brand-orange text-[10px] tracking-[0.2em] font-bold uppercase mt-1">Shani's Flavor Lab</p>
+                <img src="https://i.ibb.co/xKkzXtmz/Untitled-design-1.png" alt="Hakkal Logo" className="h-10 w-auto object-contain mt-1 mix-blend-multiply" />
               </div>
               <button 
                 onClick={onClose}
@@ -2489,11 +2734,19 @@ const TermsModal = ({ isOpen, onClose, t }: { isOpen: boolean, onClose: () => vo
                     <div className="space-y-3 text-sm">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">📧</div>
-                        <span className="font-medium">info@shanisflavorlab.com</span>
+                        <span className="font-medium">Info@hakkal-est.com</span>
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">📞</div>
-                        <span className="font-medium">WhatsApp: +94 71 764 7799</span>
+                        <span className="font-medium">{t.contactInfo.management}: +966 57 5151 506</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">📞</div>
+                        <span className="font-medium">{t.contactInfo.middleArea}: +966 57 5151 507</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">📞</div>
+                        <span className="font-medium">{t.contactInfo.westernArea}: +966 57 5151 508</span>
                       </div>
                     </div>
                   </section>
@@ -2539,7 +2792,7 @@ const PrivacyModal = ({ isOpen, onClose, t }: { isOpen: boolean, onClose: () => 
             <div className="p-8 pb-4 border-b border-gray-100 flex justify-between items-center">
               <div>
                 <h2 className="text-2xl font-serif text-brand-navy font-bold">{t.modals.privacyTitle}</h2>
-                <p className="text-brand-orange text-[10px] tracking-[0.2em] font-bold uppercase mt-1">Shani's Flavor Lab</p>
+                <img src="https://i.ibb.co/xKkzXtmz/Untitled-design-1.png" alt="Hakkal Logo" className="h-10 w-auto object-contain mt-1 mix-blend-multiply" />
               </div>
               <button 
                 onClick={onClose}
@@ -2562,11 +2815,19 @@ const PrivacyModal = ({ isOpen, onClose, t }: { isOpen: boolean, onClose: () => 
                     <div className="space-y-3 text-sm">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">📧</div>
-                        <span className="font-medium">info@shanisflavorlab.com</span>
+                        <span className="font-medium">Info@hakkal-est.com</span>
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">📞</div>
-                        <span className="font-medium">WhatsApp: +94 71 764 7799</span>
+                        <span className="font-medium">{t.contactInfo.management}: +966 57 5151 506</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">📞</div>
+                        <span className="font-medium">{t.contactInfo.middleArea}: +966 57 5151 507</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">📞</div>
+                        <span className="font-medium">{t.contactInfo.westernArea}: +966 57 5151 508</span>
                       </div>
                     </div>
                   </section>
@@ -2612,7 +2873,7 @@ const RefundModal = ({ isOpen, onClose, t }: { isOpen: boolean, onClose: () => v
             <div className="p-8 pb-4 border-b border-gray-100 flex justify-between items-center">
               <div>
                 <h2 className="text-2xl font-serif text-brand-navy font-bold">{t.modals.refundTitle}</h2>
-                <p className="text-brand-orange text-[10px] tracking-[0.2em] font-bold uppercase mt-1">Shani's Flavor Lab</p>
+                <img src="https://i.ibb.co/xKkzXtmz/Untitled-design-1.png" alt="Hakkal Logo" className="h-10 w-auto object-contain mt-1 mix-blend-multiply" />
               </div>
               <button 
                 onClick={onClose}
@@ -2655,11 +2916,19 @@ const RefundModal = ({ isOpen, onClose, t }: { isOpen: boolean, onClose: () => v
                     <div className="space-y-3 text-sm">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">📧</div>
-                        <span className="font-medium">info@shanisflavorlab.com</span>
+                        <span className="font-medium">Info@hakkal-est.com</span>
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">📞</div>
-                        <span className="font-medium">WhatsApp: +94 71 764 7799</span>
+                        <span className="font-medium">Management: +966 57 5151 506</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">📞</div>
+                        <span className="font-medium">Middle Area: +966 57 5151 507</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-sm">📞</div>
+                        <span className="font-medium">Western Area: +966 57 5151 508</span>
                       </div>
                     </div>
                   </section>
@@ -2685,83 +2954,321 @@ const RefundModal = ({ isOpen, onClose, t }: { isOpen: boolean, onClose: () => v
 
 // --- Customer Dashboard Components ---
 
-const CustomerDashboardOverview = ({ orders, user }: { orders: Order[], user: User | null }) => {
-  // orders is already filtered by userId/email in App.tsx for customers, 
-  // but we'll double check here to be safe and handle potential legacy data
-  const customerOrders = orders.filter(o => 
+const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory }: { orders: Order[], user: User | null, t: any, lang: Language, onViewHistory: (orderName: string, firebaseId?: string, status?: string, createdAt?: string) => void }) => {
+  const [isSyncing, setIsSyncing] = useState(false);
+  const isRtl = lang === 'ar';
+  
+  const customerOrders = useMemo(() => orders.filter(o => 
     o.userId === user?.uid || 
     o.email?.toLowerCase() === user?.email?.toLowerCase()
-  );
+  ), [orders, user]);
+
+  const downloadInvoicePDF = (order: Order) => {
+    const dir = isRtl ? 'rtl' : 'ltr';
+    const date = new Date(order.createdAt).toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const invoiceNum = order.invoiceName || order.odooOrderName || `#${order.firebaseId.slice(0,8).toUpperCase()}`;
+    const html = `<!DOCTYPE html><html dir="${dir}" lang="${isRtl ? 'ar' : 'en'}">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Invoice ${invoiceNum}</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: ${isRtl ? "'Tajawal', Arial" : "Arial"}, sans-serif; background:#fff; color:#1a1a2e; padding:40px; direction:${dir}; }
+    .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:40px; padding-bottom:24px; border-bottom:3px solid #FF6B35; }
+    .logo-block { display:flex; align-items:center; gap:12px; }
+    .logo-block img { height:60px; object-fit:contain; }
+    .company-name { font-size:20px; font-weight:800; color:#1a1a2e; }
+    .company-sub { font-size:11px; color:#888; margin-top:2px; }
+    .inv-meta { text-align:${isRtl ? 'left' : 'right'}; }
+    .inv-title { font-size:28px; font-weight:900; color:#FF6B35; letter-spacing:2px; }
+    .inv-num { font-size:13px; color:#666; margin-top:4px; font-family:monospace; }
+    .inv-date { font-size:12px; color:#999; margin-top:2px; }
+    .section { margin-bottom:28px; }
+    .section-title { font-size:11px; font-weight:700; color:#FF6B35; text-transform:uppercase; letter-spacing:2px; margin-bottom:10px; }
+    .info-box { background:#f8f9fa; border-radius:12px; padding:16px 20px; }
+    .info-row { display:flex; justify-content:space-between; margin-bottom:6px; font-size:13px; }
+    .info-label { color:#888; font-weight:600; }
+    .info-value { color:#1a1a2e; font-weight:700; font-family:monospace; }
+    table { width:100%; border-collapse:collapse; margin-top:8px; }
+    th { background:#1a1a2e; color:#fff; padding:12px 16px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; }
+    td { padding:12px 16px; border-bottom:1px solid #f0f0f0; font-size:13px; }
+    tr:last-child td { border-bottom:none; }
+    .total-row { background:#FF6B35; color:#fff; }
+    .total-row td { font-size:16px; font-weight:800; padding:16px; }
+    .footer-note { margin-top:40px; text-align:center; font-size:11px; color:#bbb; }
+    .status-badge { display:inline-block; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:700; background:#e8f5e9; color:#2e7d32; }
+    @media print { body { padding:20px; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo-block">
+      <img src="https://i.ibb.co/xKkzXtmz/Untitled-design-1.png" alt="Logo"/>
+      <div>
+        <div class="company-name">${isRtl ? 'شركة حقال للتجارة' : 'Hakkal Trading Company'}</div>
+        <div class="company-sub">Info@hakkal-est.com</div>
+      </div>
+    </div>
+    <div class="inv-meta">
+      <div class="inv-title">${isRtl ? 'فاتورة' : 'INVOICE'}</div>
+      <div class="inv-num">${invoiceNum}</div>
+      <div class="inv-date">${date}</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">${isRtl ? 'تفاصيل الطلب' : 'Order Details'}</div>
+    <div class="info-box">
+      <div class="info-row"><span class="info-label">${isRtl ? 'رقم الطلب' : 'Order Number'}</span><span class="info-value">${order.odooOrderName || '-'}</span></div>
+      <div class="info-row"><span class="info-label">${isRtl ? 'رقم الفاتورة' : 'Invoice Number'}</span><span class="info-value">${invoiceNum}</span></div>
+      <div class="info-row"><span class="info-label">${isRtl ? 'تاريخ الطلب' : 'Order Date'}</span><span class="info-value">${date}</span></div>
+      <div class="info-row"><span class="info-label">${isRtl ? 'الحالة' : 'Status'}</span><span class="status-badge">${order.status}</span></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">${isRtl ? 'المنتجات' : 'Products'}</div>
+    <table>
+      <thead><tr>
+        <th>${isRtl ? 'المنتج' : 'Product'}</th>
+        <th>${isRtl ? 'الكمية' : 'Qty'}</th>
+        <th>${isRtl ? 'السعر' : 'Price'}</th>
+        <th>${isRtl ? 'المجموع' : 'Total'}</th>
+      </tr></thead>
+      <tbody>
+        ${(order.items || []).map((item: any) => `
+          <tr>
+            <td>${item.name || item.productName || '-'}</td>
+            <td>${item.quantity || item.qty || 1}</td>
+            <td>${item.price?.toLocaleString() || '-'} ${isRtl ? 'ر.س' : 'SAR'}</td>
+            <td>${((item.price || 0) * (item.quantity || item.qty || 1)).toLocaleString()} ${isRtl ? 'ر.س' : 'SAR'}</td>
+          </tr>
+        `).join('')}
+        <tr class="total-row">
+          <td colspan="3">${isRtl ? 'الإجمالي' : 'TOTAL'}</td>
+          <td>${order.total?.toLocaleString()} ${isRtl ? 'ر.س' : 'SAR'}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer-note">
+    ${isRtl ? 'شكراً لتعاملكم معنا — شركة حقال للتجارة' : 'Thank you for your business — Hakkal Trading Company'}
+    <br/>Info@hakkal-est.com
+  </div>
+  <script>window.onload = () => { window.print(); }</script>
+</body></html>`;
+    const win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); }
+  };
+
+  const syncStatuses = useCallback(async (manual = false) => {
+    if (customerOrders.length === 0) {
+      if (manual) alert(t.orders.dashboard.noOrdersToSync);
+      return;
+    }
+    if (isSyncing && !manual) return;
+    
+    setIsSyncing(true);
+    if (manual) {
+      alert(lang === 'ar' ? 'بدأ عملية المزامنة... يرجى الانتظار' : 'Syncing started... please wait');
+    }
+    
+    try {
+      // Batch processing: max 3 requests at a time, 2s gap between batches
+      const batchSize = 3;
+      const ordersToSync = customerOrders.filter(o => o.odooOrderName);
+      
+      for (let i = 0; i < ordersToSync.length; i += batchSize) {
+        const batch = ordersToSync.slice(i, i + batchSize);
+        await Promise.all(batch.map(async (order) => {
+          try {
+            const safeOdooOrderName = encodeURIComponent(order.odooOrderName!);
+            const resp = await fetch(getApiUrl(`/api/odoo/order-status/${safeOdooOrderName}`));
+            const data = await resp.json();
+            
+            if (data.success && data.state) {
+              let newStatus = order.status;
+              if (data.isDelivered) newStatus = 'completed';
+              else if (data.isShipped) newStatus = 'shipped';
+              else if (data.isApproved) newStatus = 'approved';
+              else if (['cancel', 'rejected'].includes(data.state)) newStatus = 'rejected';
+
+              if (newStatus !== order.status || data.state !== order.odooState || data.invoiceName !== order.invoiceName) {
+                await updateDoc(doc(db, "orders", order.firebaseId), { 
+                  status: newStatus,
+                  odooState: data.state,
+                  invoiceName: data.invoiceName || null,
+                  lastSyncAt: new Date().toISOString()
+                });
+              }
+            }
+          } catch (e) {
+            console.error(`[Status Sync] Error for ${order.odooOrderName}:`, e);
+          }
+        }));
+        
+        if (i + batchSize < ordersToSync.length) {
+          await new Promise(r => setTimeout(r, 2000));
+        }
+      }
+      
+      if (manual) {
+        alert(t.orders.dashboard.statusesUpdated);
+      }
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [customerOrders, isSyncing, lang]);
+
+  useEffect(() => {
+    // Throttle: only auto-sync once every 30 minutes to save Vercel function invocations
+    const THROTTLE_KEY = `last_sync_dashboard_${user?.uid}`;
+    const lastSync = localStorage.getItem(THROTTLE_KEY);
+    const thirtyMin = 30 * 60 * 1000;
+    if (!lastSync || Date.now() - parseInt(lastSync) > thirtyMin) {
+      syncStatuses();
+      localStorage.setItem(THROTTLE_KEY, Date.now().toString());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const pendingOrders = customerOrders.filter(o => o.status === 'pending_approval' || o.status === 'pending_payment' || o.status === 'processing');
   
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-serif text-brand-navy font-bold">Welcome to your Dashboard</h1>
-        <p className="text-gray-500 mt-2">Overview of your recent activity and orders.</p>
+      <div className="flex justify-between items-center">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={lang === 'ar' ? 'text-right' : 'text-left'}
+        >
+          <h1 className="text-3xl font-serif text-brand-navy font-bold">{t.orders.dashboard.title}</h1>
+          <p className="text-gray-500 mt-2">{t.orders.dashboard.subtitle}</p>
+        </motion.div>
+
+        <button 
+          onClick={() => syncStatuses(true)}
+          disabled={isSyncing}
+          className={`flex items-center space-x-2 space-x-reverse px-6 py-3 rounded-2xl text-sm font-bold transition-all shadow-lg ${
+            isSyncing 
+              ? 'bg-gray-100 text-gray-400' 
+              : 'bg-brand-orange text-white hover:bg-brand-orange-hover shadow-brand-orange/20 hover:scale-105 active:scale-95'
+          }`}
+        >
+          <RefreshCw size={18} className={isSyncing ? 'animate-spin' : ''} />
+          <span>{isSyncing ? t.orders.dashboard.updating : t.orders.dashboard.syncStatus}</span>
+        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-brand-orange/10 rounded-2xl flex items-center justify-center text-brand-orange">
-              <ShoppingBag size={24} />
+        {[
+          { 
+            label: t.orders.dashboard.totalOrders, 
+            value: customerOrders.length, 
+            icon: ShoppingBag, 
+            bg: 'bg-brand-orange/10', 
+            text: 'text-brand-orange' 
+          },
+          { 
+            label: t.orders.dashboard.pendingOrders, 
+            value: pendingOrders.length, 
+            icon: Package, 
+            bg: 'bg-blue-50', 
+            text: 'text-blue-600' 
+          },
+          { 
+            label: t.orders.dashboard.completedOrders, 
+            value: customerOrders.filter(o => ['approved', 'shipped', 'completed'].includes(o.status)).length, 
+            icon: Check, 
+            bg: 'bg-emerald-50', 
+            text: 'text-emerald-600' 
+          }
+        ].map((card, i) => (
+          <motion.div 
+            key={i}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.1 }}
+            className="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
+          >
+            <div className={`flex items-center justify-between mb-4 ${lang === 'ar' ? 'flex-row-reverse' : ''}`}>
+              <div className={`w-12 h-12 ${card.bg} rounded-2xl flex items-center justify-center ${card.text}`}>
+                <card.icon size={24} />
+              </div>
+              <span className="text-2xl font-serif font-bold text-brand-navy">{card.value}</span>
             </div>
-            <span className="text-2xl font-serif font-bold text-brand-navy">{customerOrders.length}</span>
-          </div>
-          <p className="text-gray-400 text-xs font-bold uppercase tracking-widest">إجمالي الطلبات</p>
-        </div>
-
-        <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center text-blue-600">
-              <Package size={24} />
-            </div>
-            <span className="text-2xl font-serif font-bold text-brand-navy">{pendingOrders.length}</span>
-          </div>
-          <p className="text-gray-400 text-xs font-bold uppercase tracking-widest">قيد المعالجة</p>
-        </div>
-
-        <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-green-100 rounded-2xl flex items-center justify-center text-green-600">
-              <Check size={24} />
-            </div>
-            <span className="text-2xl font-serif font-bold text-brand-navy">
-              {customerOrders.filter(o => o.status === 'approved' || o.status === 'completed').length}
-            </span>
-          </div>
-          <p className="text-gray-400 text-xs font-bold uppercase tracking-widest">تم الموافقة / مكتمل</p>
-        </div>
+            <p className={`text-gray-400 text-[10px] font-bold uppercase tracking-widest ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{card.label}</p>
+          </motion.div>
+        ))}
       </div>
 
-      <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8">
-        <h3 className="text-xl font-serif text-brand-navy font-bold mb-6">Recent Orders</h3>
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+        className="bg-white rounded-[2rem] shadow-sm border border-gray-100 p-8"
+      >
+        <div className={`flex items-center justify-between mb-8 ${lang === 'ar' ? 'flex-row-reverse' : ''}`}>
+          <h3 className="text-xl font-serif text-brand-navy font-bold">{t.orders.dashboard.recentOrders}</h3>
+          <button className="text-brand-orange text-xs font-bold uppercase tracking-widest hover:underline">
+            {t.orders.dashboard.viewAll}
+          </button>
+        </div>
+        
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
+          <table className="w-full">
             <thead>
-              <tr className="border-b border-gray-100">
-                <th className="pb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Order ID</th>
-                <th className="pb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Date</th>
-                <th className="pb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total</th>
-                <th className="pb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
+              <tr className="border-b border-gray-50">
+                <th className={`pb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.orderId}</th>
+                <th className={`pb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.date}</th>
+                <th className={`pb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.invoiceId}</th>
+                <th className={`pb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.total}</th>
+                <th className={`pb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.status}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-gray-50">
               {customerOrders.slice(0, 5).map((order) => (
-                <tr key={order.firebaseId} className="group">
-                  <td className="py-4">
-                    <span className="text-[10px] font-mono text-gray-400">#{order.firebaseId.slice(0, 8).toUpperCase()}</span>
+                <tr key={order.firebaseId} className="group hover:bg-gray-50/50 transition-colors">
+                  <td className={`py-5 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
+                    <span className="text-[10px] font-mono text-gray-400 bg-gray-50 px-2 py-1 rounded">#{order.firebaseId.slice(0, 8).toUpperCase()}</span>
                   </td>
-                  <td className="py-4 text-xs text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</td>
-                  <td className="py-4 text-xs font-bold text-brand-navy">SAR {order.total.toLocaleString()}</td>
-                  <td>
-                    {(() => {
-                      const { label, color } = getStatusDetails(order.status);
-                      return (
-                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase border ${color}`}>
-                          {label}
+                  <td className={`py-5 text-xs text-gray-500 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{new Date(order.createdAt).toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US')}</td>
+                  <td className={`py-5 ${lang === 'ar' ? 'text-right' : 'text-left'}`} style={{ minWidth: '140px' }}>
+                    <div className={`flex items-center gap-2 flex-wrap ${lang === 'ar' ? 'flex-row-reverse justify-end' : ''}`}>
+                      {order.invoiceName ? (
+                        <span className="text-[10px] font-mono font-bold text-brand-navy bg-gray-100 px-2 py-1 rounded-lg border border-gray-200 leading-tight">
+                          {order.invoiceName}
                         </span>
+                      ) : order.odooOrderName ? (
+                        <span className="text-[10px] font-mono text-gray-400 bg-gray-50 px-2 py-1 rounded-lg border border-dashed border-gray-200 leading-tight" title={t.orders.dashboard.invoiceNotIssued}>
+                          {order.odooOrderName}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-gray-300">-</span>
+                      )}
+                      <button
+                        onClick={() => downloadInvoicePDF(order)}
+                        title={t.orders.dashboard.downloadInvoicePdf}
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg bg-brand-navy text-white text-[10px] font-bold hover:bg-brand-orange transition-all shadow-sm flex-shrink-0"
+                      >
+                        <FileText size={11} />
+                        <span>PDF</span>
+                      </button>
+                    </div>
+                  </td>
+                  <td className={`py-5 text-xs font-bold text-brand-navy ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{t.products.pricePrefix}{order.total.toLocaleString()}</td>
+                  <td className={`py-5 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
+                    {(() => {
+                      const { label, color } = getStatusDetails(order.status, t);
+                      return (
+                        <button
+                          onClick={() => onViewHistory(order.odooOrderName || '', order.firebaseId, order.status, order.createdAt)}
+                          className={`px-5 py-2 rounded-xl text-xs font-bold border shadow-sm transition-all hover:shadow-md hover:scale-105 active:scale-95 inline-block whitespace-normal max-w-[250px] leading-relaxed text-center cursor-pointer ${color}`}
+                          title={t.orders.dashboard.viewSequence}
+                        >
+                          {label}
+                        </button>
                       );
                     })()}
                   </td>
@@ -2769,87 +3276,522 @@ const CustomerDashboardOverview = ({ orders, user }: { orders: Order[], user: Us
               ))}
               {customerOrders.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-10 text-center text-gray-400 italic">No recent orders found.</td>
+                  <td colSpan={5} className="py-20 text-center">
+                    <div className="flex flex-col items-center justify-center space-y-4">
+                      <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center text-gray-300">
+                        <ShoppingBag size={32} />
+                      </div>
+                      <p className="text-gray-400 italic text-sm">{t.orders.dashboard.noOrders}</p>
+                    </div>
+                  </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 };
 
-const CustomerShop = ({ products, onAddToCart }: { products: Product[], onAddToCart: (p: Product) => void }) => {
+const CustomerShop = ({ products, onAddToCart, t, lang }: { products: Product[], onAddToCart: (p: Product) => void, t: any, lang: Language }) => {
+  const isRtl = lang === 'ar';
+  const [search, setSearch] = useState('');
+  const [addedId, setAddedId] = useState<number | null>(null);
+  const [showOffer, setShowOffer] = useState(true);
+
+  // إعادة إظهار البوب آب كل 5 دقائق
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setShowOffer(true);
+    }, 5 * 60 * 1000); // 5 minutes
+    return () => clearInterval(interval);
+  }, []);
+
+  const filtered = useMemo(() =>
+    products.filter(p =>
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      p.description?.toLowerCase().includes(search.toLowerCase())
+    ), [products, search]);
+
+  const handleAdd = (p: Product) => {
+    onAddToCart(p);
+    setAddedId(p.id);
+    setTimeout(() => setAddedId(null), 1500);
+  };
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-serif text-brand-navy font-bold">Shop Now</h1>
-        <p className="text-gray-500 mt-2">Browse our premium collection and add to your cart.</p>
+    <div className="space-y-6">
+      {/* Offers Modal Popup */}
+      <AnimatePresence>
+        {showOffer && (() => {
+          const discounted = products.filter(p => p.discountPrice);
+          if (discounted.length === 0) return null;
+          return (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+              onClick={() => setShowOffer(false)}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: 30 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 30 }}
+                transition={{ type: 'spring', damping: 20 }}
+                onClick={e => e.stopPropagation()}
+                className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden"
+              >
+                {/* Header */}
+                <div className="relative bg-gradient-to-r from-brand-orange to-amber-400 p-6 flex-shrink-0">
+                  <div className="absolute inset-0 overflow-hidden">
+                    <div className="absolute -top-8 -right-8 w-32 h-32 bg-white/10 rounded-full" />
+                    <div className="absolute -bottom-6 -left-6 w-24 h-24 bg-white/10 rounded-full" />
+                  </div>
+                  <div className={`relative flex items-center justify-between ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <div className={isRtl ? 'text-right' : 'text-left'}>
+                      <h2 className="text-white font-bold text-xl">
+                        🔥 {isRtl ? 'عروض حصرية!' : 'Special Offers!'}
+                      </h2>
+                      <p className="text-white/80 text-sm mt-1">
+                        {isRtl
+                          ? `${discounted.length} منتج بخصم خاص لك`
+                          : `${discounted.length} products with special discount`}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setShowOffer(false)}
+                      className="bg-white/20 hover:bg-white/30 text-white rounded-full p-2 transition-all"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Discounted Products */}
+                <div className="overflow-y-auto flex-1 p-4 space-y-3">
+                  {discounted.map(p => {
+                    const orig = parseFloat(p.price.replace(/[^\d.]/g, ''));
+                    const disc = parseFloat(p.discountPrice!.replace(/[^\d.]/g, ''));
+                    const pct  = Math.round((1 - disc / orig) * 100);
+                    return (
+                      <div key={p.id} className={`flex items-center gap-4 bg-gray-50 rounded-2xl p-3 hover:bg-orange-50 transition-colors ${isRtl ? 'flex-row-reverse' : ''}`}>
+                        {/* Image */}
+                        <div className="w-16 h-16 rounded-xl overflow-hidden bg-white flex-shrink-0 shadow-sm">
+                          <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
+                        </div>
+                        {/* Info */}
+                        <div className={`flex-1 min-w-0 ${isRtl ? 'text-right' : 'text-left'}`}>
+                          <p className="text-brand-navy font-bold text-sm line-clamp-1">{p.name}</p>
+                          <div className={`flex items-center gap-2 mt-1 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                            <span className="text-brand-orange font-bold text-base">{t.products.pricePrefix}{disc.toLocaleString()}</span>
+                            <span className="text-gray-400 text-xs line-through">{t.products.pricePrefix}{orig.toLocaleString()}</span>
+                            <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">-{pct}%</span>
+                          </div>
+                        </div>
+                        {/* Add button */}
+                        <button
+                          onClick={() => { handleAdd(p); }}
+                          className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all shadow-md ${
+                            addedId === p.id ? 'bg-green-500 text-white scale-110' : 'bg-brand-navy text-white hover:bg-brand-orange hover:scale-105'
+                          }`}
+                        >
+                          {addedId === p.id ? <Check size={16} /> : <Plus size={16} />}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Footer */}
+                <div className="p-4 border-t border-gray-100 flex-shrink-0">
+                  <button
+                    onClick={() => setShowOffer(false)}
+                    className="w-full bg-brand-navy text-white py-3 rounded-2xl font-bold text-sm hover:bg-brand-orange transition-all"
+                  >
+                    {isRtl ? 'تصفح جميع المنتجات' : 'Browse All Products'}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
+
+      {/* Header + Search */}
+      <div className={`flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between ${isRtl ? 'sm:flex-row-reverse' : ''}`}>
+        <div className={isRtl ? 'text-right' : 'text-left'}>
+          <h1 className="text-2xl font-serif text-brand-navy font-bold">{t.orders.dashboard.shopNow}</h1>
+          <p className="text-gray-400 text-sm mt-0.5">{filtered.length} {isRtl ? 'منتج' : 'products'}</p>
+        </div>
+
+        {/* Search Bar */}
+        <div className={`relative flex-shrink-0 w-full sm:w-72`}>
+          <Search size={16} className={`absolute top-1/2 -translate-y-1/2 text-gray-400 ${isRtl ? 'right-3' : 'left-3'}`} />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder={isRtl ? 'ابحث عن منتج...' : 'Search products...'}
+            className={`w-full bg-white border border-gray-200 rounded-2xl py-2.5 text-sm text-brand-navy placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/30 focus:border-brand-orange transition-all ${isRtl ? 'pr-9 pl-4 text-right' : 'pl-9 pr-4 text-left'}`}
+          />
+          {search && (
+            <button onClick={() => setSearch('')} className={`absolute top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 ${isRtl ? 'left-3' : 'right-3'}`}>
+              <X size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {products.map((p) => (
-          <div key={p.id} className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-gray-100 hover:shadow-xl transition-all group flex flex-col">
-            <div className="aspect-square mb-6 overflow-hidden rounded-3xl bg-gray-50">
-              <img src={p.image} alt={p.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-            </div>
-            <h3 className="text-brand-navy font-serif text-lg font-bold mb-2">{p.name}</h3>
-            <p className="text-gray-500 text-xs mb-4 line-clamp-2">{p.description}</p>
-            <div className="flex items-center justify-between mt-auto">
-              <span className="text-brand-orange font-serif font-bold text-lg">{p.price}</span>
-              <button 
-                onClick={() => onAddToCart(p)}
-                className="bg-brand-navy text-white p-3 rounded-2xl hover:bg-brand-orange transition-all"
-              >
-                <Plus size={20} />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+      {/* Products Grid */}
+      {filtered.length === 0 ? (
+        <div className="text-center py-20 text-gray-400">
+          <Search size={40} className="mx-auto mb-3 opacity-30" />
+          <p className="font-medium">{isRtl ? 'لا توجد نتائج' : 'No results found'}</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+          {filtered.map((p, i) => (
+            <motion.div
+              key={p.id}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.03 }}
+              className="bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-brand-orange/20 transition-all group flex flex-col overflow-hidden"
+            >
+              {/* Image — compact */}
+              <div className="relative overflow-hidden bg-gray-50" style={{ aspectRatio: '1/1' }}>
+                <img
+                  src={p.image}
+                  alt={p.name}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                />
+                {/* Brand badge */}
+                <div className="absolute bottom-1.5 start-1.5 bg-white/90 backdrop-blur-sm rounded-lg shadow-sm p-1">
+                  <img
+                    src="https://i.ibb.co/FTqMcyG/Untitled-design.png"
+                    alt="Brand"
+                    className="h-5 w-auto object-contain mix-blend-multiply"
+                  />
+                </div>
+                {/* Quick Add overlay */}
+                <button
+                  onClick={() => handleAdd(p)}
+                  className="absolute inset-0 bg-brand-navy/0 group-hover:bg-brand-navy/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100"
+                >
+                  <div className="bg-white text-brand-navy rounded-full p-2 shadow-xl transform scale-75 group-hover:scale-100 transition-transform">
+                    {addedId === p.id ? <Check size={18} className="text-green-500" /> : <ShoppingCart size={18} />}
+                  </div>
+                </button>
+              </div>
+
+              {/* Info */}
+              <div className={`p-2.5 flex flex-col flex-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                <p className="text-brand-navy font-bold text-xs leading-snug line-clamp-2 mb-1 group-hover:text-brand-orange transition-colors">
+                  {p.name}
+                </p>
+                <div className={`flex items-center justify-between mt-auto pt-1.5 border-t border-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                  <span className="text-brand-orange font-bold text-sm">
+                    {t.products.pricePrefix}{typeof p.price === 'number' ? p.price.toLocaleString() : p.price}
+                  </span>
+                  <button
+                    onClick={() => handleAdd(p)}
+                    className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all shadow-sm ${
+                      addedId === p.id
+                        ? 'bg-green-500 text-white scale-110'
+                        : 'bg-brand-navy text-white hover:bg-brand-orange hover:scale-110 active:scale-95'
+                    }`}
+                  >
+                    {addedId === p.id ? <Check size={14} /> : <Plus size={14} />}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
 
-const CustomerOrders = ({ orders, user }: { orders: Order[], user: User | null }) => {
-  const customerOrders = orders.filter(o => 
+const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, historyOrder }: { 
+  orders: Order[], 
+  user: User | null, 
+  t: any, 
+  lang: Language, 
+  onViewHistory: (orderName: string, firebaseId?: string, status?: string, createdAt?: string) => void,
+  loadingHistory: boolean,
+  historyOrder: Order | null
+}) => {
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isSyncingIndividual, setIsSyncingIndividual] = useState<string | null>(null);
+
+  const customerOrders = useMemo(() => orders.filter(o => 
     o.userId === user?.uid || 
     o.email?.toLowerCase() === user?.email?.toLowerCase()
-  );
+  ), [orders, user]);
 
-  useEffect(() => {
-    const syncStatuses = async () => {
+  const isRtl = lang === 'ar';
+
+  const downloadInvoicePDF = (order: Order) => {
+    const dir = isRtl ? 'rtl' : 'ltr';
+    const date = new Date(order.createdAt).toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const invoiceNum = order.invoiceName || order.odooOrderName || `#${order.firebaseId.slice(0,8).toUpperCase()}`;
+    const html = `<!DOCTYPE html><html dir="${dir}" lang="${isRtl ? 'ar' : 'en'}">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Invoice ${invoiceNum}</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: ${isRtl ? "'Tajawal', Arial" : 'Arial'}, sans-serif; background:#fff; color:#1a1a2e; padding:40px; direction:${dir}; }
+    .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:40px; padding-bottom:24px; border-bottom:3px solid #FF6B35; }
+    .logo-block { display:flex; align-items:center; gap:12px; }
+    .logo-block img { height:60px; object-fit:contain; }
+    .company-name { font-size:20px; font-weight:800; color:#1a1a2e; }
+    .company-sub { font-size:11px; color:#888; margin-top:2px; }
+    .inv-meta { text-align:${isRtl ? 'left' : 'right'}; }
+    .inv-title { font-size:28px; font-weight:900; color:#FF6B35; letter-spacing:2px; }
+    .inv-num { font-size:13px; color:#666; margin-top:4px; font-family:monospace; }
+    .inv-date { font-size:12px; color:#999; margin-top:2px; }
+    .section { margin-bottom:28px; }
+    .section-title { font-size:11px; font-weight:700; color:#FF6B35; text-transform:uppercase; letter-spacing:2px; margin-bottom:10px; }
+    .info-box { background:#f8f9fa; border-radius:12px; padding:16px 20px; }
+    .info-row { display:flex; justify-content:space-between; margin-bottom:6px; font-size:13px; }
+    .info-label { color:#888; font-weight:600; }
+    .info-value { color:#1a1a2e; font-weight:700; font-family:monospace; }
+    table { width:100%; border-collapse:collapse; margin-top:8px; }
+    th { background:#1a1a2e; color:#fff; padding:12px 16px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; }
+    td { padding:12px 16px; border-bottom:1px solid #f0f0f0; font-size:13px; }
+    .total-row { background:#FF6B35; color:#fff; }
+    .total-row td { font-size:16px; font-weight:800; padding:16px; }
+    .footer-note { margin-top:40px; text-align:center; font-size:11px; color:#bbb; }
+    @media print { body { padding:20px; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo-block">
+      <img src="https://i.ibb.co/xKkzXtmz/Untitled-design-1.png" alt="Logo"/>
+      <div>
+        <div class="company-name">${isRtl ? 'شركة حقال للتجارة' : 'Hakkal Trading Company'}</div>
+        <div class="company-sub">Info@hakkal-est.com</div>
+      </div>
+    </div>
+    <div class="inv-meta">
+      <div class="inv-title">${isRtl ? 'فاتورة' : 'INVOICE'}</div>
+      <div class="inv-num">${invoiceNum}</div>
+      <div class="inv-date">${date}</div>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section-title">${isRtl ? 'تفاصيل الطلب' : 'Order Details'}</div>
+    <div class="info-box">
+      <div class="info-row"><span class="info-label">${isRtl ? 'رقم الطلب' : 'Order Number'}</span><span class="info-value">${order.odooOrderName || '-'}</span></div>
+      <div class="info-row"><span class="info-label">${isRtl ? 'رقم الفاتورة' : 'Invoice Number'}</span><span class="info-value">${invoiceNum}</span></div>
+      <div class="info-row"><span class="info-label">${isRtl ? 'تاريخ الطلب' : 'Order Date'}</span><span class="info-value">${date}</span></div>
+      <div class="info-row"><span class="info-label">${isRtl ? 'الحالة' : 'Status'}</span><span class="info-value">${order.status}</span></div>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section-title">${isRtl ? 'المنتجات' : 'Products'}</div>
+    <table>
+      <thead><tr>
+        <th>${isRtl ? 'المنتج' : 'Product'}</th>
+        <th>${isRtl ? 'الكمية' : 'Qty'}</th>
+        <th>${isRtl ? 'السعر' : 'Price'}</th>
+        <th>${isRtl ? 'المجموع' : 'Total'}</th>
+      </tr></thead>
+      <tbody>
+        ${(order.items || []).map((item: any) => `
+          <tr><td>${item.name || item.productName || '-'}</td><td>${item.quantity || item.qty || 1}</td><td>${item.price?.toLocaleString() || '-'} ${isRtl ? 'ر.س' : 'SAR'}</td><td>${((item.price||0)*(item.quantity||item.qty||1)).toLocaleString()} ${isRtl ? 'ر.س' : 'SAR'}</td></tr>
+        `).join('')}
+        <tr class="total-row"><td colspan="3">${isRtl ? 'الإجمالي' : 'TOTAL'}</td><td>${order.total?.toLocaleString()} ${isRtl ? 'ر.س' : 'SAR'}</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="footer-note">${isRtl ? 'شكراً لتعاملكم معنا — شركة حقال للتجارة' : 'Thank you for your business — Hakkal Trading Company'}<br/>Info@hakkal-est.com</div>
+  <script>window.onload = () => { window.print(); }<\/script>
+</body></html>`;
+    const win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); }
+  };
+
+  const syncIndividualOrder = useCallback(async (order: Order) => {
+    if (!order.odooOrderName) return;
+    
+    setIsSyncingIndividual(order.firebaseId);
+    try {
+      const safeOdooOrderName = encodeURIComponent(order.odooOrderName);
+      const resp = await fetch(getApiUrl(`/api/odoo/order-status/${safeOdooOrderName}`));
+      
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      
+      const data = await resp.json();
+      if (data.success && data.state) {
+        let newStatus = order.status;
+        if (data.isDelivered) newStatus = 'completed';
+        else if (data.isShipped) newStatus = 'shipped';
+        else if (data.isApproved) newStatus = 'approved';
+        else if (['cancel', 'rejected'].includes(data.state)) newStatus = 'rejected';
+
+        if (newStatus !== order.status || data.state !== order.odooState || data.invoiceName !== order.invoiceName) {
+          const orderRef = doc(db, "orders", order.firebaseId);
+          await updateDoc(orderRef, { 
+            status: newStatus,
+            odooState: data.state,
+            invoiceName: data.invoiceName || null,
+            lastSyncAt: new Date().toISOString()
+          });
+          
+          const statusLabels: any = {
+            approved: t.orders.statuses.approved,
+            shipped: t.orders.statuses.shipped,
+            completed: t.orders.statuses.completed
+          };
+          
+          /* Removed alert for better UX */
+        } else {
+          /* Removed alert for better UX */
+        }
+      }
+    } catch (e: any) {
+      console.error("[Individual Sync] Error:", e);
+      /* Removed alert for better UX */
+    } finally {
+      setIsSyncingIndividual(null);
+    }
+  }, [lang]);
+
+  const syncStatuses = useCallback(async (manual = false) => {
+    if (manual) {
+      console.log(lang === 'ar' ? 'بدأ عملية المزامنة... يرجى الانتظار' : 'Syncing started... please wait');
+    }
+    
+    if (customerOrders.length === 0) {
+      if (manual) console.log(lang === 'ar' ? 'لا يوجد طلبات للمزامنة' : 'No orders to sync');
+      return;
+    }
+    if (isSyncing && !manual) return;
+    
+    setIsSyncing(true);
+    console.log(`[Status Sync] ${manual ? 'Manual' : 'Auto'} sync checking ${customerOrders.length} orders...`);
+    
+    try {
+      if (manual) {
+        console.log(`[Status Sync] Starting manual sync for ${customerOrders.length} orders.`);
+      }
+
       for (const order of customerOrders) {
-        // Case 1: Order has Odoo name, just sync status
-        if (order.odooOrderName && (order.status === 'pending_approval' || order.status === 'processing')) {
+        const hasOdooName = !!order.odooOrderName;
+        
+        // Allow manual sync to check any order, but auto-sync skips non-terminal statuses unless invoice is missing
+        const shouldSync = manual || (
+          hasOdooName && (
+            ['pending_approval', 'processing', 'approved', 'shipped'].includes(order.status) || 
+            (order.status === 'completed' && !order.invoiceName)
+          )
+        );
+
+        if (manual && !hasOdooName) {
+          console.warn(`[Status Sync] Order ${order.firebaseId} is missing Odoo Order Name. Cannot sync.`);
+          continue;
+        }
+
+        if (hasOdooName && shouldSync) {
           try {
             const safeOdooOrderName = encodeURIComponent(order.odooOrderName);
-            const resp = await fetch(getApiUrl(`/api/odoo/order-status/${safeOdooOrderName}`));
+            const statusUrl = getApiUrl(`/api/odoo/order-status/${safeOdooOrderName}`);
+            
+            console.log(`[Status Sync] Fetching status for ${order.odooOrderName} from: ${statusUrl}`);
+            const resp = await fetch(statusUrl);
+            
+            if (!resp.ok) {
+              let errorMessage = `HTTP Error ${resp.status}`;
+              try {
+                const errorData = await resp.json();
+                if (errorData.message) errorMessage = errorData.message;
+                else if (errorData.error) errorMessage = errorData.error;
+              } catch (e) {
+                // Use text fallback if JSON parsing fails
+                try {
+                  const text = await resp.text();
+                  if (text && text.length < 200) errorMessage = text;
+                } catch (e2) {}
+              }
+              
+              console.error(`[Status Sync] ${errorMessage} for ${order.odooOrderName}`);
+              /* Removed alert for better UX */
+              continue;
+            }
+
             const data = await resp.json();
+            console.log(`[Status Sync] Received data for ${order.odooOrderName}:`, data);
+            
+            if (data.debug) {
+              console.log(`[Status Sync] Debug info for ${order.odooOrderName}:`, {
+                state: data.state,
+                isApproved: data.isApproved,
+                isShipped: data.isShipped,
+                isDelivered: data.isDelivered,
+                pickings: data.debug.pickings
+              });
+            }
 
             if (data.success && data.state) {
               let newStatus = order.status;
-              if (['sale', 'done'].includes(data.state)) {
-                newStatus = 'approved';
-              } else if (data.state === 'cancel') {
+              
+              // Map Odoo data to Website statuses - CHECK IN THIS ORDER:
+              // 1. delivered (done) → completed (تم التسليم)
+              // 2. shipped (assigned/in_pack) → shipped (تم الشحن)
+              // 3. approved (sale/done) → approved (تم الموافقة)
+              if (data.isDelivered) {
+                newStatus = 'completed'; // تم التسليم
+              } else if (data.isShipped) {
+                newStatus = 'shipped'; // تم الشحن
+              } else if (data.isApproved) {
+                newStatus = 'approved'; // تم الموافقة
+              } else if (['cancel', 'rejected'].includes(data.state)) {
                 newStatus = 'rejected';
               }
 
-              if (newStatus !== order.status) {
-                console.log(`Syncing order ${order.odooOrderName}: Odoo state ${data.state} -> Firestore status ${newStatus}`);
-                await updateDoc(doc(db, "orders", order.firebaseId), { status: newStatus });
+              const hasStatusChanged = newStatus !== order.status;
+              const hasStateChanged = data.state !== order.odooState;
+              const hasInvoiceChanged = data.invoiceName !== order.invoiceName;
+
+              if (hasStatusChanged || hasStateChanged || hasInvoiceChanged) {
+                console.log(`[Status Sync] ${order.odooOrderName}: Updating Firestore (Status: ${order.status}->${newStatus}, State: ${order.odooState}->${data.state})`);
+                const orderRef = doc(db, "orders", order.firebaseId);
+                await updateDoc(orderRef, { 
+                  status: newStatus,
+                  odooState: data.state,
+                  invoiceName: data.invoiceName || null,
+                  lastSyncAt: new Date().toISOString()
+                });
+                
+                if (manual && hasStatusChanged) {
+                  /* Removed alert for better UX */
+                } else if (manual) {
+                  /* Removed alert for better UX */
+                }
+              } else if (manual) {
+                /* Removed alert for better UX */
               }
+            } else if (manual) {
+              /* Removed alert for better UX */
             }
-          } catch (e) {
-            console.error("Status sync error:", e);
+          } catch (e: any) {
+            console.error(`[Status Sync] Exception for ${order.odooOrderName}:`, e);
+            if (manual) {
+              /* Removed alert for better UX */
+            }
           }
         } 
-        // Case 2: Order is missing Odoo name, try to look it up
+        // Case 2: Missing Odoo name
         else if (!order.odooOrderName && order.status === 'pending_approval') {
           try {
-            console.log(`Looking up missing Odoo ID for order: ${order.firebaseId}`);
-            const lookupResp = await fetch(getApiUrl("/api/odoo/order-lookup"), {
+            console.log(`[Status Sync] Looking up missing Odoo ID for: ${order.firebaseId}`);
+            const lookupResp = await fetch(getApiUrl("/api/odoo/lookup-order"), {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -2861,100 +3803,217 @@ const CustomerOrders = ({ orders, user }: { orders: Order[], user: User | null }
             const lookupData = await lookupResp.json();
             
             if (lookupData.success && lookupData.data) {
-              const odooOrder = lookupData.data;
-              console.log(`Found matching Odoo order: ${odooOrder.name} for Firestore order ${order.firebaseId}`);
+              console.log(`[Status Sync] Found match: ${lookupData.data.name}`);
               await updateDoc(doc(db, "orders", order.firebaseId), {
-                odooOrderName: odooOrder.name,
-                odooOrderId: odooOrder.id,
+                odooOrderName: lookupData.data.name,
+                odooOrderId: lookupData.data.id,
                 syncStatus: 'success',
                 syncedAt: new Date().toISOString()
               });
+            } else {
+              console.warn(`[Status Sync] No Odoo match found for order ${order.firebaseId}`);
             }
           } catch (e) {
-            console.error("Order lookup error:", e);
+            console.error("[Status Sync] Lookup error:", e);
           }
         }
       }
-    };
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [customerOrders, isSyncing, lang]);
 
-    if (customerOrders.length === 0) return;
-
-    // Run immediately, then keep polling so status changes in Odoo appear without page refresh.
-    syncStatuses();
-    const intervalId = setInterval(syncStatuses, 20000);
-    return () => clearInterval(intervalId);
-  }, [customerOrders]);
+  useEffect(() => {
+    // Throttle: only auto-sync once every 30 minutes to save Vercel function invocations
+    const THROTTLE_KEY = `last_sync_orders_${user?.uid}`;
+    const lastSync = localStorage.getItem(THROTTLE_KEY);
+    const thirtyMin = 30 * 60 * 1000;
+    if (!lastSync || Date.now() - parseInt(lastSync) > thirtyMin) {
+      syncStatuses();
+      localStorage.setItem(THROTTLE_KEY, Date.now().toString());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-serif text-brand-navy font-bold">My Orders</h1>
-        <p className="text-gray-500 mt-2">Track your order status and purchase history.</p>
+      <div className="flex justify-between items-center">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={lang === 'ar' ? 'text-right' : 'text-left'}
+        >
+          <h1 className="text-3xl font-serif text-brand-navy font-bold">{t.orders.dashboard.myOrders}</h1>
+          <p className="text-gray-500 mt-2">{t.orders.dashboard.ordersSubtitle}</p>
+        </motion.div>
+        
+        <button 
+          onClick={() => syncStatuses(true)}
+          disabled={isSyncing}
+          className={`flex items-center space-x-2 space-x-reverse px-6 py-3 rounded-2xl text-sm font-bold transition-all shadow-lg ${
+            isSyncing 
+              ? 'bg-gray-100 text-gray-400' 
+              : 'bg-brand-orange text-white hover:bg-brand-orange-hover shadow-brand-orange/20 hover:scale-105 active:scale-95'
+          }`}
+        >
+          <RefreshCw size={18} className={isSyncing ? 'animate-spin' : ''} />
+          <span>{isSyncing ? t.orders.dashboard.updating : t.orders.dashboard.syncStatus}</span>
+        </button>
       </div>
 
-      <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-        <table className="w-full text-left">
-          <thead className="bg-gray-50 border-b border-gray-100">
-            <tr>
-              <th className="px-8 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Order ID</th>
-              <th className="px-8 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Date</th>
-              <th className="px-8 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Products</th>
-              <th className="px-8 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total</th>
-              <th className="px-8 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Odoo ID</th>
-              <th className="px-8 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {customerOrders.map((order) => (
-              <tr key={order.firebaseId} className="hover:bg-gray-50/50 transition-colors">
-                <td className="px-8 py-6">
-                  <span className="text-[10px] font-mono text-gray-400">#{order.firebaseId.slice(0, 8).toUpperCase()}</span>
-                </td>
-                <td className="px-8 py-6 text-xs text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</td>
-                <td className="px-8 py-6">
-                  <div className="flex flex-col space-y-1">
-                    {order.items.map((item, i) => (
-                      <span key={i} className="text-xs text-brand-navy font-medium">{item.name} × {item.quantity}</span>
-                    ))}
-                  </div>
-                </td>
-                <td className="px-8 py-6 text-xs font-bold text-brand-navy">SAR {order.total.toLocaleString()}</td>
-                <td className="px-8 py-6">
-                  {order.odooOrderName ? (
-                    <span className="text-xs font-mono font-bold text-brand-orange bg-brand-orange/10 px-3 py-1 rounded-lg">
-                      {order.odooOrderName}
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-gray-400 italic">Processing Sync</span>
-                  )}
-                </td>
-                <td className="px-8 py-6">
-                  {(() => {
-                    const { label, color } = getStatusDetails(order.status);
-                    return (
-                      <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase border ${color}`}>
-                        {label}
-                      </span>
-                    );
-                  })()}
-                </td>
-              </tr>
-            ))}
-            {customerOrders.length === 0 && (
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden"
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50/50 border-b border-gray-100">
               <tr>
-                <td colSpan={6} className="px-8 py-20 text-center text-gray-400 italic">
-                  No orders yet. Visit the shop to start shopping!
-                </td>
+                <th className={`px-8 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.orderId}</th>
+                <th className={`px-8 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.date}</th>
+                <th className={`px-8 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.products}</th>
+                <th className={`px-8 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.total}</th>
+                <th className={`px-8 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.odooId}</th>
+                <th className={`px-8 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.invoiceId}</th>
+                <th className={`px-8 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.status}</th>
+                <th className={`px-8 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${lang === 'ar' ? 'text-left' : 'text-right'}`}>{t.orders.dashboard.actions}</th>
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {customerOrders.map((order) => (
+                <tr key={order.firebaseId} className="hover:bg-gray-50/50 transition-colors group">
+                  <td className={`px-8 py-6 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
+                    <span className="text-[10px] font-mono text-gray-400 bg-gray-50 px-2 py-1 rounded">#{order.firebaseId.slice(0, 8).toUpperCase()}</span>
+                  </td>
+                  <td className={`px-8 py-6 text-xs text-gray-500 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{new Date(order.createdAt).toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US')}</td>
+                  <td className={`px-8 py-6 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
+                    <div className="flex flex-col space-y-1.5">
+                      {order.items.map((item, i) => (
+                        <div key={i} className={`flex items-center space-x-2 ${lang === 'ar' ? 'flex-row-reverse space-x-reverse' : ''}`}>
+                          <span className="text-xs text-brand-navy font-bold">{item.quantity}×</span>
+                          <span className="text-xs text-gray-600">{item.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </td>
+                  <td className={`px-8 py-6 text-xs font-bold text-brand-navy ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{t.products.pricePrefix}{order.total.toLocaleString()}</td>
+                  <td className={`px-8 py-6 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
+                    {order.odooOrderName ? (
+                      <button 
+                        onClick={async () => {
+                          const newWindow = window.open('', '_blank');
+                          if (!newWindow) {
+                            alert(t.orders.dashboard.allowPopups);
+                            return;
+                          }
+                          newWindow.document.write(`<div style="font-family:sans-serif;padding:20px;text-align:center;">${t.orders.dashboard.loadingQuotation}</div>`);
+                          try {
+                            const resp = await fetch(getApiUrl(`/api/odoo/order-portal/${encodeURIComponent(order.odooOrderName!)}`));
+                            const data = await resp.json();
+                            if (data.success && data.url) {
+                              newWindow.location.href = data.url;
+                            } else {
+                              newWindow.document.write(`<div style="font-family:sans-serif;padding:20px;text-align:center;color:red;">${t.orders.dashboard.quotationNotFound}</div>`);
+                            }
+                          } catch(e) {
+                            newWindow.document.write(`<div style="font-family:sans-serif;padding:20px;text-align:center;color:red;">${t.orders.dashboard.quotationError}</div>`);
+                          }
+                        }}
+                        title={t.orders.dashboard.viewQuotation}
+                        className="text-[10px] font-mono font-bold text-brand-orange bg-brand-orange/10 px-3 py-1.5 rounded-lg border border-brand-orange/20 hover:bg-brand-orange hover:text-white transition-colors cursor-pointer"
+                      >
+                        {order.odooOrderName}
+                      </button>
+                    ) : (
+                      <div className={`flex items-center space-x-2 ${lang === 'ar' ? 'flex-row-reverse space-x-reverse' : ''}`}>
+                        <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-pulse" />
+                        <span className="text-[10px] text-gray-400 italic">{t.orders.dashboard.syncing}</span>
+                      </div>
+                    )}
+                  </td>
+                  <td className={`px-8 py-6 ${lang === 'ar' ? 'text-right' : 'text-left'}`} style={{ minWidth: '160px' }}>
+                    <div className={`flex items-center gap-2 flex-wrap ${lang === 'ar' ? 'flex-row-reverse justify-end' : ''}`}>
+                      {order.invoiceName ? (
+                        <span className="text-[10px] font-mono font-bold text-brand-navy bg-blue-50 px-2 py-1 rounded-lg border border-blue-200 leading-tight">
+                          {order.invoiceName}
+                        </span>
+                      ) : order.odooOrderName ? (
+                        <span className="text-[10px] font-mono text-gray-400 bg-gray-50 px-2 py-1 rounded-lg border border-dashed border-gray-200 leading-tight">
+                          {order.odooOrderName}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-gray-300">-</span>
+                      )}
+                      <button
+                        onClick={() => downloadInvoicePDF(order)}
+                        title={t.orders.dashboard.downloadPdf}
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg bg-brand-navy text-white text-[10px] font-bold hover:bg-brand-orange transition-all shadow-sm flex-shrink-0"
+                      >
+                        <FileText size={11} />
+                        <span>PDF</span>
+                      </button>
+                    </div>
+                  </td>
+                  <td className={`px-8 py-6 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
+                    {(() => {
+                      const { label, color } = getStatusDetails(order.status, t);
+                      return (
+                        <button
+                          onClick={() => onViewHistory(order.odooOrderName || '', order.firebaseId, order.status, order.createdAt)}
+                          className={`px-5 py-2 rounded-xl text-xs font-bold border shadow-sm transition-all hover:shadow-md hover:scale-105 active:scale-95 inline-block whitespace-normal max-w-[250px] leading-relaxed text-center cursor-pointer ${color}`}
+                          title={t.orders.dashboard.viewSequence}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })()}
+                  </td>
+                  <td className={`px-8 py-6 ${lang === 'ar' ? 'text-left' : 'text-right'}`}>
+                    <div className={`flex items-center ${lang === 'ar' ? 'justify-start' : 'justify-end'}`}>
+                      {order.odooOrderName && (
+                        <button 
+                          onClick={() => syncIndividualOrder(order)}
+                          disabled={isSyncingIndividual === order.firebaseId}
+                          title={t.orders.dashboard.updateStatus}
+                          className={`p-2.5 rounded-xl transition-all ${
+                            isSyncingIndividual === order.firebaseId
+                              ? 'bg-gray-50 text-gray-300'
+                              : 'text-brand-orange hover:bg-brand-orange/10 active:scale-95'
+                          }`}
+                        >
+                          <RefreshCw size={18} className={isSyncingIndividual === order.firebaseId ? 'animate-spin' : ''} />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {customerOrders.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-8 py-32 text-center">
+                    <div className="flex flex-col items-center justify-center space-y-4">
+                      <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center text-gray-200">
+                        <ShoppingBag size={40} />
+                      </div>
+                      <p className="text-gray-400 italic text-sm">{t.orders.dashboard.noOrdersYet}</p>
+                      <button className="bg-brand-navy text-white px-6 py-2 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-brand-orange transition-colors">
+                        {t.orders.dashboard.shopNow}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </motion.div>
     </div>
   );
 };
 
-const CustomerProfile = ({ user }: { user: User | null }) => {
+const CustomerProfile = ({ user, t, lang }: { user: User | null, t: any, lang: Language }) => {
   const [profile, setProfile] = useState<any>(null);
 
   useEffect(() => {
@@ -2967,53 +4026,79 @@ const CustomerProfile = ({ user }: { user: User | null }) => {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-serif text-brand-navy font-bold">My Profile</h1>
-        <p className="text-gray-500 mt-2">Your registered facility details.</p>
-      </div>
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={lang === 'ar' ? 'text-right' : 'text-left'}
+      >
+        <h1 className="text-3xl font-serif text-brand-navy font-bold">{t.orders.dashboard.myProfile}</h1>
+        <p className="text-gray-500 mt-2">{t.orders.dashboard.profileSubtitle}</p>
+      </motion.div>
 
-      <div className="max-w-2xl bg-white rounded-3xl shadow-sm border border-gray-100 p-10">
-        <div className="space-y-8">
-          <div className="flex items-center space-x-6">
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="max-w-2xl bg-white rounded-[2rem] shadow-sm border border-gray-100 p-10"
+      >
+        <div className="space-y-10">
+          <div className={`flex items-center space-x-6 ${lang === 'ar' ? 'flex-row-reverse space-x-reverse' : ''}`}>
             <div className="w-20 h-20 bg-brand-orange/10 rounded-3xl flex items-center justify-center text-brand-orange">
               <UserIcon size={40} />
             </div>
-            <div>
-              <h3 className="text-xl font-serif text-brand-navy font-bold">{profile?.facilityName || 'Facility Name'}</h3>
+            <div className={lang === 'ar' ? 'text-right' : 'text-left'}>
+              <h3 className="text-xl font-serif text-brand-navy font-bold">{profile?.facilityName || t.orders.dashboard.facilityName}</h3>
               <p className="text-gray-400 text-sm">{user?.email}</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-8 border-t border-gray-50">
-            <div>
-              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Phone Number</label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-10 pt-10 border-t border-gray-50">
+            <div className={lang === 'ar' ? 'text-right' : 'text-left'}>
+              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">{t.orders.dashboard.phone}</label>
               <p className="text-brand-navy font-medium">{profile?.phoneNumber || 'N/A'}</p>
             </div>
-            <div>
-              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Address</label>
+            <div className={lang === 'ar' ? 'text-right' : 'text-left'}>
+              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">{t.orders.dashboard.address}</label>
               <p className="text-brand-navy font-medium">{profile?.address || 'N/A'}</p>
             </div>
-            <div>
-              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2">Joined Date</label>
-              <p className="text-brand-navy font-medium">{profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString() : 'N/A'}</p>
+            <div className={lang === 'ar' ? 'text-right' : 'text-left'}>
+              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">{t.orders.dashboard.city}</label>
+              <p className="text-brand-navy font-medium">{profile?.city || 'N/A'}</p>
+            </div>
+            <div className={lang === 'ar' ? 'text-right' : 'text-left'}>
+              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">{t.orders.dashboard.joinedDate}</label>
+              <p className="text-brand-navy font-medium">{profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US') : 'N/A'}</p>
             </div>
           </div>
 
           <div className="bg-brand-cream/50 p-6 rounded-2xl border border-brand-orange/10 mt-8">
-            <p className="text-[10px] text-brand-orange font-bold uppercase mb-2">Note</p>
-            <p className="text-xs text-brand-navy/60 leading-relaxed">
-              These details are verified by administration and cannot be changed manually. If you wish to update your information, please contact support.
+            <div className={`flex items-center space-x-2 mb-3 ${lang === 'ar' ? 'flex-row-reverse space-x-reverse' : ''}`}>
+              <div className="w-1.5 h-1.5 bg-brand-orange rounded-full" />
+              <p className="text-[10px] text-brand-orange font-bold uppercase tracking-widest">{t.orders.dashboard.note}</p>
+            </div>
+            <p className={`text-xs text-brand-navy/60 leading-relaxed ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
+              {t.orders.dashboard.profileNote}
             </p>
           </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 };
 
-const DashboardLayout = ({ children, user, role }: { children: React.ReactNode, user: User | null, role: string | null }) => {
+const DashboardLayout = ({ children, user, role, t, lang, onToggleLang, cartCount, onOpenCart, onOpenTerms, onOpenPrivacy, onOpenRefund }: { children: React.ReactNode, user: User | null, role: string | null, t: any, lang: Language, onToggleLang: () => void, cartCount?: number, onOpenCart?: () => void, onOpenTerms?: () => void, onOpenPrivacy?: () => void, onOpenRefund?: () => void }) => {
+  const [profile, setProfile] = useState<any>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    if (user) {
+      getDoc(doc(db, "users", user.uid)).then(snap => {
+        if (snap.exists()) setProfile(snap.data());
+      });
+    }
+  }, [user]);
 
   const handleLogout = async () => {
     try {
@@ -3025,22 +4110,21 @@ const DashboardLayout = ({ children, user, role }: { children: React.ReactNode, 
   };
 
   const adminMenuItems = [
-    { name: "Overview", icon: <LayoutDashboard size={20} />, path: "/admin" },
-    { name: "Orders", icon: <ShoppingBag size={20} />, path: "/admin/orders" },
-    { name: "Customers", icon: <Users size={20} />, path: "/admin/customers" },
-    { name: "Products", icon: <Package size={20} />, path: "/admin/products" },
-    { name: "Discounts", icon: <Percent size={20} />, path: "/admin/discounts" },
-    { name: "Odoo Sync", icon: <RefreshCw size={20} />, path: "/admin/odoo" },
-    { name: "SEO Settings", icon: <Search size={20} />, path: "/admin/seo" },
-    { name: "Blog (Coming Soon)", icon: <FileText size={20} />, path: "/admin/blog" },
-    { name: "Settings", icon: <Settings size={20} />, path: "/admin/settings" },
+    { name: t.orders.dashboard.overview, icon: <LayoutDashboard size={20} />, path: "/admin" },
+    { name: t.orders.dashboard.orders, icon: <ShoppingBag size={20} />, path: "/admin/orders" },
+    { name: t.orders.dashboard.products, icon: <Package size={20} />, path: "/admin/products" },
+    { name: t.orders.dashboard.discounts, icon: <Percent size={20} />, path: "/admin/discounts" },
+    { name: t.orders.dashboard.odooSync, icon: <RefreshCw size={20} />, path: "/admin/odoo" },
+    { name: t.orders.dashboard.seoSettings, icon: <Search size={20} />, path: "/admin/seo" },
+    { name: t.orders.dashboard.blog, icon: <FileText size={20} />, path: "/admin/blog" },
+    { name: t.orders.dashboard.settings, icon: <Settings size={20} />, path: "/admin/settings" },
   ];
 
   const customerMenuItems = [
-    { name: "Dashboard", icon: <LayoutDashboard size={20} />, path: "/dashboard" },
-    { name: "Shop Now", icon: <ShoppingBag size={20} />, path: "/dashboard/shop" },
-    { name: "My Orders", icon: <Package size={20} />, path: "/dashboard/orders" },
-    { name: "My Profile", icon: <UserIcon size={20} />, path: "/dashboard/profile" },
+    { name: t.orders.dashboard.dashboardMenu, icon: <LayoutDashboard size={20} />, path: "/dashboard" },
+    { name: t.orders.dashboard.shopNow, icon: <ShoppingBag size={20} />, path: "/dashboard/shop" },
+    { name: t.orders.dashboard.myOrders, icon: <Package size={20} />, path: "/dashboard/orders" },
+    { name: t.orders.dashboard.myProfile, icon: <UserIcon size={20} />, path: "/dashboard/profile" },
   ];
 
   const menuItems = role === 'admin' ? adminMenuItems : customerMenuItems;
@@ -3053,24 +4137,56 @@ const DashboardLayout = ({ children, user, role }: { children: React.ReactNode, 
 
   if (!user) return null;
 
+  const isRtl = lang === 'ar';
+
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className={`min-h-screen bg-gray-50 flex ${isRtl ? 'flex-row-reverse' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
+      {/* Mobile Menu Overlay */}
+      {mobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-20 md:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-64 bg-brand-navy text-white flex flex-col fixed h-full z-20 left-0 shadow-2xl">
+      <aside className={`w-64 bg-brand-navy text-white flex flex-col fixed h-full z-30 ${isRtl ? 'right-0' : 'left-0'} shadow-2xl transition-transform duration-300 md:translate-x-0 ${
+        mobileMenuOpen ? 'translate-x-0' : (isRtl ? 'translate-x-full' : '-translate-x-full')
+      }`}>
         <div className="p-8 border-b border-white/10">
-          <div className="flex flex-col items-start">
-            <span className="text-white font-serif text-xl tracking-widest font-bold">SHANI'S</span>
-            <span className="text-white text-[10px] tracking-[0.3em] -mt-1 uppercase">
-              {role === 'admin' ? 'Administration' : 'Customer Account'}
-            </span>
+        <div className="flex justify-between items-start">
+            <div className="flex flex-col items-start w-full">
+              <div className="flex items-center gap-3 mb-4">
+                <img
+                  src="https://i.ibb.co/xKkzXtmz/Untitled-design-1.png"
+                  alt="Hakkal Logo"
+                  className="h-14 w-auto object-contain flex-shrink-0"
+                  style={{ filter: 'brightness(0) invert(1)' }}
+                />
+                <div className="flex flex-col">
+                  <span className="text-white font-bold text-base leading-tight">
+                    {lang === 'ar' ? 'شركة حقال للتجارة' : 'Hakkal Trading'}
+                  </span>
+                  <span className="text-white/50 text-[10px] font-medium leading-tight mt-0.5">
+                    {lang === 'ar' ? 'شركة' : 'Company'}
+                  </span>
+                </div>
+              </div>
+              <span className="text-white font-bold text-sm bg-white/10 px-3 py-2 rounded-lg w-full text-center">
+                {role === 'admin' ? t.orders.dashboard.administration : (lang === 'ar' ? 'صفحة حساب العميل' : 'Customer Account Page')}
+              </span>
+            </div>
+            <button className="md:hidden text-white/50 hover:text-white" onClick={() => setMobileMenuOpen(false)}>
+              <X size={24} />
+            </button>
           </div>
-          <div className="mt-4 flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-full bg-brand-orange/20 flex items-center justify-center text-brand-orange font-bold text-xs border border-white/20">
-              {user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}
+          <div className={`mt-6 flex items-center ${isRtl ? 'space-x-reverse space-x-3' : 'space-x-3'}`}>
+            <div className="w-10 h-10 rounded-full bg-brand-orange/20 flex items-center justify-center text-brand-orange font-bold text-lg border border-white/20">
+              {profile?.facilityName?.charAt(0) || user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}
             </div>
             <div className="overflow-hidden">
-              <p className="text-[10px] font-bold truncate">{user.displayName || 'User'}</p>
-              <p className="text-[8px] text-white/40 truncate">{user.email}</p>
+              <p className="text-[12px] font-bold text-white truncate">{profile?.facilityName || (lang === 'ar' ? 'منشأة غير محددة' : 'Unknown Facility')}</p>
+              <p className="text-[10px] text-white/60 truncate mt-0.5">{user.displayName || user.email}</p>
             </div>
           </div>
         </div>
@@ -3080,7 +4196,7 @@ const DashboardLayout = ({ children, user, role }: { children: React.ReactNode, 
             <Link
               key={item.name}
               to={item.path}
-              className={`flex items-center space-x-3 p-3 rounded-lg transition-all ${
+              className={`flex items-center p-3 rounded-lg transition-all ${isRtl ? 'space-x-reverse space-x-3' : 'space-x-3'} ${
                 location.pathname === item.path 
                   ? "bg-brand-orange text-white" 
                   : "text-white/60 hover:bg-white/5 hover:text-white"
@@ -3095,46 +4211,76 @@ const DashboardLayout = ({ children, user, role }: { children: React.ReactNode, 
         <div className="p-4 border-t border-white/10">
           <button 
             onClick={() => navigate("/")}
-            className="flex items-center space-x-3 p-3 w-full text-white/60 hover:text-white transition-colors"
+            className={`flex items-center p-3 w-full text-white/60 hover:text-white transition-colors ${isRtl ? 'space-x-reverse space-x-3' : 'space-x-3'}`}
           >
             <Eye size={20} />
-            <span className="text-sm font-medium">{role === 'admin' ? 'View Website' : 'Back to Website'}</span>
+            <span className="text-sm font-medium">{role === 'admin' ? t.orders.dashboard.viewWebsite || 'View Website' : t.orders.dashboard.backToWebsite}</span>
           </button>
           <button 
             onClick={handleLogout}
-            className="flex items-center space-x-3 p-3 w-full text-red-400 hover:text-red-300 transition-colors"
+            className={`flex items-center p-3 w-full text-red-400 hover:text-red-300 transition-colors ${isRtl ? 'space-x-reverse space-x-3' : 'space-x-3'}`}
           >
             <LogOut size={20} />
-            <span className="text-sm font-medium">Logout</span>
+            <span className="text-sm font-medium">{t.orders.dashboard.logout}</span>
           </button>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 ml-64 min-h-screen bg-gray-50">
+      <main className={`flex-1 min-h-screen bg-gray-50 ${isRtl ? 'md:mr-64' : 'md:ml-64'}`}>
         {/* Top Header */}
-        <header className="bg-white border-b border-gray-100 h-20 flex items-center justify-between px-10 sticky top-0 z-10">
-          <div>
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">
-              {location.pathname.startsWith('/admin') ? 'Administration' : 'Customer Account'}
+        <header className={`bg-white border-b border-gray-100 h-20 flex items-center justify-between px-4 md:px-10 sticky top-0 z-10 ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <div className={`flex items-center ${isRtl ? 'flex-row-reverse space-x-reverse space-x-4' : 'space-x-4'}`}>
+            <button className="md:hidden text-brand-navy" onClick={() => setMobileMenuOpen(true)}>
+              <Menu size={24} />
+            </button>
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden md:block">
+              {location.pathname.startsWith('/admin') ? t.orders.dashboard.administration : t.orders.dashboard.customerAccount}
             </span>
           </div>
-          <div className="flex items-center space-x-6">
-            <div className="flex items-center space-x-3 pr-6 border-r border-gray-100">
-              <div className="text-right">
-                <p className="text-xs font-bold text-brand-navy leading-none">{user.displayName || 'User'}</p>
-                <p className="text-[10px] text-gray-400 mt-1">{user.email}</p>
+          <div className={`flex items-center ${isRtl ? 'flex-row-reverse space-x-reverse space-x-4 md:space-x-6' : 'space-x-4 md:space-x-6'}`}>
+            {/* Language Switcher */}
+            <button 
+              onClick={onToggleLang}
+              className={`flex items-center space-x-2 space-x-reverse text-brand-navy hover:text-brand-orange transition-colors border-gray-100`}
+            >
+              <Globe size={18} />
+              <span className="text-[10px] font-bold tracking-widest hidden md:inline">{lang === 'en' ? 'AR' : 'EN'}</span>
+            </button>
+
+            {/* Cart Button */}
+            {role !== 'admin' && onOpenCart && (
+              <button 
+                onClick={onOpenCart}
+                className={`relative flex items-center gap-2 bg-brand-navy text-white hover:bg-brand-orange transition-all duration-200 px-4 py-2.5 rounded-2xl shadow-md ${isRtl ? 'md:ml-4' : 'md:mr-4'}`}
+              >
+                <ShoppingCart size={20} />
+                <span className="text-xs font-bold hidden md:inline">
+                  {isRtl ? 'عربية التسوق' : 'Cart'}
+                </span>
+                {(cartCount || 0) > 0 && (
+                  <span className="bg-brand-orange text-white text-[9px] w-5 h-5 rounded-full flex items-center justify-center font-bold border-2 border-white absolute -top-1.5 -right-1.5">
+                    {cartCount}
+                  </span>
+                )}
+              </button>
+            )}
+
+            <div className={`hidden md:flex items-center ${isRtl ? 'flex-row-reverse space-x-reverse space-x-3 pl-6 border-l' : 'space-x-3 pr-6 border-r'} border-gray-100`}>
+              <div className={isRtl ? 'text-left' : 'text-right'}>
+                <p className="text-xs font-bold text-brand-navy leading-none">{profile?.facilityName || (lang === 'ar' ? 'منشأة غير محددة' : 'Unknown Facility')}</p>
+                <p className="text-[10px] text-gray-400 mt-1">{user.displayName || user.email}</p>
               </div>
               <div className="w-10 h-10 rounded-xl bg-brand-cream flex items-center justify-center text-brand-orange font-bold text-sm">
-                {user.displayName?.charAt(0) || user.email?.charAt(0) || 'A'}
+                {profile?.facilityName?.charAt(0) || user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}
               </div>
             </div>
             <button 
               onClick={handleLogout}
-              className="group flex items-center space-x-2 text-red-500 hover:text-red-600 transition-all font-bold text-[10px] tracking-widest uppercase"
+              className={`group flex items-center text-red-500 hover:text-red-600 transition-all font-bold text-[10px] tracking-widest uppercase ${isRtl ? 'flex-row-reverse space-x-reverse space-x-2' : 'space-x-2'}`}
             >
-              <LogOut size={16} className="group-hover:-translate-x-1 transition-transform" />
-              <span>Logout</span>
+              <LogOut size={16} className={`${isRtl ? 'group-hover:translate-x-1' : 'group-hover:-translate-x-1'} transition-transform hidden md:block`} />
+              <span className="hidden md:inline">{t.orders.dashboard.logout}</span>
             </button>
           </div>
         </header>
@@ -3142,17 +4288,156 @@ const DashboardLayout = ({ children, user, role }: { children: React.ReactNode, 
         <div className="p-10">
           {children}
         </div>
+
+        {/* Full Footer */}
+        <Footer
+          onOpenTerms={onOpenTerms || (() => {})}
+          onOpenPrivacy={onOpenPrivacy || (() => {})}
+          onOpenRefund={onOpenRefund || (() => {})}
+          t={t}
+        />
       </main>
     </div>
   );
 };
 
-const OrderManager = ({ orders, setModalContent }: { orders: Order[], setModalContent: (content: { title: string; message: string; type: 'success' | 'error' } | null) => void }) => {
+const OrderManager = ({ 
+  orders, 
+  setModalContent, 
+  t, 
+  lang,
+  historyOrder,
+  setHistoryOrder,
+  historyData,
+  setHistoryData,
+  loadingHistory,
+  setLoadingHistory,
+  fetchOrderHistory
+}: { 
+  orders: Order[], 
+  setModalContent: (content: { title: string; message: string; type: 'success' | 'error' } | null) => void, 
+  t: any, 
+  lang: Language,
+  historyOrder: Order | null,
+  setHistoryOrder: (order: Order | null) => void,
+  historyData: any[],
+  setHistoryData: (data: any[]) => void,
+  loadingHistory: boolean,
+  setLoadingHistory: (loading: boolean) => void,
+  fetchOrderHistory: (orderName: string, firebaseId?: string) => void
+}) => {
   console.log("[OrderManager] Rendering with orders:", orders);
+  const isRtl = lang === 'ar';
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [view, setView] = useState<'local' | 'odoo'>('local');
   const [odooOrders, setOdooOrders] = useState<any[]>([]);
   const [loadingOdoo, setLoadingOdoo] = useState(false);
+  const [isSyncingIndividual, setIsSyncingIndividual] = useState(false);
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
+
+  const syncAllStoreOrders = async () => {
+    const ordersToSync = orders.filter(o => o.odooOrderName && ['pending_approval', 'processing', 'approved', 'shipped'].includes(o.status));
+    if (ordersToSync.length === 0) {
+      alert(t.orders.dashboard.noActiveOrdersFound);
+      return;
+    }
+
+    setIsSyncingAll(true);
+    let updatedCount = 0;
+    
+    try {
+      // Batch processing to avoid overwhelming Odoo
+      const batchSize = 3;
+      for (let i = 0; i < ordersToSync.length; i += batchSize) {
+        const batch = ordersToSync.slice(i, i + batchSize);
+        await Promise.all(batch.map(async (order) => {
+          try {
+            const safeOdooOrderName = encodeURIComponent(order.odooOrderName!);
+            const resp = await fetch(getApiUrl(`/api/odoo/order-status/${safeOdooOrderName}`));
+            const data = await resp.json();
+            
+            if (data.success && data.state) {
+              let newStatus = order.status;
+              if (data.isDelivered) newStatus = 'completed';
+              else if (data.isShipped) newStatus = 'shipped';
+              else if (data.isApproved) newStatus = 'approved';
+              else if (['cancel', 'rejected'].includes(data.state)) newStatus = 'rejected';
+
+              if (newStatus !== order.status || data.state !== order.odooState || data.invoiceName !== order.invoiceName) {
+                const orderRef = doc(db, "orders", order.firebaseId);
+                await updateDoc(orderRef, { 
+                  status: newStatus,
+                  odooState: data.state,
+                  invoiceName: data.invoiceName || null,
+                  lastSyncAt: new Date().toISOString()
+                });
+                updatedCount++;
+              }
+            }
+          } catch (e) {
+            console.error(`Error syncing order ${order.odooOrderName}:`, e);
+          }
+        }));
+        if (i + batchSize < ordersToSync.length) {
+          await new Promise(r => setTimeout(r, 2000)); // 2s gap between batches
+        }
+      }
+      alert(t.orders.dashboard.syncCompleted.replace('{count}', updatedCount.toString()));
+    } finally {
+      setIsSyncingAll(false);
+    }
+  };
+
+  const syncIndividualOrder = async (order: Order) => {
+    if (!order.odooOrderName) {
+      alert(t.orders.dashboard.noOdooReference);
+      return;
+    }
+    
+    setIsSyncingIndividual(true);
+    try {
+      const safeOdooOrderName = encodeURIComponent(order.odooOrderName);
+      const resp = await fetch(getApiUrl(`/api/odoo/order-status/${safeOdooOrderName}`));
+      const data = await resp.json();
+      
+      if (data.success && data.state) {
+        let newStatus = order.status;
+        if (data.isDelivered) newStatus = 'completed';
+        else if (data.isShipped) newStatus = 'shipped';
+        else if (data.isApproved) newStatus = 'approved';
+        else if (['cancel', 'rejected'].includes(data.state)) newStatus = 'rejected';
+
+        if (newStatus !== order.status || data.state !== order.odooState || data.invoiceName !== order.invoiceName) {
+          const orderRef = doc(db, "orders", order.firebaseId);
+          await updateDoc(orderRef, { 
+            status: newStatus,
+            odooState: data.state,
+            invoiceName: data.invoiceName || null,
+            lastSyncAt: new Date().toISOString()
+          });
+          
+          // Update the selected order in the modal to reflect changes
+          setSelectedOrder({
+            ...order,
+            status: newStatus,
+            odooState: data.state,
+            invoiceName: data.invoiceName || null
+          });
+          
+          alert(t.orders.dashboard.statusUpdatedFromOdoo.replace('{status}', data.state));
+        } else {
+          alert(t.orders.dashboard.statusAlreadyUpToDate);
+        }
+      } else {
+        alert(t.orders.dashboard.syncFailedWithError.replace('{error}', data.error || (isRtl ? 'خطأ غير معروف' : 'Unknown error')));
+      }
+    } catch (e) {
+      console.error("[Status Sync] Error:", e);
+      alert(t.orders.dashboard.syncFailed);
+    } finally {
+      setIsSyncingIndividual(false);
+    }
+  };
 
   const fetchOdooOrders = async () => {
     setLoadingOdoo(true);
@@ -3238,45 +4523,46 @@ const OrderManager = ({ orders, setModalContent }: { orders: Order[], setModalCo
   };
 
   const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'pending_approval': return 'Pending Approval';
-      case 'pending_payment': return 'Pending Payment';
-      case 'processing': return 'Processing';
-      case 'shipped': return 'Shipped';
-      case 'completed': return 'Completed';
-      case 'cancelled': return 'Cancelled';
-      case 'refunded': return 'Refunded';
-      default: return status;
-    }
+    return t.orders.statuses[status] || status;
   };
 
   return (
     <div className="p-8">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <div className="flex items-center space-x-3 mb-1">
-            <h1 className="text-3xl font-serif text-brand-navy font-bold">Order Management</h1>
-            <span className="px-3 py-1 bg-brand-navy text-white text-[10px] font-bold rounded-full tracking-widest uppercase">Admin Mode</span>
+      <div className={`flex justify-between items-center mb-8 ${isRtl ? 'flex-row-reverse' : ''}`}>
+        <div className={isRtl ? 'text-right' : 'text-left'}>
+          <div className={`flex items-center space-x-3 mb-1 ${isRtl ? 'flex-row-reverse space-x-reverse' : ''}`}>
+            <h1 className="text-3xl font-serif text-brand-navy font-bold">{t.orders.dashboard.orderManagement}</h1>
+            <span className="px-3 py-1 bg-brand-navy text-white text-[10px] font-bold rounded-full tracking-widest uppercase">{t.orders.dashboard.adminMode}</span>
           </div>
-          <p className="text-gray-500">View and manage customer orders from store and Odoo.</p>
+          <p className="text-gray-500">{t.orders.dashboard.adminDescription}</p>
         </div>
-        <button 
-          onClick={fetchOdooOrders}
-          className="bg-brand-orange text-white px-6 py-3 rounded-xl text-xs font-bold flex items-center space-x-2 transition-all hover:bg-brand-orange-hover"
-        >
-          <RefreshCw size={14} className={loadingOdoo ? "animate-spin" : ""} />
-          <span>SYNC WITH ODOO</span>
-        </button>
+        <div className={`flex ${isRtl ? 'flex-row-reverse space-x-reverse space-x-3' : 'space-x-3'}`}>
+          <button 
+            onClick={syncAllStoreOrders}
+            disabled={isSyncingAll}
+            className="bg-brand-navy text-white px-6 py-3 rounded-xl text-xs font-bold flex items-center space-x-2 transition-all hover:bg-brand-navy-hover disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={isSyncingAll ? "animate-spin" : ""} />
+            <span>{t.orders.dashboard.syncAllStatuses}</span>
+          </button>
+          <button 
+            onClick={fetchOdooOrders}
+            className="bg-brand-orange text-white px-6 py-3 rounded-xl text-xs font-bold flex items-center space-x-2 transition-all hover:bg-brand-orange-hover"
+          >
+            <RefreshCw size={14} className={loadingOdoo ? "animate-spin" : ""} />
+            <span>{t.orders.dashboard.syncWithOdoo}</span>
+          </button>
+        </div>
       </div>
 
-      <div className="flex space-x-4 mb-8 border-b border-gray-100">
+      <div className={`flex space-x-4 mb-8 border-b border-gray-100 ${isRtl ? 'flex-row-reverse space-x-reverse' : ''}`}>
         <button
           onClick={() => setView('local')}
           className={`px-6 py-4 text-xs font-bold uppercase tracking-widest transition-all border-b-2 ${
             view === 'local' ? "border-brand-orange text-brand-orange" : "border-transparent text-gray-400 hover:text-gray-600"
           }`}
         >
-          Store Orders ({orders.length})
+          {t.orders.dashboard.storeOrders} ({orders.length})
         </button>
         <button
           onClick={() => setView('odoo')}
@@ -3284,24 +4570,25 @@ const OrderManager = ({ orders, setModalContent }: { orders: Order[], setModalCo
             view === 'odoo' ? "border-brand-orange text-brand-orange" : "border-transparent text-gray-400 hover:text-gray-600"
           }`}
         >
-          Odoo ERP Orders ({odooOrders.length})
+          {t.orders.dashboard.odooErpOrders} ({odooOrders.length})
         </button>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
           {view === 'local' ? (
-            <table className="w-full text-left">
+            <table className={`w-full ${isRtl ? 'text-right' : 'text-left'}`}>
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest">Order ID</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest">Customer</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest">Date</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest">Odoo ID</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest">Total</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest">Payment</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest">Status</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest text-right">Actions</th>
+                  <th className={`px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest ${isRtl ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.orderId}</th>
+                  <th className={`px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest ${isRtl ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.customer}</th>
+                  <th className={`px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest ${isRtl ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.date}</th>
+                  <th className={`px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest ${isRtl ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.odooId}</th>
+                  <th className={`px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest ${isRtl ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.invoiceId}</th>
+                  <th className={`px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest ${isRtl ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.total}</th>
+                  <th className={`px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest ${isRtl ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.payment}</th>
+                  <th className={`px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest ${isRtl ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.status}</th>
+                  <th className={`px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest ${isRtl ? 'text-left' : 'text-right'}`}>{t.orders.dashboard.actions}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -3317,15 +4604,50 @@ const OrderManager = ({ orders, setModalContent }: { orders: Order[], setModalCo
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-xs text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</span>
+                      <span className="text-xs text-gray-500">{new Date(order.createdAt).toLocaleDateString(isRtl ? 'ar-SA' : 'en-US')}</span>
                     </td>
                     <td className="px-6 py-4">
                       {order.odooOrderName ? (
-                        <span className="text-[10px] font-bold text-brand-orange bg-brand-orange/10 px-2 py-1 rounded">
+                        <button 
+                          onClick={async () => {
+                            const newWindow = window.open('', '_blank');
+                            if (!newWindow) {
+                              alert(t.orders.dashboard.allowPopups);
+                              return;
+                            }
+                            newWindow.document.write(`<div style="font-family:sans-serif;padding:20px;text-align:center;">${t.orders.dashboard.loadingQuotation}</div>`);
+                            try {
+                              const resp = await fetch(getApiUrl(`/api/odoo/order-portal/${encodeURIComponent(order.odooOrderName!)}`));
+                              const data = await resp.json();
+                              if (data.success && data.url) {
+                                newWindow.location.href = data.url;
+                              } else {
+                                newWindow.document.write(`<div style="font-family:sans-serif;padding:20px;text-align:center;color:red;">${t.orders.dashboard.quotationNotFound}</div>`);
+                              }
+                            } catch(e) {
+                              newWindow.document.write(`<div style="font-family:sans-serif;padding:20px;text-align:center;color:red;">${t.orders.dashboard.quotationError}</div>`);
+                            }
+                          }}
+                          title={t.orders.dashboard.viewQuotation}
+                          className="text-[10px] font-bold text-brand-orange bg-brand-orange/10 px-2 py-1 rounded hover:bg-brand-orange hover:text-white transition-colors cursor-pointer"
+                        >
+                          {order.odooOrderName}
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-gray-400 italic">{t.orders.dashboard.noSync}</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      {order.invoiceName ? (
+                        <span className="text-[10px] font-mono font-bold text-brand-navy bg-gray-100 px-2 py-1 rounded">
+                          {order.invoiceName}
+                        </span>
+                      ) : order.odooOrderName ? (
+                        <span className="text-[10px] font-mono text-gray-400 bg-gray-50 px-2 py-1 rounded">
                           {order.odooOrderName}
                         </span>
                       ) : (
-                        <span className="text-[10px] text-gray-400 italic">No Sync</span>
+                        <span className="text-[10px] text-gray-400">-</span>
                       )}
                     </td>
                     <td className="px-6 py-4">
@@ -3333,65 +4655,81 @@ const OrderManager = ({ orders, setModalContent }: { orders: Order[], setModalCo
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                        {order.paymentMethod === 'cod' ? 'Cash on Delivery' : 'Bank Transfer'}
+                        {order.paymentMethod === 'cod' ? t.orders.dashboard.cashOnDelivery : t.orders.dashboard.bankTransfer}
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`px-3 py-1 rounded-full text-[10px] font-bold border ${getStatusColor(order.status)}`}>
-                        {getStatusLabel(order.status)}
+                      <span 
+                        className={`px-3 py-1 rounded-full text-[10px] font-bold border inline-flex items-center space-x-1 space-x-reverse ${getStatusColor(order.status)}`}
+                      >
+                        <span>{getStatusLabel(order.status)}</span>
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-right">
-                      <button 
-                        onClick={() => setSelectedOrder(order)}
-                        className="p-2 text-brand-navy hover:bg-brand-navy hover:text-white rounded-lg transition-all"
-                      >
-                        <Eye size={18} />
-                      </button>
+                    <td className={`px-6 py-4 ${isRtl ? 'text-left' : 'text-right'}`}>
+                      <div className={`flex items-center space-x-2 ${isRtl ? 'justify-start space-x-reverse' : 'justify-end'}`}>
+                        {order.odooOrderName && (
+                          <button 
+                            onClick={() => syncIndividualOrder(order)}
+                            disabled={isSyncingIndividual}
+                            title={t.orders.dashboard.updateStatus}
+                            className="p-2 text-brand-orange hover:bg-brand-orange hover:text-white rounded-lg transition-all disabled:opacity-50"
+                          >
+                            <RefreshCw size={18} className={isSyncingIndividual ? "animate-spin" : ""} />
+                          </button>
+                        )}
+                        <button 
+                          onClick={() => setSelectedOrder(order)}
+                          className="p-2 text-brand-navy hover:bg-brand-navy hover:text-white rounded-lg transition-all"
+                        >
+                          <Eye size={18} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
                 {orders.length === 0 && (
                   <tr>
                     <td colSpan={8} className="py-20 text-center text-gray-400 italic">
-                      No store orders found in Firestore.
+                      {t.orders.dashboard.noOrdersFound}
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
           ) : (
-            <table className="w-full text-left">
+            <table className={`w-full ${isRtl ? 'text-right' : 'text-left'}`}>
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest">Odoo SO#</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest">Customer</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest">Date</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest">Total</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest text-right">Status</th>
+                  <th className={`px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest ${isRtl ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.odooSo}</th>
+                  <th className={`px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest ${isRtl ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.customer}</th>
+                  <th className={`px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest ${isRtl ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.date}</th>
+                  <th className={`px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest ${isRtl ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.total}</th>
+                  <th className={`px-6 py-4 text-[10px] font-bold text-brand-navy uppercase tracking-widest ${isRtl ? 'text-left' : 'text-right'}`}>{t.orders.dashboard.status}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {odooOrders.map((o) => (
                   <tr key={o.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 px-8">
+                    <td className="px-6 py-4">
                       <span className="text-sm font-bold text-brand-navy">{o.name}</span>
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-sm font-medium text-gray-600">{o.partner_id[1]}</span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-xs text-gray-500">{new Date(o.date_order).toLocaleDateString()}</span>
+                      <span className="text-xs text-gray-500">{new Date(o.date_order).toLocaleDateString(isRtl ? 'ar-SA' : 'en-US')}</span>
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-sm font-bold text-brand-orange">SAR {o.amount_total?.toLocaleString()}</span>
                     </td>
-                    <td className="px-6 py-4 text-right">
-                      <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase border ${
-                        o.state === 'sale' ? 'bg-green-100 text-green-700 border-green-200' :
-                        'bg-gray-100 text-gray-700 border-gray-200'
-                      }`}>
-                        {o.state}
+                    <td className={`px-6 py-4 ${isRtl ? 'text-left' : 'text-right'}`}>
+                      <span 
+                        className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase border inline-flex items-center ${
+                          o.state === 'sale' ? 'bg-green-100 text-green-700 border-green-200' :
+                          'bg-gray-100 text-gray-700 border-gray-200'
+                        }`}
+                      >
+                        <span>{o.state}</span>
                       </span>
                     </td>
                   </tr>
@@ -3421,7 +4759,7 @@ const OrderManager = ({ orders, setModalContent }: { orders: Order[], setModalCo
             >
               <div className="p-8 border-b border-gray-100 flex justify-between items-center">
                 <div>
-                  <h2 className="text-2xl font-serif text-brand-navy font-bold">Order Details</h2>
+                  <h2 className="text-2xl font-serif text-brand-navy font-bold">{t.orders.dashboard.orderDetails}</h2>
                   <p className="text-[10px] font-mono text-gray-400 uppercase tracking-widest mt-1">#{selectedOrder.firebaseId.toUpperCase()}</p>
                 </div>
                 <button onClick={() => setSelectedOrder(null)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
@@ -3432,7 +4770,7 @@ const OrderManager = ({ orders, setModalContent }: { orders: Order[], setModalCo
               <div className="p-8 overflow-y-auto custom-scrollbar">
                 <div className="grid grid-cols-2 gap-8 mb-8">
                   <div>
-                    <h3 className="text-[10px] font-bold text-brand-orange uppercase tracking-widest mb-4">Customer Info</h3>
+                    <h3 className="text-[10px] font-bold text-brand-orange uppercase tracking-widest mb-4">{t.orders.dashboard.customerInfo}</h3>
                     <div className="space-y-2">
                       <p className="text-sm font-bold text-brand-navy">{selectedOrder.customerName}</p>
                       <p className="text-sm text-gray-500">{selectedOrder.phone1}</p>
@@ -3440,7 +4778,7 @@ const OrderManager = ({ orders, setModalContent }: { orders: Order[], setModalCo
                     </div>
                   </div>
                   <div>
-                    <h3 className="text-[10px] font-bold text-brand-orange uppercase tracking-widest mb-4">Delivery Address</h3>
+                    <h3 className="text-[10px] font-bold text-brand-orange uppercase tracking-widest mb-4">{t.orders.dashboard.deliveryAddress}</h3>
                     <div className="space-y-2">
                       <p className="text-sm text-gray-500">{selectedOrder.address}</p>
                       <p className="text-sm text-gray-500">{selectedOrder.city}, {selectedOrder.district}</p>
@@ -3449,26 +4787,53 @@ const OrderManager = ({ orders, setModalContent }: { orders: Order[], setModalCo
                 </div>
 
                 <div className="mb-8">
-                  <h3 className="text-[10px] font-bold text-brand-orange uppercase tracking-widest mb-4">Order Items</h3>
+                  <h3 className="text-[10px] font-bold text-brand-orange uppercase tracking-widest mb-4">{t.orders.dashboard.orderItems}</h3>
                   <div className="bg-gray-50 rounded-2xl p-6 space-y-4">
                     {selectedOrder.items.map((item: any, idx: number) => (
                       <div key={idx} className="flex justify-between items-center">
                         <div className="flex flex-col">
                           <span className="text-sm font-bold text-brand-navy">{item.name}</span>
-                          <span className="text-xs text-gray-400">Quantity: {item.quantity}</span>
+                          <span className="text-xs text-gray-400">{t.orders.dashboard.quantity}: {item.quantity}</span>
                         </div>
                         <span className="text-sm font-bold text-brand-navy">{item.price}</span>
                       </div>
                     ))}
                     <div className="pt-4 border-t border-gray-200 flex justify-between items-center">
-                      <span className="text-sm font-bold text-brand-navy uppercase tracking-widest">Total</span>
+                      <span className="text-sm font-bold text-brand-navy uppercase tracking-widest">{t.orders.dashboard.total}</span>
                       <span className="text-xl font-serif font-bold text-brand-orange">SAR {selectedOrder.total.toLocaleString()}</span>
                     </div>
                   </div>
                 </div>
 
                 <div className="mb-8">
-                  <h3 className="text-[10px] font-bold text-brand-orange uppercase tracking-widest mb-4">Update Status</h3>
+                  <div className={`flex justify-between items-center mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <h3 className="text-[10px] font-bold text-brand-orange uppercase tracking-widest">{t.orders.dashboard.updateStatus}</h3>
+                    <div className={`flex items-center ${isRtl ? 'space-x-reverse space-x-2' : 'space-x-2'}`}>
+                      {selectedOrder.odooOrderName && (
+                        <>
+                          <button 
+                            onClick={() => fetchOrderHistory(selectedOrder.odooOrderName || '', selectedOrder.firebaseId)}
+                            className="flex items-center space-x-1 space-x-reverse text-[10px] font-bold px-3 py-1.5 rounded-lg bg-brand-navy/5 text-brand-navy hover:bg-brand-navy hover:text-white transition-all"
+                          >
+                            <FileText size={12} />
+                            <span>{t.orders.dashboard.history}</span>
+                          </button>
+                          <button 
+                            onClick={() => syncIndividualOrder(selectedOrder)}
+                            disabled={isSyncingIndividual}
+                            className={`flex items-center space-x-1 space-x-reverse text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all ${
+                              isSyncingIndividual 
+                                ? 'bg-gray-100 text-gray-400' 
+                                : 'bg-brand-orange/10 text-brand-orange hover:bg-brand-orange hover:text-white'
+                            }`}
+                          >
+                            <RefreshCw size={12} className={isSyncingIndividual ? 'animate-spin' : ''} />
+                            <span>{isSyncingIndividual ? t.orders.dashboard.syncing : t.orders.dashboard.syncWithOdoo}</span>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
                   
                   {selectedOrder.status === 'pending_approval' && (
                     <button
@@ -3476,7 +4841,7 @@ const OrderManager = ({ orders, setModalContent }: { orders: Order[], setModalCo
                       className="w-full mb-4 bg-green-500 text-white py-4 rounded-xl text-xs font-bold tracking-widest hover:bg-green-600 transition-all flex items-center justify-center space-x-2 shadow-lg shadow-green-500/20"
                     >
                       <Check size={18} />
-                      <span>APPROVE ORDER</span>
+                      <span>{t.orders.dashboard.approveOrder}</span>
                     </button>
                   )}
 
@@ -3501,6 +4866,7 @@ const OrderManager = ({ orders, setModalContent }: { orders: Order[], setModalCo
           </div>
         )}
       </AnimatePresence>
+
     </div>
   );
 };
@@ -3927,11 +5293,18 @@ const DashboardOverview = ({ products, orders }: { products: Product[], orders: 
   useEffect(() => {
     const fetchStats = async () => {
       try {
+        const fetchWithCors = (path: string) => fetch(getApiUrl(path), {
+          mode: 'cors',
+          credentials: 'include',
+          headers: { 'Accept': 'application/json' }
+        }).then(res => res.json());
+
         const [prod, ord, cust] = await Promise.all([
-          fetch(getApiUrl("/api/odoo/products")).then(res => res.json()),
-          fetch(getApiUrl("/api/odoo/orders")).then(res => res.json()),
-          fetch(getApiUrl("/api/odoo/customers")).then(res => res.json())
+          fetchWithCors("/api/odoo/products"),
+          fetchWithCors("/api/odoo/orders"),
+          fetchWithCors("/api/odoo/customers")
         ]);
+        
         setOdooStats({
           prodCount: prod.success ? prod.data.length : 0,
           orderCount: ord.success ? ord.data.length : 0,
@@ -3955,7 +5328,7 @@ const DashboardOverview = ({ products, orders }: { products: Product[], orders: 
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-serif text-brand-navy font-bold">Dashboard Overview</h1>
-        <p className="text-gray-500 mt-2 text-sm">Welcome back, Chef Shani. Here's what's happening today.</p>
+        <p className="text-gray-500 mt-2 text-sm">Welcome back, Hakkal Admin. Here's what's happening today.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -4406,7 +5779,14 @@ const OdooManager = ({ products, setModalContent, t }: { products: Product[], se
   };
 
   useEffect(() => {
-    fetchOdooData();
+    // Throttle admin Odoo fetch: once per 60 minutes
+    const THROTTLE_KEY = 'last_admin_odoo_fetch';
+    const lastFetch = localStorage.getItem(THROTTLE_KEY);
+    const oneHour = 60 * 60 * 1000;
+    if (!lastFetch || Date.now() - parseInt(lastFetch) > oneHour) {
+      fetchOdooData();
+      localStorage.setItem(THROTTLE_KEY, Date.now().toString());
+    }
   }, []);
 
   return (
@@ -4698,7 +6078,7 @@ const SEOManager = ({ seo, setModalContent }: { seo: SiteSettings["seo"], setMod
         <h3 className="text-xs font-bold text-gray-400 uppercase mb-4">Google Search Preview</h3>
         <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
           <p className="text-[#1a0dab] text-xl font-medium hover:underline cursor-pointer mb-1">{tempData.title}</p>
-          <p className="text-[#006621] text-sm mb-1">https://shanisflavorlab.com › {activeTab}</p>
+          <p className="text-[#006621] text-sm mb-1">https://hakkal.com › {activeTab}</p>
           <p className="text-[#4d5156] text-sm line-clamp-2">{tempData.description}</p>
         </div>
       </div>
@@ -4707,46 +6087,9 @@ const SEOManager = ({ seo, setModalContent }: { seo: SiteSettings["seo"], setMod
 };
 
 const Testimonials = ({ t }: { t: any }) => {
-  const reviews = [
-    { stars: 5, text: t.testimonials.review1, author: "Sumudu Aththanayake" },
-    { stars: 5, text: t.testimonials.review2, author: "Shyamali Perera" },
-    { stars: 5, text: t.testimonials.review3, author: "Priyantha Perera" },
-    { stars: 5, text: t.testimonials.review4, author: "Nilanthi Silva" },
-    { stars: 5, text: t.testimonials.review5, author: "Saman Kumara" }
-  ];
-
   return (
     <section className="py-24 bg-brand-cream relative overflow-hidden">
-      {/* Quote marks background */}
-      <div className="absolute top-10 left-10 text-brand-navy/5 font-serif text-[200px] leading-none pointer-events-none">"</div>
-      
       <div className="max-w-7xl mx-auto px-6 relative z-10">
-        <div className="text-center mb-16">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="h-[1px] w-8 bg-brand-orange" />
-            <span className="text-brand-orange text-[10px] tracking-[0.3em] uppercase font-bold">{t.testimonials.subtitle}</span>
-            <div className="h-[1px] w-8 bg-brand-orange" />
-          </div>
-          <h2 className="text-brand-navy text-5xl font-serif">{t.testimonials.title}</h2>
-        </div>
-
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-20">
-          {reviews.slice(0, 4).map((r, i) => (
-            <div key={i} className="bg-white p-8 rounded-2xl shadow-sm border border-brand-navy/5">
-              <div className="flex gap-1 mb-6">
-                {[...Array(r.stars)].map((_, i) => (
-                  <Star key={i} size={12} className="fill-brand-orange text-brand-orange" />
-                ))}
-              </div>
-              <p className="text-brand-navy/80 text-sm leading-relaxed mb-8 italic">"{r.text}"</p>
-              <div className="flex items-center gap-3">
-                <div className="h-[1px] w-4 bg-brand-orange" />
-                <span className="text-brand-navy text-[10px] tracking-widest font-bold">{r.author}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-
         <div className="max-w-xl mx-auto bg-white p-10 rounded-2xl shadow-sm border border-brand-navy/5">
           <h3 className="text-brand-navy text-2xl font-serif mb-8 text-center">{t.testimonials.shareTitle}</h3>
           <form className="space-y-4">
@@ -4775,8 +6118,8 @@ const About = ({ t }: { t: any }) => {
     <section id="about" className="py-24 bg-white">
       <div className="max-w-4xl mx-auto px-6 text-center">
         <div className="flex flex-col items-center mb-12">
-          <span className="text-brand-navy font-serif text-3xl tracking-widest font-bold">SHANI'S</span>
-          <span className="text-brand-navy text-sm tracking-[0.4em] -mt-1 font-medium">FLAVOR LAB</span>
+          <span className="text-brand-navy font-serif text-3xl tracking-widest font-bold">HAKKAL</span>
+          <span className="text-brand-navy text-sm tracking-[0.4em] -mt-1 font-medium">TRADING COMPANY</span>
           <span className="text-brand-navy text-[8px] tracking-[0.2em] opacity-60">{t.about.brandTagline}</span>
         </div>
 
@@ -4842,8 +6185,8 @@ const Chef = ({ t }: { t: any }) => {
         >
           <div className="absolute -inset-4 border border-brand-orange/30 rounded-sm" />
           <img 
-            src="https://i.postimg.cc/QdpB8XPT/SHANI.jpg" 
-            alt="Chef Shani" 
+            src="https://i.ibb.co/xKkzXtmz/Untitled-design-1.png" 
+            alt="Hakkal Company" 
             className="w-full h-auto rounded-sm shadow-2xl relative z-10"
             referrerPolicy="no-referrer"
           />
@@ -4902,14 +6245,12 @@ const Footer = ({ onOpenTerms, onOpenPrivacy, onOpenRefund, t }: {
         <div className="grid md:grid-cols-3 gap-16 mb-24">
           {/* Column 1 */}
           <div>
-            <div className="flex items-center space-x-3 space-x-reverse mb-8">
-              <div className="w-12 h-12 bg-brand-navy rounded-2xl flex items-center justify-center text-white shadow-xl shadow-brand-navy/5">
-                <Leaf size={24} />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-brand-navy font-serif font-bold text-xl leading-none tracking-tight uppercase">SHANI'S</span>
-                <span className="text-brand-orange text-[9px] font-bold tracking-[0.4em] uppercase mt-1">Flavor Lab</span>
-              </div>
+            <div className="mb-8">
+              <img
+                src="https://i.ibb.co/xKkzXtmz/Untitled-design-1.png"
+                alt="Hakkal Logo"
+                className="h-28 md:h-32 w-auto object-contain mix-blend-multiply"
+              />
             </div>
             <p className="text-brand-slate text-sm leading-relaxed mb-8 font-medium">
               {t.footer.description}
@@ -4954,11 +6295,13 @@ const Footer = ({ onOpenTerms, onOpenPrivacy, onOpenRefund, t }: {
           <div>
             <h4 className="text-brand-navy font-serif text-xl font-bold mb-10">{t.footer.contact}</h4>
             <div className="space-y-6 text-brand-slate text-sm font-medium">
-              <p><span className="text-brand-navy font-bold">WhatsApp:</span> +94 77 000 0000</p>
-              <p><span className="text-brand-navy font-bold">Email:</span> info@shanisflavorlab.com</p>
+              <p><span className="text-brand-navy font-bold">{t.contactInfo.management}:</span> +966 57 5151 506</p>
+              <p><span className="text-brand-navy font-bold">{t.contactInfo.middleArea}:</span> +966 57 5151 507</p>
+              <p><span className="text-brand-navy font-bold">{t.contactInfo.westernArea}:</span> +966 57 5151 508</p>
+              <p><span className="text-brand-navy font-bold">{t.contactInfo.email}:</span> Info@hakkal-est.com</p>
               <p>
-                <span className="text-brand-navy font-bold">Address:</span><br />
-                Shani's Flavor Lab, No: 78, Kirimetiyana East, Lunuwila, Sri Lanka.
+                <span className="text-brand-navy font-bold">{t.contactInfo.address}:</span><br />
+                {t.contactInfo.jeddah}
               </p>
             </div>
           </div>
@@ -5046,6 +6389,7 @@ export default function App() {
     return (saved as Language) || 'en';
   });
   const t = translations[lang];
+  const isRtl = lang === 'ar';
 
   useEffect(() => {
     localStorage.setItem('app_lang', lang);
@@ -5073,8 +6417,133 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [modalContent, setModalContent] = useState<{ title: string; message: string; type: 'success' | 'error' } | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const syncStatuses = useCallback(async () => {
+    if (orders.length === 0 || isSyncing) return;
+    
+    // Throttle: only auto-sync once every 15 minutes
+    const THROTTLE_KEY = `auto_sync_main_${user?.uid}`;
+    const lastSync = localStorage.getItem(THROTTLE_KEY);
+    if (lastSync && Date.now() - parseInt(lastSync) < 15 * 60 * 1000) return;
+
+    const ordersToSync = orders.filter(o => 
+      o.odooOrderName && 
+      ['pending_approval', 'processing', 'approved', 'shipped'].includes(o.status)
+    );
+
+    if (ordersToSync.length === 0) return;
+
+    setIsSyncing(true);
+    console.log(`[App Sync] Checking ${ordersToSync.length} orders...`);
+
+    try {
+      const batchSize = 3;
+      for (let i = 0; i < ordersToSync.length; i += batchSize) {
+        const batch = ordersToSync.slice(i, i + batchSize);
+        await Promise.all(batch.map(async (order) => {
+          try {
+            const safeOdooOrderName = encodeURIComponent(order.odooOrderName!);
+            const resp = await fetch(getApiUrl(`/api/odoo/order-status/${safeOdooOrderName}`));
+            const data = await resp.json();
+            
+            if (data.success && data.state) {
+              let newStatus = order.status;
+              if (data.isDelivered) newStatus = 'completed';
+              else if (data.isShipped) newStatus = 'shipped';
+              else if (data.isApproved) newStatus = 'approved';
+              else if (['cancel', 'rejected'].includes(data.state)) newStatus = 'rejected';
+
+              if (newStatus !== order.status || data.state !== order.odooState || data.invoiceName !== order.invoiceName) {
+                await updateDoc(doc(db, "orders", order.firebaseId), { 
+                  status: newStatus,
+                  odooState: data.state,
+                  invoiceName: data.invoiceName || null,
+                  lastSyncAt: new Date().toISOString()
+                });
+              }
+            }
+          } catch (e) {
+            console.error(`[App Sync] Error for ${order.odooOrderName}:`, e);
+          }
+        }));
+        if (i + batchSize < ordersToSync.length) {
+          await new Promise(r => setTimeout(r, 2000));
+        }
+      }
+      localStorage.setItem(THROTTLE_KEY, Date.now().toString());
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [orders, isSyncing, user?.uid]);
   const [activeOffer, setActiveOffer] = useState<Offer | null>(null);
   const [showOfferPopup, setShowOfferPopup] = useState(false);
+  const [historyOrder, setHistoryOrder] = useState<Order | null>(null);
+  const [historyData, setHistoryData] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState<'not_found' | 'error' | 'no_history' | null>(null);
+  const [historyErrorMessage, setHistoryErrorMessage] = useState<string | null>(null);
+
+  const fetchOrderHistory = async (orderName: string, firebaseId?: string, orderStatus?: string, orderCreatedAt?: string) => {
+    const isRtl = lang === 'ar';
+    if (!orderName) {
+      alert(t.orders.dashboard.notLinkedToOdoo);
+      return;
+    }
+
+    console.log(`[Order History] Fetching for: ${orderName}`);
+    setHistoryOrder({ odooOrderName: orderName, firebaseId: firebaseId || 'odoo', status: orderStatus, createdAt: orderCreatedAt } as any);
+    setLoadingHistory(true);
+    setHistoryData([]);
+    setHistoryError(null);
+    setHistoryErrorMessage(null);
+
+    try {
+      const safeOdooOrderName = encodeURIComponent(orderName);
+      const url = getApiUrl(`/api/odoo/order-history/${safeOdooOrderName}`);
+      console.log(`[Order History] Requesting URL: ${url}`);
+      
+      const resp = await fetch(url);
+      console.log(`[Order History] HTTP Response Status: ${resp.status}`);
+      
+      if (resp.status === 404) {
+        setHistoryError('not_found');
+        return;
+      }
+
+      const data = await resp.json();
+            console.log(`[Order History] API Data Received:`, data);
+            
+            if (data.debug) {
+              console.log(`[Order History] API Debug Info:`, data.debug);
+            }
+
+            if (!resp.ok) {
+              setHistoryError('error');
+              setHistoryErrorMessage(data.error || data.message || `HTTP ${resp.status}`);
+              return;
+            }
+
+            if (data.success && data.history) {
+              if (data.history.length === 0) {
+                console.warn(`[Order History] Success but history is empty for: ${orderName}. Debug info:`, data.debug);
+                setHistoryError('no_history');
+              } else {
+                setHistoryData(data.history);
+              }
+            } else {
+        console.error(`[Order History] API Logic Error:`, data.message || 'Unknown error');
+        setHistoryError('error');
+        setHistoryErrorMessage(data.message || 'API success: false');
+      }
+    } catch (e: any) {
+      console.error(`[Order History] Fetch Exception:`, e);
+      setHistoryError('error');
+      setHistoryErrorMessage(e.message || 'Network error');
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
 
   const handleViewProduct = (product: Product) => {
     setSelectedProduct(product);
@@ -5147,71 +6616,83 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // 1. Independent Odoo Fetch (Runs regardless of Firestore status)
+    const fetchOdooProducts = async () => {
+      const isLocalRuntime = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+      if (!isLocalRuntime) return;
+      
+      console.log("[Odoo] Attempting fresh product fetch...");
+      try {
+        const resp = await fetch(getApiUrl("/api/odoo/products"));
+        const contentType = resp.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const data = await resp.json();
+          if (data.success && data.data) {
+            const odooMapped = data.data.map((op: any) => ({
+              id: op.id,
+              name: op.name,
+              description: op.description_sale || "Product imported from Odoo ERP.",
+              price: `SAR ${(op.list_price || 0).toLocaleString()}`,
+              image: op.image_1920 ? (op.image_1920.toString().startsWith('data:') ? op.image_1920 : `data:image/png;base64,${op.image_1920}`) : "https://picsum.photos/seed/product/400/400",
+              isOdoo: true
+            }));
+            
+            setProducts(prev => {
+              const existingIds = new Set(prev.map(p => p.id));
+              const newItems = odooMapped.filter((p: any) => !existingIds.has(p.id));
+              return [...prev, ...newItems].slice(0, 50);
+            });
+            console.log(`[Odoo] Loaded ${odooMapped.length} products successfully.`);
+          }
+        }
+      } catch (e) {
+        console.error("[Odoo] API fetch failed:", e);
+      }
+    };
+
+    fetchOdooProducts();
+
+    // 2. Firestore Listener (Will fail gracefully if quota exceeded)
     const q = query(collection(db, "products"), orderBy("createdAt", "desc"));
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      let allProducts = snapshot.docs.map(doc => ({
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const allProducts = snapshot.docs.map(doc => ({
         ...doc.data(),
         firebaseId: doc.id
       })) as any[];
       
-      // Prefer Odoo-tagged products, but gracefully fall back to any Firestore products.
-      // This is important on static hosting where /api/odoo/* is unavailable.
-      let filtered = allProducts.filter(p => p.isOdoo === true);
-      if (filtered.length === 0 && allProducts.length > 0) {
-        filtered = allProducts;
+      if (allProducts.length > 0) {
+        setProducts(prev => {
+          const odooProducts = prev.filter(p => p.isOdoo && !allProducts.some(ap => ap.id === p.id));
+          return [...allProducts, ...odooProducts].slice(0, 50);
+        });
       }
-      
-      // Attempt to fetch fresh data from Odoo API only in local/dev environments.
-      const isLocalRuntime = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-      if (isLocalRuntime && filtered.length < 29) {
-        console.log("Fetching real products from Odoo database...");
-        try {
-          const resp = await fetch(getApiUrl("/api/odoo/products"));
-          
-          // Check if response is JSON
-          const contentType = resp.headers.get("content-type");
-          if (contentType && contentType.includes("application/json")) {
-            const data = await resp.json();
-            if (data.success && data.data) {
-              const odooMapped = data.data.map((op: any) => ({
-                id: op.id,
-                name: op.name,
-                description: op.description_sale || "Product imported from Odoo ERP.",
-                price: `SAR ${(op.list_price || 0).toLocaleString()}`,
-                image: op.image_1920 ? (op.image_1920.toString().startsWith('data:') ? op.image_1920 : `data:image/png;base64,${op.image_1920}`) : "https://picsum.photos/seed/product/400/400",
-                isOdoo: true
-              }));
-              
-              // Merge real Odoo products into the list
-              const existingIds = new Set(filtered.map(p => p.id));
-              const newProducts = odooMapped.filter((p: any) => !existingIds.has(p.id));
-              filtered = [...filtered, ...newProducts];
-            }
-          } else {
-            console.warn("Odoo API returned non-JSON response.");
-          }
-        } catch (e) {
-          console.error("Odoo API connection failed:", e);
-        }
-      }
-
-      // If STILL no products found after filtering, show nothing or empty state
-      if (filtered.length === 0) {
-        console.warn("No Odoo products found in Firestore. Please sync from localhost.");
-      }
-
-      setProducts(filtered.slice(0, 50));
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, "products");
-      setProducts(INITIAL_PRODUCTS);
+      console.warn("[Firestore] Product sync failed (likely quota):", error.message);
+      // If we have no products yet, show initial ones as safety
+      setProducts(prev => prev.length === 0 ? INITIAL_PRODUCTS : prev);
     });
+
     return () => unsubscribe();
   }, []);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(doc(db, "settings", "seo"), (snapshot) => {
       if (snapshot.exists()) {
-        setSeo(snapshot.data() as SiteSettings["seo"]);
+        const data = snapshot.data() as SiteSettings["seo"];
+        // Ensure no old brand names leak through from Firebase
+        const sanitized = JSON.parse(
+          JSON.stringify(data)
+            .replace(/Shani's Flavor Lab/g, "Hakkal Trading Company")
+            .replace(/شاني فليفر لاب/g, "شركة حقال للتجارة")
+            .replace(/Haqqal/g, "Hakkal")
+            .replace(/هكال التجارية/g, "شركة حقال للتجارة")
+            .replace(/حقال/g, "حقال")
+            .replace(/هكال/g, "حقال")
+            .replace(/حقال للتجارة/g, "شركة حقال للتجارة")
+            .replace(/شركة شركة حقال للتجارة/g, "شركة حقال للتجارة")
+            .replace(/Authentic Sri Lankan Spices/g, "شركة حقال للتجارة")
+        );
+        setSeo(sanitized);
       }
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, "settings/seo");
@@ -5220,9 +6701,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!isAuthReady) return;
+    // Only set up listener if user is authenticated and on a dashboard/orders route
+    const isDashboardRoute = window.location.pathname.startsWith('/dashboard') || window.location.pathname.startsWith('/my-orders');
+    if (!isAuthReady || !user || !isDashboardRoute) {
+      if (!user) setOrders([]);
+      return;
+    }
 
-    console.log(`[Order Sync] Setting up listener. Role: ${userRole}, User: ${user?.email || 'Guest'}`);
+    console.log(`[Order Sync] Setting up listener for: ${user.email || user.uid}`);
 
     let q;
     try {
@@ -5273,6 +6759,11 @@ export default function App() {
         
         console.log(`[Firestore Orders] Loaded ${ordersData.length} orders successfully.`);
         setOrders(ordersData);
+
+        // Background Sync for Odoo status if logged in as customer
+        if (user && userRole === 'customer') {
+          syncStatuses();
+        }
       }, (error) => {
         console.error("[Firestore Orders] snapshot error:", error);
         if (user) {
@@ -5285,29 +6776,24 @@ export default function App() {
     }
   }, [isAuthReady, user, userRole]);
 
-  useEffect(() => {
-    if (!isAuthReady) return;
 
-    // Offer Popup Logic
-    const hasSeenOffer = sessionStorage.getItem('hasSeenOffer');
-    if (!hasSeenOffer && user && userRole === 'customer') {
-      const offersQuery = query(collection(db, "offers"), where("active", "==", true));
-      const unsubscribeOffers = onSnapshot(offersQuery, (snapshot) => {
-        if (!snapshot.empty) {
-          const offerData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Offer;
-          setActiveOffer(offerData);
-          setShowOfferPopup(true);
-          sessionStorage.setItem('hasSeenOffer', 'true');
-        }
-      });
-      return () => unsubscribeOffers();
-    }
-  }, [isAuthReady, user, userRole]);
 
   useEffect(() => {
-    document.title = seo.home.title;
+    const title = seo.home.title || "Hakkal Trading Company | شركة حقال للتجارة";
+    document.title = title;
+    
+    // Update Meta Tags
     const metaDesc = document.querySelector('meta[name="description"]');
     if (metaDesc) metaDesc.setAttribute("content", seo.home.description);
+    
+    const metaKeywords = document.querySelector('meta[name="keywords"]');
+    if (metaKeywords) metaKeywords.setAttribute("content", seo.home.keywords);
+    
+    const ogTitle = document.querySelector('meta[property="og:title"]');
+    if (ogTitle) ogTitle.setAttribute("content", title);
+    
+    const ogDesc = document.querySelector('meta[property="og:description"]');
+    if (ogDesc) ogDesc.setAttribute("content", seo.home.description);
   }, [seo]);
 
   if (!isAuthReady) {
@@ -5320,33 +6806,30 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      {activeOffer && (
-        <OffersPopup 
-          isOpen={showOfferPopup} 
-          onClose={() => setShowOfferPopup(false)} 
-          offer={activeOffer} 
-        />
-      )}
+
       <Routes>
         <Route path="/" element={
-          <Home 
-            products={products} 
-            onAddToCart={addToCart} 
-            cartCount={cart.length}
-            onOpenCart={() => setIsCartOpen(true)}
-            onOpenAuth={() => setIsAuthModalOpen(true)}
-            onOpenTerms={() => setIsTermsOpen(true)}
-            onOpenPrivacy={() => setIsPrivacyOpen(true)}
-            onOpenRefund={() => setIsRefundOpen(true)}
-            onViewProduct={handleViewProduct}
-            user={user}
-            userRole={userRole}
-            lang={lang}
-            onToggleLang={toggleLang}
-            t={t}
-          />
+          !user
+            ? <Navigate to="/auth" replace />
+            : <Home 
+                products={products} 
+                onAddToCart={addToCart} 
+                cartCount={cart.length}
+                onOpenCart={() => setIsCartOpen(true)}
+                onOpenAuth={() => setIsAuthModalOpen(true)}
+                onOpenTerms={() => setIsTermsOpen(true)}
+                onOpenPrivacy={() => setIsPrivacyOpen(true)}
+                onOpenRefund={() => setIsRefundOpen(true)}
+                onViewProduct={handleViewProduct}
+                user={user}
+                userRole={userRole}
+                lang={lang}
+                onToggleLang={toggleLang}
+                t={t}
+              />
         } />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/auth" element={<CustomerLoginPage />} />
         <Route path="/pending-activation" element={<PendingActivation />} />
@@ -5354,56 +6837,62 @@ export default function App() {
         
         <Route path="/admin" element={
           <ProtectedRoute>
-            <DashboardLayout user={user} role={userRole}>
+            <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
               <DashboardOverview products={products} orders={orders} />
             </DashboardLayout>
           </ProtectedRoute>
         } />
         <Route path="/admin/products" element={
           <ProtectedRoute>
-            <DashboardLayout user={user} role={userRole}>
+            <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
               <ProductManager products={products} setModalContent={setModalContent} />
             </DashboardLayout>
           </ProtectedRoute>
         } />
         <Route path="/admin/discounts" element={
           <ProtectedRoute>
-            <DashboardLayout user={user} role={userRole}>
+            <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
               <DiscountsManager />
             </DashboardLayout>
           </ProtectedRoute>
         } />
         <Route path="/admin/odoo" element={
           <ProtectedRoute>
-            <DashboardLayout user={user} role={userRole}>
+            <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
               <OdooManager products={products} setModalContent={setModalContent} t={t} />
             </DashboardLayout>
           </ProtectedRoute>
         } />
         <Route path="/admin/orders" element={
           <ProtectedRoute>
-            <DashboardLayout user={user} role={userRole}>
-              <OrderManager orders={orders} setModalContent={setModalContent} />
+            <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
+              <OrderManager 
+                orders={orders} 
+                setModalContent={setModalContent} 
+                t={t} 
+                lang={lang}
+                historyOrder={historyOrder}
+                setHistoryOrder={setHistoryOrder}
+                historyData={historyData}
+                setHistoryData={setHistoryData}
+                loadingHistory={loadingHistory}
+                setLoadingHistory={setLoadingHistory}
+                fetchOrderHistory={fetchOrderHistory}
+              />
             </DashboardLayout>
           </ProtectedRoute>
         } />
-        <Route path="/admin/customers" element={
-          <ProtectedRoute>
-            <DashboardLayout user={user} role={userRole}>
-              <CustomerSyncDashboard />
-            </DashboardLayout>
-          </ProtectedRoute>
-        } />
+
         <Route path="/admin/seo" element={
           <ProtectedRoute>
-            <DashboardLayout user={user} role={userRole}>
+            <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
               <SEOManager seo={seo} setModalContent={setModalContent} />
             </DashboardLayout>
           </ProtectedRoute>
         } />
         <Route path="/admin/blog" element={
           <ProtectedRoute>
-            <DashboardLayout user={user} role={userRole}>
+            <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
               <div className="text-center py-20">
                 <FileText size={64} className="mx-auto text-gray-200 mb-6" />
                 <h1 className="text-3xl font-serif text-brand-navy font-bold">Blog Management</h1>
@@ -5414,7 +6903,7 @@ export default function App() {
         } />
         <Route path="/admin/settings" element={
           <ProtectedRoute>
-            <DashboardLayout user={user} role={userRole}>
+            <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
               <div className="text-center py-20">
                 <Settings size={64} className="mx-auto text-gray-200 mb-6" />
                 <h1 className="text-3xl font-serif text-brand-navy font-bold">General Settings</h1>
@@ -5425,29 +6914,43 @@ export default function App() {
         } />
         <Route path="/dashboard" element={
           <ProtectedRoute>
-            <DashboardLayout user={user} role={userRole}>
-              <CustomerDashboardOverview orders={orders} user={user} />
+            <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
+              <CustomerDashboardOverview 
+                orders={orders} 
+                user={user} 
+                t={t} 
+                lang={lang} 
+                onViewHistory={fetchOrderHistory}
+              />
             </DashboardLayout>
           </ProtectedRoute>
         } />
         <Route path="/dashboard/shop" element={
           <ProtectedRoute>
-            <DashboardLayout user={user} role={userRole}>
-              <CustomerShop products={products} onAddToCart={addToCart} />
+            <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
+              <CustomerShop products={products} onAddToCart={addToCart} t={t} lang={lang} />
             </DashboardLayout>
           </ProtectedRoute>
         } />
         <Route path="/dashboard/orders" element={
           <ProtectedRoute>
-            <DashboardLayout user={user} role={userRole}>
-              <CustomerOrders orders={orders} user={user} />
+            <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
+              <CustomerOrders 
+                orders={orders} 
+                user={user} 
+                t={t} 
+                lang={lang} 
+                onViewHistory={fetchOrderHistory}
+                loadingHistory={loadingHistory}
+                historyOrder={historyOrder}
+              />
             </DashboardLayout>
           </ProtectedRoute>
         } />
         <Route path="/dashboard/profile" element={
           <ProtectedRoute>
-            <DashboardLayout user={user} role={userRole}>
-              <CustomerProfile user={user} />
+            <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
+              <CustomerProfile user={user} t={t} lang={lang} />
             </DashboardLayout>
           </ProtectedRoute>
         } />
@@ -5469,6 +6972,7 @@ export default function App() {
         user={user}
         setModalContent={setModalContent}
         t={t}
+        lang={lang}
       />
       <TermsModal 
         isOpen={isTermsOpen} 
@@ -5522,6 +7026,276 @@ export default function App() {
           </motion.div>
         </div>
       )}
+
+      {/* Order History Modal */}
+      <AnimatePresence>
+        {historyOrder && (
+          <div className="fixed inset-0 z-[400] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setHistoryOrder(null)}
+              className="absolute inset-0 bg-brand-navy/70 backdrop-blur-md"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 24 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 24 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+              className="relative w-full max-w-lg bg-white rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[88vh]"
+            >
+              {/* Header */}
+              <div className={`px-7 pt-7 pb-5 border-b border-gray-100 flex justify-between items-start ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <div className={isRtl ? 'text-right' : 'text-left'}>
+                  <h2 className="text-2xl font-serif text-brand-navy font-bold">{t.orders.dashboard.operationSequence}</h2>
+                  <p className="text-xs font-mono text-gray-400 uppercase tracking-widest mt-1">
+                    {(historyOrder as any).odooOrderName || `#${(historyOrder as any).firebaseId?.toUpperCase().slice(0, 8)}`}
+                  </p>
+                </div>
+                <button onClick={() => setHistoryOrder(null)} className="p-2 hover:bg-gray-100 rounded-full transition-colors mt-1">
+                  <X size={20} className="text-gray-500" />
+                </button>
+              </div>
+
+              {/* Progress Stepper */}
+              {(() => {
+                const statusVal = (historyOrder as any).status || '';
+                const isCancelled = statusVal === 'cancel' || statusVal === 'rejected';
+                const steps = t.orders.dashboard.sequenceSteps;
+                const currentStep =
+                  isCancelled ? -1 :
+                  statusVal === 'completed' ? 4 :
+                  statusVal === 'shipped' ? 3 :
+                  (statusVal === 'approved' || statusVal === 'processing') ? 2 :
+                  statusVal === 'pending_approval' ? 1 : 0;
+
+                return (
+                  <>
+                    {isCancelled && (
+                      <div className="bg-red-50 px-7 py-3 border-b border-red-100 flex items-center gap-3">
+                        <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center">
+                          <X size={14} className="text-white" />
+                        </div>
+                        <p className="text-sm font-bold text-red-700">
+                          {t.orders.dashboard.cancelledBanner}
+                        </p>
+                      </div>
+                    )}
+                    <div className="px-6 py-5 bg-gray-50 border-b border-gray-100">
+                      <div className={`flex items-start ${isRtl ? 'flex-row-reverse' : ''} gap-0`}>
+                      {steps.map((step: string, idx: number) => {
+                        const done = idx < currentStep;
+                        const active = idx === currentStep - 1;
+                        const upcoming = idx >= currentStep;
+                        return (
+                          <div key={idx} className={`flex-1 flex flex-col items-center relative ${isRtl ? '' : ''}`}>
+                            {/* Connector line */}
+                            {idx > 0 && (
+                              <div className={`absolute top-[14px] ${isRtl ? 'right-1/2 left-0' : 'left-0 right-1/2'} h-0.5 ${
+                                done || active ? 'bg-brand-orange' : 'bg-gray-200'
+                              }`} />
+                            )}
+                            {idx < steps.length - 1 && (
+                              <div className={`absolute top-[14px] ${isRtl ? 'left-1/2 right-auto' : 'left-1/2'} right-0 h-0.5 ${
+                                done ? 'bg-brand-orange' : 'bg-gray-200'
+                              }`} />
+                            )}
+                            {/* Dot */}
+                            <div className={`relative z-10 w-7 h-7 rounded-full flex items-center justify-center border-2 transition-all ${
+                              done
+                                ? 'bg-brand-orange border-brand-orange text-white'
+                                : active
+                                ? 'bg-white border-brand-orange text-brand-orange ring-4 ring-brand-orange/20'
+                                : 'bg-white border-gray-200 text-gray-300'
+                            }`}>
+                              {done ? (
+                                <Check size={12} />
+                              ) : (
+                                <div className={`w-2 h-2 rounded-full ${
+                                  active ? 'bg-brand-orange' : 'bg-gray-300'
+                                }`} />
+                              )}
+                            </div>
+                            {/* Label */}
+                            <span className={`mt-2 text-[10px] leading-tight text-center font-semibold px-1 ${
+                              done ? 'text-brand-orange' :
+                              active ? 'text-brand-navy' :
+                              'text-gray-400'
+                            }`} style={{ maxWidth: 64 }}>{step}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+
+              {/* History Items */}
+              <div className="p-7 overflow-y-auto custom-scrollbar flex-1">
+                {loadingHistory ? (
+                  <div className="flex flex-col items-center justify-center py-16 space-y-4">
+                    <RefreshCw size={40} className="text-brand-orange animate-spin" />
+                    <p className="text-sm text-gray-400 font-bold tracking-widest uppercase">
+                      {t.orders.dashboard.fetchingHistory}
+                    </p>
+                  </div>
+                ) : (() => {
+                  const statusVal = (historyOrder as any).status || '';
+                  const isCancelled = statusVal === 'cancel' || statusVal === 'rejected';
+                  // Use 5 for completed so all 4 steps show as "Done"
+                  const currentStep =
+                    isCancelled ? -2 :
+                    statusVal === 'completed' ? 5 :
+                    statusVal === 'shipped' ? 3 :
+                    (statusVal === 'approved' || statusVal === 'processing') ? 2 : 1;
+
+                  const firebaseCreatedAt = (historyOrder as any).createdAt;
+
+                  const createdEvent   = historyData.find((i: any) => i.type === 'created')
+                                       || (firebaseCreatedAt ? { date: firebaseCreatedAt, title: null } : null);
+                  const preparingEvent = historyData.find((i: any) => i.type === 'preparing' || i.type === 'status_change')
+                                       || (firebaseCreatedAt ? { date: firebaseCreatedAt, title: null } : null);
+                  const shippedEvent   = historyData.find((i: any) => i.type === 'shipped')
+                                       || (firebaseCreatedAt ? { date: firebaseCreatedAt, title: null } : null);
+                  const deliveredEvent = (statusVal === 'completed' && historyData.length > 0) ? historyData[0]
+                                       : (firebaseCreatedAt ? { date: firebaseCreatedAt, title: null } : null);
+
+                  const stages = [
+                    { key: 'pending',   labelAr: 'بانتظار موافقة قسم المبيعات', labelEn: 'Pending Sales Approval',          icon: <RefreshCw size={16} className="text-white" />, color: 'bg-amber-500',   event: createdEvent },
+                    { key: 'approved',  labelAr: 'تمت الموافقة وجاري تجهيز الطلب', labelEn: 'Approved & Being Prepared',    icon: <Package   size={16} className="text-white" />, color: 'bg-blue-500',    event: preparingEvent },
+                    { key: 'shipped',   labelAr: 'تم الشحن',                      labelEn: 'Shipped',                        icon: <Truck     size={16} className="text-white" />, color: 'bg-purple-500',  event: shippedEvent },
+                    { key: 'completed', labelAr: 'تم التسليم',                    labelEn: 'Delivered',                      icon: <Check     size={16} className="text-white" />, color: 'bg-emerald-500', event: deliveredEvent },
+                  ];
+
+                  if (isCancelled) {
+                    stages.push({
+                      key: 'cancelled',
+                      labelAr: 'تم إلغاء الطلب',
+                      labelEn: 'Order Cancelled',
+                      icon: <X size={16} className="text-white" />,
+                      color: 'bg-red-500',
+                      event: historyData.find((i: any) => i.type === 'status_change' && (i.new_status === 'cancel' || i.new_status === 'rejected')) || { date: new Date().toISOString(), title: t.orders.dashboard.cancelledBySystem }
+                    });
+                  }
+
+                  return (
+                    <div className="relative">
+                      <div className={`absolute top-6 bottom-6 w-0.5 bg-gray-100 ${isRtl ? 'right-[22px]' : 'left-[22px]'}`} />
+                      <div className="space-y-0">
+                        {stages.map((stage, idx) => {
+                          const step = idx + 1;
+                          const isCancelledStage = stage.key === 'cancelled';
+                          
+                          let isDone, isActive, isUpcoming;
+                          
+                          if (isCancelled) {
+                            if (isCancelledStage) {
+                              isDone = false;
+                              isActive = true;
+                              isUpcoming = false;
+                            } else {
+                              // For non-cancelled stages when order is cancelled
+                              // We can try to guess if they were done based on history
+                              isDone = !!stage.event?.title || (idx === 0 && !!stage.event?.date); 
+                              isActive = false;
+                              isUpcoming = !isDone;
+                            }
+                          } else {
+                            isDone = step < currentStep;
+                            isActive = step === currentStep;
+                            isUpcoming = step > currentStep;
+                          }
+
+                          return (
+                            <div key={stage.key} className={`relative flex items-start gap-4 py-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                              {/* Circle */}
+                              <div className={`flex-shrink-0 z-10 w-11 h-11 rounded-full flex items-center justify-center shadow-md ${
+                                isDone   ? `${stage.color} ring-4 ring-offset-2 ring-emerald-100` :
+                                isActive ? `${stage.color} ring-4 ring-offset-2 ring-orange-100 animate-pulse` :
+                                           'bg-gray-100 border-2 border-gray-200'
+                              }`}>
+                                {isDone   ? <Check size={18} className="text-white" /> :
+                                 isActive ? stage.icon :
+                                            <div className="w-3 h-3 rounded-full bg-gray-300" />}
+                              </div>
+
+                              {/* Text */}
+                              <div className={`flex-1 min-w-0 ${isRtl ? 'text-right' : 'text-left'} ${isUpcoming ? 'opacity-40' : ''}`}>
+                                <p className={`text-base font-bold leading-snug ${isDone ? 'text-emerald-700' : isActive ? 'text-brand-navy' : 'text-gray-400'}`}>
+                                  {isRtl ? stage.labelAr : stage.labelEn}
+                                </p>
+                                {(isDone || isActive) && stage.event?.date ? (
+                                  <div className="mt-0.5">
+                                    <p className="text-sm font-semibold text-gray-600">
+                                      {new Date(stage.event.date).toLocaleString(isRtl ? 'ar-SA' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                    {!stage.event.title && firebaseCreatedAt && stage.event.date === firebaseCreatedAt && idx > 0 && (
+                                      <p className="text-[10px] text-gray-400 italic">{t.orders.dashboard.approximateDate}</p>
+                                    )}
+                                  </div>
+                                ) : isActive ? (
+                                  <p className="text-xs font-semibold text-brand-orange mt-0.5">● {t.orders.dashboard.currentStatus}</p>
+                                ) : isUpcoming ? (
+                                  <p className="text-xs text-gray-400 mt-0.5">{t.orders.dashboard.pendingEllipsis}</p>
+                                ) : null}
+                                {(isDone || isActive) && stage.event?.title && (
+                                  <p className="text-[11px] text-gray-400 mt-0.5 font-mono truncate">
+                                    {isRtl ? (stage.event.title_ar || stage.event.title) : stage.event.title}
+                                  </p>
+                                )}
+                              </div>
+
+                              {/* Badge */}
+                              {isDone && (
+                                <span className="flex-shrink-0 self-center text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full border border-emerald-100">
+                                  {t.orders.dashboard.doneCheck}
+                                </span>
+                              )}
+                              {isActive && (
+                                <span className={`flex-shrink-0 self-center text-[10px] font-bold px-2 py-1 rounded-full border animate-pulse ${
+                                  isCancelledStage 
+                                    ? 'text-red-600 bg-red-50 border-red-100' 
+                                    : 'text-brand-orange bg-orange-50 border-orange-100'
+                                }`}>
+                                  {isCancelledStage 
+                                    ? t.orders.dashboard.cancelledBadge
+                                    : t.orders.dashboard.activeBadge}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {historyError && (
+                        <div className="mt-5 p-3 bg-amber-50 border border-amber-100 rounded-xl text-center">
+                          <p className="text-xs text-amber-600 font-medium">
+                            {t.orders.dashboard.odooFetchError}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+
+
+              {/* Footer */}
+              <div className="px-7 pb-7 pt-4 bg-gray-50 border-t border-gray-100">
+                <button
+                  onClick={() => setHistoryOrder(null)}
+                  className="w-full bg-brand-navy text-white py-4 rounded-2xl text-sm tracking-widest font-bold hover:bg-brand-orange transition-all shadow-lg"
+                >
+                  {t.orders.dashboard.close}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </BrowserRouter>
   );
 }

@@ -63,12 +63,12 @@ service cloud.firestore {
     }
 
     function isValidOrder(data) {
-      return data.keys().hasAll(['customerName', 'email', 'phone1', 'address', 'city', 'district', 'paymentMethod', 'items', 'total', 'status', 'createdAt']) &&
+      return data.keys().hasAll(['customerName', 'email', 'phone1', 'address', 'paymentMethod', 'items', 'total', 'status', 'createdAt']) &&
              data.customerName is string && data.customerName.size() > 0 &&
              data.email is string && data.email.size() > 0 &&
              data.phone1 is string && data.phone1.size() > 0 &&
              data.address is string && data.address.size() > 0 &&
-             data.paymentMethod in ['cod', 'bank_transfer'] &&
+             data.paymentMethod in ['cod', 'bank_transfer', 'deferred_invoice'] &&
              data.items is list && data.items.size() > 0 &&
              data.total is number &&
              data.status in ['pending_approval', 'pending_payment', 'approved', 'processing', 'shipped', 'completed', 'cancelled', 'rejected', 'refunded'] &&
@@ -104,7 +104,7 @@ service cloud.firestore {
     match /orders/{orderId} {
       allow list: if isAdmin() || (isSignedIn() && (resource.data.userId == request.auth.uid || resource.data.email == request.auth.token.email));
       allow get: if isAdmin() || (isSignedIn() && (resource.data.userId == request.auth.uid || resource.data.email == request.auth.token.email));
-      allow create: if isSignedIn() && (isAdmin() || (request.auth.token.activated == true && request.auth.token.odooCustomer == true)) && isValidOrder(incoming());
+      allow create: if isSignedIn() && isValidOrder(incoming());
       
       // Allow customers to update ONLY sync-related fields on their own orders
       // so the UI can store the Odoo order number/status without exposing edits to the order content.
@@ -119,8 +119,6 @@ service cloud.firestore {
         request.resource.data.email == resource.data.email &&
         request.resource.data.phone1 == resource.data.phone1 &&
         request.resource.data.address == resource.data.address &&
-        request.resource.data.city == resource.data.city &&
-        request.resource.data.district == resource.data.district &&
         request.resource.data.paymentMethod == resource.data.paymentMethod &&
         request.resource.data.items == resource.data.items &&
         request.resource.data.total == resource.data.total &&

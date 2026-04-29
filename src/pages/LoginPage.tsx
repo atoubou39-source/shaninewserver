@@ -23,7 +23,7 @@ export const LoginPage = () => {
     setLang(prev => prev === 'en' ? 'ar' : 'en');
   };
 
-  const [email, setEmail] = useState('');
+  const [loginInput, setLoginInput] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -37,19 +37,53 @@ export const LoginPage = () => {
     setError('');
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      // Phone Sanitization Helper
+      const sanitizePhone = (phone: string): string => {
+        let clean = phone.replace(/\D/g, "");
+        if (clean.startsWith("00966")) clean = clean.substring(2);
+        if (clean.startsWith("05") && clean.length === 10) clean = "966" + clean.substring(1);
+        else if (clean.startsWith("5") && clean.length === 9) clean = "966" + clean;
+        else if (!clean.startsWith("966") && clean.length === 9) clean = "966" + clean;
+        return clean;
+      };
+
+      let loginEmail = loginInput;
+      
+      // If it looks like a phone number, look it up via backend
+      if (!loginInput.includes('@')) {
+        const cleanPhone = sanitizePhone(loginInput);
+        
+        try {
+          const baseUrl = (import.meta as any).env?.VITE_API_BASE_URL || "http://localhost:3001";
+          const response = await fetch(`${baseUrl}/api/get-email-by-phone?phone=${encodeURIComponent(cleanPhone)}`);
+          const data = await response.json();
+          
+          if (data.success && data.email) {
+            loginEmail = data.email;
+          } else {
+            // Fallback to generated email if lookup fails
+            loginEmail = `${cleanPhone}@hakkal.com`;
+          }
+        } catch (lookupErr) {
+          console.error("Email lookup failed:", lookupErr);
+          // Fallback to generated email
+          loginEmail = `${cleanPhone}@hakkal.com`;
+        }
+      }
+
+      await signInWithEmailAndPassword(auth, loginEmail, password);
       const from = (location.state as any)?.from?.pathname || "/";
       navigate(from);
     } catch (err: any) {
       console.error(err);
       if (err.code === 'auth/wrong-password') {
-        setError(lang === 'ar' ? "كلمة المرور غير صحيحة." : "Incorrect password.");
-      } else if (err.code === 'auth/user-not-found') {
-        setError(lang === 'ar' ? "هذا البريد الإلكتروني غير مسجل." : "Email not registered.");
+        setError(t.auth.incorrectPassword);
+      } else if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-email') {
+        setError(lang === 'ar' ? 'بيانات الدخول غير صحيحة' : 'Invalid login credentials');
       } else if (err.code === 'auth/too-many-requests') {
-        setError(lang === 'ar' ? "محاولات كثيرة جداً. يرجى المحاولة لاحقاً." : "Too many attempts. Please try again later.");
+        setError(t.auth.tooManyAttempts);
       } else {
-        setError(lang === 'ar' ? "حدث خطأ أثناء تسجيل الدخول. يرجى التأكد من بياناتك." : "Login error. Please check your credentials.");
+        setError(t.auth.loginError);
       }
     } finally {
       setLoading(false);
@@ -57,17 +91,22 @@ export const LoginPage = () => {
   };
 
   const handleResetPassword = async () => {
-    if (!email) {
-      setError(lang === 'ar' ? "يرجى إدخال البريد الإلكتروني أولاً." : "Please enter email first.");
+    if (!loginInput) {
+      setError(t.auth.enterEmailFirst);
       return;
     }
     setLoading(true);
     try {
-      await sendPasswordResetEmail(auth, email);
+      let resetEmail = loginInput;
+      if (!loginInput.includes('@')) {
+        const cleanPhone = loginInput.replace(/\D/g, '');
+        resetEmail = `${cleanPhone}@hakkal.com`;
+      }
+      await sendPasswordResetEmail(auth, resetEmail);
       setResetSent(true);
       setError('');
     } catch (err: any) {
-      setError(lang === 'ar' ? "فشل إرسال رابط إعادة التعيين. تأكد من صحة البريد." : "Failed to send reset link.");
+      setError(t.auth.failedSendReset);
     } finally {
       setLoading(false);
     }
@@ -91,11 +130,15 @@ export const LoginPage = () => {
         <div className="absolute top-0 end-0 w-32 h-32 bg-brand-orange/5 rounded-full -me-16 -mt-16" />
         
         <div className="text-center mb-10 relative">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-brand-navy/5 rounded-3xl mb-6">
-            <Lock className="text-brand-navy" size={32} />
+          <div className="flex items-center justify-center mb-6">
+            <img
+              src="https://i.ibb.co/xKkzXtmz/Untitled-design-1.png"
+              alt={t.auth.welcomeBrand}
+              className="h-20 w-auto object-contain"
+            />
           </div>
           <h2 className="text-3xl font-serif text-brand-navy mb-3">{t.auth.login}</h2>
-          <p className="text-gray-400 text-sm font-medium">{lang === 'ar' ? 'مرحباً بك مجدداً في مختبر النكهات' : 'Welcome back to Flavor Lab'}</p>
+          <p className="text-gray-400 text-sm font-medium">{t.auth.welcomeBrand}</p>
         </div>
 
         {error && (
@@ -111,24 +154,24 @@ export const LoginPage = () => {
 
         {resetSent && (
           <div className="mb-8 p-4 bg-green-50 text-green-600 rounded-2xl text-sm text-center font-bold">
-            {lang === 'ar' ? 'تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.' : 'Password reset link sent to your email.'}
+            {t.auth.resetLinkSent}
           </div>
         )}
 
         <form onSubmit={handleLogin} className="space-y-6 relative">
           <div className="space-y-2">
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block ms-1">
-              {t.auth.email}
+              {lang === 'ar' ? 'رقم الجوال أو البريد الإلكتروني' : 'Phone Number or Email'}
             </label>
             <div className="relative">
               <Mail className="absolute end-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input 
-                type="email" 
+                type="text" 
                 required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full pe-12 ps-4 py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange focus:bg-white transition-all font-medium text-brand-navy text-end"
-                placeholder="email@example.com"
+                value={loginInput}
+                onChange={(e) => setLoginInput(e.target.value)}
+                className="w-full pe-12 ps-4 py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange focus:bg-white transition-all font-medium text-brand-navy text-start"
+                placeholder={lang === 'ar' ? "9665XXXXXXXX" : "email@example.com"}
               />
             </div>
           </div>
@@ -164,7 +207,7 @@ export const LoginPage = () => {
             disabled={loading}
             className="w-full bg-brand-navy text-white py-5 rounded-2xl text-[11px] font-bold tracking-[0.2em] shadow-xl shadow-brand-navy/10 hover:bg-brand-orange transition-all duration-300 disabled:opacity-50 text-center"
           >
-            {loading ? (lang === 'ar' ? 'جاري التحقق...' : 'VERIFYING...') : t.auth.loginBtn}
+            {loading ? t.auth.verifying : t.auth.loginBtn}
           </button>
         </form>
 

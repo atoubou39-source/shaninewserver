@@ -14,12 +14,12 @@
 
 #### Variable 1: API Base URL
 - **Key:** `VITE_API_BASE_URL`
-- **Value:** `https://co.hakkal-est.com/`
+- **Value:** `https://co.haqqal-est.com/`
 - **Scope:** Build & Deploy
 
 #### Variable 2: (Optional) Other Variables
 ```
-VITE_API_BASE_URL=https://co.hakkal-est.com/
+VITE_API_BASE_URL=https://co.haqqal-est.com/
 ```
 
 ### 3. Deploy Updated Build
@@ -35,7 +35,7 @@ VITE_API_BASE_URL=https://co.hakkal-est.com/
 ### 4. Important Notes
 
 **Backend API Issue:**
-Currently `https://co.hakkal-est.com/` doesn't have API endpoints. You have two options:
+Currently `https://co.haqqal-est.com/` doesn't have API endpoints. You have two options:
 
 1. **Deploy Backend Server:**
    - Deploy your `server.ts` to a service like:

@@ -41,7 +41,7 @@ if (!admin.apps.length) {
 
 // Odoo Configuration
 const odooConfig = {
-  url: process.env.ODOO_URL || "https://co.hakkal-est.com",
+  url: (process.env.ODOO_URL || "https://co.hakkal-est.com").replace(/\/$/, ""),
   db: process.env.ODOO_DB || "test",
   apiKey: process.env.ODOO_API_KEY || "b1624329dc9a6ba356f92d9e76eabab105479791",
   username: process.env.ODOO_USERNAME || "aburiyad",
@@ -58,11 +58,113 @@ const AUTH_CACHE_DURATION = 1000 * 60 * 30; // Cache UID for 30 minutes
 
 const getOdooCredential = () => odooConfig.apiKey || odooConfig.password;
 
+// Madar SMS Configuration
+const madarConfig = {
+  token: process.env.MADAR_API_TOKEN,
+  senderName: process.env.MADAR_SENDER_NAME || "HAKKAL",
+  baseUrl: "https://app.mobile.net.sa/api/v1"
+};
+
+const sendMadarSMS = async (number: string, message: string) => {
+  if (!madarConfig.token) {
+    console.warn("[Madar SMS] Token missing, skipping SMS");
+    return { success: false, error: "Token missing" };
+  }
+
+  const cleanNumber = sanitizePhone(number);
+  const token = madarConfig.token ? madarConfig.token.trim() : "";
+  
+  // Debug log (obscured token)
+  console.log(`[Madar SMS] Attempting to send to ${cleanNumber}...`);
+  console.log(`[Madar SMS] Token: ...${token.substring(token.length - 4)} | Sender: ${madarConfig.senderName}`);
+
+  try {
+    const response = await axios.post(`${madarConfig.baseUrl}/send`, {
+      number: cleanNumber,
+      senderName: madarConfig.senderName,
+      messageBody: message,
+      sendAtOption: "NOW",
+      allow_duplicate: true
+    }, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      timeout: 10000 // 10s timeout
+    });
+
+    console.log("[Madar SMS] Raw Response:", JSON.stringify(response.data));
+    
+    // Check for success in response body
+    // Madar/Mobile.net.sa often returns { status: "Success", ... } or { code: 200, ... }
+    const resData = response.data || {};
+    const status = (resData.status || "").toString().toLowerCase();
+    const code = (resData.code || "").toString();
+    
+    const isSuccess = 
+      status === "success" || 
+      status === "sent" || 
+      status === "pending" ||
+      code === "200" ||
+      resData.success === true ||
+      (resData.data && (resData.data.id || resData.data.message?.id));
+
+    if (isSuccess) {
+      console.log("[Madar SMS] Success confirmed (or queued)");
+      return { success: true, data: response.data };
+    }
+    
+    // If we have an error message in the body
+    const errorMsg = response.data?.message || response.data?.error || "فشل إرسال الرسالة من موفر الخدمة";
+    console.error("[Madar SMS] API rejected request:", errorMsg);
+    return { success: false, error: errorMsg, debug: JSON.stringify(response.data) };
+  } catch (error: any) {
+    const errorDetail = error.response?.data || error.message;
+    console.error("[Madar SMS] Exception:", JSON.stringify(errorDetail));
+    
+    let readableError = "خطأ في الاتصال بمزود الرسائل";
+    if (error.response?.data?.message) {
+      readableError = error.response.data.message;
+    } else if (typeof errorDetail === 'string') {
+      readableError = errorDetail;
+    }
+    
+    return { success: false, error: readableError, debug: JSON.stringify(errorDetail) };
+  }
+};
+
 const isOdooConfigured = () => {
   if (!odooConfig.enabled) return false;
   const { url, db, username } = odooConfig;
   const credential = getOdooCredential();
   return !!(url && db && username && credential);
+};
+
+// Phone Sanitization Helper for Madar and Firebase
+const sanitizePhone = (phone: string): string => {
+  // Remove all non-digits (spaces, +, -, etc.)
+  let clean = phone.replace(/\D/g, "");
+  
+  // If it starts with 00966, convert to 966
+  if (clean.startsWith("00966")) {
+    clean = clean.substring(2);
+  }
+  
+  // If it starts with 05 and length is 10, convert to 9665...
+  if (clean.startsWith("05") && clean.length === 10) {
+    clean = "966" + clean.substring(1);
+  } 
+  // If it starts with 5 and length is 9, convert to 9665...
+  else if (clean.startsWith("5") && clean.length === 9) {
+    clean = "966" + clean;
+  } 
+  // If it's 9 digits but doesn't start with 966, assume it's a local number without 0
+  else if (!clean.startsWith("966") && clean.length === 9) {
+    clean = "966" + clean;
+  }
+  
+  return clean;
 };
 
 const ODOO_CALL_TIMEOUT_MS = 30000; // Increased to 30s for Render environment
@@ -157,6 +259,11 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
+// Root route for basic connectivity check
+app.get("/", (req, res) => {
+  res.send("API Server is running correctly.");
+});
+
 // Explicit CORS for Vercel
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
@@ -183,7 +290,7 @@ app.get("/api/odoo/config-check", (req, res) => {
   });
 });
 
-// Advanced diagnostic to test Odoo connection
+// Health check route (Advanced diagnostic)
 app.get("/api/health-check", async (req, res) => {
   const response: any = {
     timestamp: new Date().toISOString(),
@@ -242,46 +349,58 @@ app.get("/api/debug-headers", (req, res) => {
       }
 
       const uid = await authenticateOdoo();
-      const fields = ["name", "display_name", "email", "phone", "mobile", "id", "street", "city", "user_id", "district", "sale_warn", "sale_warn_msg"];
+      const fields = ["name", "display_name", "email", "phone", "mobile", "id", "street", "city", "user_id", "sale_warn", "sale_warn_msg"];
       
       // Try multiple search strategies
       let customers: any = [];
 
       // 1. Try Exact Match (Email or Phone)
-      let domain: any[] = ["|"];
-      if (email) domain.push(["email", "=", email.trim().toLowerCase()]);
-      if (phone) {
+      let domain: any[] = [];
+      if (email && phone) {
         const cleanPhone = phone.replace(/\D/g, "");
-        domain.push("|", ["phone", "=", cleanPhone], ["mobile", "=", cleanPhone]);
+        domain = ["|", ["email", "=", email.trim().toLowerCase()], "|", ["phone", "=", cleanPhone], ["mobile", "=", cleanPhone]];
+      } else if (email) {
+        domain = [["email", "=", email.trim().toLowerCase()]];
+      } else if (phone) {
+        const cleanPhone = phone.replace(/\D/g, "");
+        domain = ["|", ["phone", "=", cleanPhone], ["mobile", "=", cleanPhone]];
       }
-      
-      // Fix domain structure if only one condition
-      if (domain.length === 2) domain = domain.slice(1);
-      else if (domain.length === 3) domain = domain.slice(1); // Should not happen with current logic
 
-      console.log("[Odoo Verify] Strategy 1: Exact Match Search...");
-      customers = await (callOdoo as any)("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "res.partner", "search_read", [domain], { fields, limit: 1 });
+      console.log("[Odoo Verify] Strategy 1: Exact Match Search...", JSON.stringify(domain));
+      if (domain.length > 0) {
+        customers = await (callOdoo as any)("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "res.partner", "search_read", [domain], { fields, limit: 1 });
+      }
 
       // 2. Fuzzy Fallback if no exact match
       if ((!Array.isArray(customers) || customers.length === 0) && (email || phone)) {
         console.log("[Odoo Verify] Strategy 2: Fuzzy Fallback Search...");
-        let fuzzyDomain: any[] = ["|"];
-        if (email) fuzzyDomain.push(["email", "ilike", email.trim().toLowerCase()]);
-        if (phone) {
+        let fuzzyDomain: any[] = [];
+        if (email && phone) {
           const cleanPhone = phone.replace(/\D/g, "");
-          fuzzyDomain.push("|", ["phone", "ilike", cleanPhone], ["mobile", "ilike", cleanPhone]);
+          fuzzyDomain = ["|", ["email", "ilike", email.trim().toLowerCase()], "|", ["phone", "ilike", cleanPhone], ["mobile", "ilike", cleanPhone]];
+        } else if (email) {
+          fuzzyDomain = [["email", "ilike", email.trim().toLowerCase()]];
+        } else if (phone) {
+          const cleanPhone = phone.replace(/\D/g, "");
+          fuzzyDomain = ["|", ["phone", "ilike", cleanPhone], ["mobile", "ilike", cleanPhone]];
         }
         
-        if (fuzzyDomain.length === 2) fuzzyDomain = fuzzyDomain.slice(1);
-        
-        customers = await (callOdoo as any)("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "res.partner", "search_read", [fuzzyDomain], { fields, limit: 1 });
+        if (fuzzyDomain.length > 0) {
+          customers = await (callOdoo as any)("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "res.partner", "search_read", [fuzzyDomain], { fields, limit: 1 });
+        }
       }
 
       if (Array.isArray(customers) && customers.length > 0) {
-        const c = customers[0];
-        const salesperson = (c.user_id && Array.isArray(c.user_id)) ? { id: c.user_id[0], name: c.user_id[1] } : null;
+              const c = customers[0];
+              console.log(`[Odoo Verify] Customer data for ${c.name}:`, JSON.stringify({
+                user_id: c.user_id,
+                email: c.email,
+                phone: c.phone
+              }));
+              
+              const salesperson = (c.user_id && Array.isArray(c.user_id)) ? { id: c.user_id[0], name: c.user_id[1] } : null;
 
-        console.log(`[Odoo Verify] SUCCESS in ${Date.now() - start}ms for ${c.name}`);
+        console.log(`[Odoo Verify] SUCCESS in ${Date.now() - start}ms for ${c.name} (Salesperson: ${salesperson ? salesperson.name : 'None'})`);
         res.json({ 
           success: true, 
           customer: { 
@@ -1068,38 +1187,32 @@ app.post("/api/odoo/orders", async (req, res) => {
     
     if (!orderId) throw new Error("Failed to create order in Odoo");
 
-    // 4. Confirm Order and Create Invoice (Non-blocking errors)
+    // 4. (MODIFIED) Do NOT auto-confirm or auto-invoice. 
+    // Leave the order as a Quotation (Draft) for manual review.
     let invoiceName = "";
-    let orderNameResult = `SO-${orderId}`; // Use result name to avoid collision
+    let orderNameResult = `SO-${orderId}`; 
     
     try {
-      console.log("[Odoo Order] Confirming & Invoicing order:", orderId);
-      
-      // Confirm the order
-      await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "sale.order", "action_confirm", [[orderId]]);
-      
-      // Create invoices
-      const invoiceIds = await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "sale.order", "_create_invoices", [[orderId]]);
-      
-      if (Array.isArray(invoiceIds) && invoiceIds.length > 0) {
-        const invoiceId = invoiceIds[0];
-        // Post the invoice to get a formal number
-        await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "account.move", "action_post", [[invoiceId]]);
-        
-        // Read the invoice name
-        const invoiceInfo = await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "account.move", "read", [[invoiceId], ["name"]]);
-        if (Array.isArray(invoiceInfo) && invoiceInfo.length > 0) {
-          invoiceName = invoiceInfo[0].name;
-        }
-      }
-
-      // Read the final order name
+      // Get the real Odoo Order Name (like S00123)
       const orderInfo = await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "sale.order", "read", [[orderId], ["name"]]);
       if (Array.isArray(orderInfo) && orderInfo.length > 0) {
         orderNameResult = orderInfo[0].name;
       }
+      
+      console.log("[Odoo Order] Order created successfully as Draft:", orderNameResult);
+      
+      /* 
+      // LEGACY: Auto-confirm and Invoice logic (Disabled by user request)
+      await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "sale.order", "action_confirm", [[orderId]]);
+      const invoiceIds = await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "sale.order", "_create_invoices", [[orderId]]);
+      if (Array.isArray(invoiceIds) && invoiceIds.length > 0) {
+        await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "account.move", "action_post", [[invoiceIds[0]]]);
+        const invInfo = await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "account.move", "read", [[invoiceIds[0]]], { fields: ["name"] });
+        if (Array.isArray(invInfo) && invInfo.length > 0) invoiceName = invInfo[0].name;
+      }
+      */
     } catch (e) {
-      console.error("[Odoo Order] Error in post-creation flow:", e.message);
+      console.error("[Odoo Order] Error fetching order name:", e.message);
     }
 
     res.json({ 
@@ -1112,6 +1225,307 @@ app.post("/api/odoo/orders", async (req, res) => {
   } catch (error: any) { 
     console.error("Order Creation Error:", error);
     res.status(500).json({ success: false, error: error.message }); 
+  }
+});
+
+// OTP Management
+const otpStore = new Map<string, { code: string, expires: number, odooName?: string, odooId?: number, odooData?: any }>();
+
+app.get("/api/check-phone", async (req, res) => {
+  const { phone } = req.query;
+  if (!phone || typeof phone !== 'string') {
+    return res.status(400).json({ error: "Phone number required" });
+  }
+
+  try {
+    const cleanPhone = sanitizePhone(phone);
+    const formattedPhone = `+${cleanPhone}`;
+    let exists = false;
+    try {
+      await admin.auth().getUserByPhoneNumber(formattedPhone);
+      exists = true;
+    } catch (e) {
+      // Check Firestore as fallback
+      const snapshot = await admin.firestore().collection("users").where("phoneNumber", "==", cleanPhone).limit(1).get();
+      exists = !snapshot.empty;
+    }
+    res.json({ exists });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/send-otp", async (req, res) => {
+  const { phone } = req.body;
+  if (!phone) return res.status(400).json({ success: false, error: "رقم الجوال مطلوب" });
+
+  try {
+    const cleanPhone = sanitizePhone(phone);
+    
+    // Check if we already have a VALID OTP for this phone (not expired) in Firestore
+    const otpDoc = await admin.firestore().collection("otps").doc(cleanPhone).get();
+    const existing = otpDoc.exists ? otpDoc.data() : null;
+    
+    if (existing && existing.expires > Date.now()) {
+      console.log(`[OTP] Using existing valid OTP for ${cleanPhone} from Firestore. CODE: ${existing.code}`);
+      
+      // Still send the SMS again if requested
+      const message = `كود التحقق الخاص بك لمتجر شركة حقال للتجارة هو: ${existing.code}`;
+      const result = await sendMadarSMS(cleanPhone, message);
+      
+      if (result.success) {
+        return res.json({ success: true, message: "Code resent" });
+      } else {
+        return res.status(500).json({ success: false, error: result.error, debug: result.debug });
+      }
+    }
+
+    // 1. Verify if phone exists in Odoo before sending SMS
+    console.log(`[OTP] Verifying phone in Odoo: ${cleanPhone}`);
+    const uid = await authenticateOdoo();
+    
+    // Multi-Stage Ultra-Flexible Search
+    const last9 = cleanPhone.slice(-9);
+    const last8 = cleanPhone.slice(-8);
+    const last7 = cleanPhone.slice(-7);
+    
+    // Create a very fuzzy search pattern for the digits
+    // e.g., 533420333 -> %5%3%3%4%2%0%3%3%3%
+    const fuzzyPattern = `%${last9.split("").join("%")}%`;
+    
+    // Additional pattern for partial matches like "342 0333"
+    const partialPattern = `%${last7.substring(0, 3)}%${last7.substring(3)}%`;
+    
+    console.log(`[OTP] Multi-Stage Search for: ${cleanPhone} (L9:${last9}, Fuzzy:${fuzzyPattern}, Partial:${partialPattern})`);
+
+    // We have 14 conditions below. In Odoo Domain, for 'OR' operations, 
+    // we need exactly (N-1) '|' operators. So for 14 conditions, we need 13 '|'.
+    const odooCustomers = await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "res.partner", "search_read", 
+      [["|", "|", "|", "|", "|", "|", "|", "|", "|", "|", "|", "|", "|",
+        ["mobile", "ilike", cleanPhone], 
+        ["phone", "ilike", cleanPhone],
+        ["mobile", "ilike", last9],
+        ["phone", "ilike", last9],
+        ["mobile", "ilike", last8],
+        ["phone", "ilike", last8],
+        ["mobile", "ilike", last7],
+        ["phone", "ilike", last7],
+        ["mobile", "ilike", fuzzyPattern],
+        ["phone", "ilike", fuzzyPattern],
+        ["mobile", "ilike", partialPattern],
+        ["phone", "ilike", partialPattern],
+        ["mobile", "ilike", `%${last7}%`],
+        ["phone", "ilike", `%${last7}%`]
+      ]], 
+      { fields: ["id", "name", "phone", "mobile"], limit: 1 }
+    );
+
+    console.log(`[OTP] Odoo Search Results: ${Array.isArray(odooCustomers) ? odooCustomers.length : 0}`);
+
+    if (!Array.isArray(odooCustomers) || odooCustomers.length === 0) {
+      // DEBUG: Fetch a few random customers to see what's in there
+      let sample = "No data found";
+      try {
+        const samples = await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "res.partner", "search_read", [[]], { fields: ["name", "phone"], limit: 5 });
+        if (Array.isArray(samples)) {
+          sample = samples.map(s => `${s.name}: ${s.phone || 'no phone'}`).join(", ");
+        }
+      } catch (e) { sample = `Error listing samples: ${e.message}`; }
+
+      return res.status(404).json({ 
+        success: false, 
+        error: "هذا الرقم غير مسجل في نظام اودو كعميل",
+        debug: `DB: ${odooConfig.db} | Sample Data: [${sample}]`
+      });
+    }
+
+    console.log(`[OTP] Found customer in Odoo: ${odooCustomers[0].name}`);
+
+    // 2. Generate and Send SMS
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires = Date.now() + 10 * 60 * 1000; // Increased to 10 mins
+
+    // Store in Firestore for persistence across server restarts
+    await admin.firestore().collection("otps").doc(cleanPhone).set({
+      code,
+      expires,
+      odooName: odooCustomers[0].name,
+      odooId: odooCustomers[0].id,
+      odooData: odooCustomers[0],
+      createdAt: new Date().toISOString()
+    });
+
+    const message = `كود التحقق الخاص بك لمتجر شركة حقال للتجارة هو: ${code}`;
+    console.log(`[OTP] Sending message to ${cleanPhone}: ${message}. CODE: ${code}`);
+    const result = await sendMadarSMS(cleanPhone, message);
+
+    if (result.success) {
+      console.log(`[OTP] Successfully stored and sent ${code} to ${cleanPhone}`);
+      res.json({ success: true });
+    } else {
+      console.error(`[OTP] Failed to send SMS to ${cleanPhone}:`, result.error);
+      res.status(500).json({ 
+        success: false, 
+        error: result.error || "فشل إرسال الرسالة القصيرة",
+        debug: result.debug
+      });
+    }
+  } catch (error: any) {
+    console.error("[OTP Error]", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post("/api/verify-otp", async (req, res) => {
+  const { phone, otp, password, email: reqEmail, name: reqName } = req.body;
+  const cleanPhone = sanitizePhone(phone);
+  
+  // Get OTP from Firestore instead of memory
+  const otpDoc = await admin.firestore().collection("otps").doc(cleanPhone).get();
+  const stored = otpDoc.exists ? otpDoc.data() : null;
+
+  console.log(`[OTP Verify] Attempt for ${cleanPhone}. Code provided: ${otp}, Stored code: ${stored?.code}, Expires: ${stored ? new Date(stored.expires).toISOString() : 'N/A'}`);
+
+  if (!stored) {
+    return res.status(400).json({ success: false, error: "الكود غير موجود، يرجى إعادة إرسال الرمز" });
+  }
+
+  if (stored.expires < Date.now()) {
+    return res.status(400).json({ success: false, error: "الكود منتهي الصلاحية، يرجى إعادة إرسال الرمز" });
+  }
+
+  if (stored.code !== otp) {
+    return res.status(400).json({ success: false, error: "رمز التحقق غير صحيح" });
+  }
+
+  const { odooId, odooData, odooName } = stored;
+  const email = reqEmail || (odooData?.email) || `${cleanPhone}@hakkal.com`;
+  const displayName = reqName || odooName || odooData?.name || "Customer";
+
+  // If we reach here, OTP is valid
+  try {
+      let uid = "";
+      const fullPhone = `+${cleanPhone}`;
+      const findUser = async (retryCount = 0): Promise<string> => {
+        try {
+          const userRecord = await admin.auth().getUserByPhoneNumber(fullPhone);
+          return userRecord.uid;
+        } catch (e: any) {
+          if ((e.message.includes('RESOURCE_EXHAUSTED') || e.code === 'auth/quota-exceeded') && retryCount < 2) {
+            console.log(`[Firebase Auth] Quota hit, retrying in 1s... (Attempt ${retryCount + 1})`);
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            return findUser(retryCount + 1);
+          }
+          throw e;
+        }
+      };
+
+      try {
+        uid = await findUser();
+      } catch (e: any) {
+        console.error("[Firebase Auth Search Failed]", e.message);
+      }
+
+      const usersRef = admin.firestore().collection("users");
+      const snapshot = await usersRef.where("phoneNumber", "==", cleanPhone).limit(1).get();
+      
+      if (!snapshot.empty) {
+        uid = snapshot.docs[0].id;
+      } else if (!uid) {
+        // AUTO-REGISTER only if not found in Auth AND not found in Firestore
+        // Get Odoo UID first!
+        const odooUid = await authenticateOdoo();
+        
+        // Super-Flexible search: extract the core digits (last 9 digits usually)
+        const coreDigits = cleanPhone.slice(-9);
+        const searchPattern = `%${coreDigits.split("").join("%")}%`;
+        
+        console.log(`[Odoo Search] Searching for core digits: ${coreDigits} using Odoo UID: ${odooUid}`);
+
+        const odooCustomers = await callOdoo("object", "execute_kw", odooConfig.db, odooUid, getOdooCredential(), "res.partner", "search_read", [[
+          "|", "|",
+          ["mobile", "like", coreDigits],
+          ["phone", "like", coreDigits],
+          ["mobile", "like", searchPattern]
+        ]], { fields: ["id", "name", "email", "mobile", "phone", "street", "city"], limit: 1 }) as any[];
+        
+        const email = reqEmail || (odooCustomers && odooCustomers.length > 0 && odooCustomers[0].email ? odooCustomers[0].email : `${cleanPhone}@hakkal.com`);
+        const displayName = reqName || (stored as any).odooName || (odooCustomers && odooCustomers.length > 0 ? odooCustomers[0].name : "Odoo Customer");
+        const odooId = (stored as any).odooId || (odooCustomers && odooCustomers.length > 0 ? odooCustomers[0].id : null);
+        const odooData = (stored as any).odooData || (odooCustomers && odooCustomers.length > 0 ? odooCustomers[0] : {});
+        
+        try {
+          const newUser = await admin.auth().createUser({
+            phoneNumber: fullPhone,
+            email: email,
+            displayName: displayName
+          });
+          uid = newUser.uid;
+        } catch (authError: any) {
+          if (authError.code === 'auth/email-already-exists' || authError.code === 'auth/phone-number-already-exists') {
+            // User might exist in Auth but not in Firestore yet
+            console.log("[Firebase Auth] User already exists in Auth, trying to fetch...");
+            const existingUser = await admin.auth().getUserByPhoneNumber(fullPhone);
+            uid = existingUser.uid;
+          } else {
+            throw authError;
+          }
+        }
+        
+        await admin.firestore().collection("users").doc(uid).set({
+          facilityName: displayName,
+          phoneNumber: cleanPhone,
+          email: email,
+          odooPartnerId: odooId,
+          odoo_partner: odooData,
+          role: "customer",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          accountActivated: true,
+          status: "active",
+          passwordSet: !!password
+        }, { merge: true });
+      } else {
+        // User exists in Auth but not in Firestore - create minimal record
+        console.log("[Firestore] Creating missing record for existing Auth user:", uid);
+        await admin.firestore().collection("users").doc(uid).set({
+          phoneNumber: cleanPhone,
+          role: "customer",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          accountActivated: true,
+          status: "active",
+          passwordSet: !!password
+        }, { merge: true });
+      }
+      
+      // If password provided, update it now
+      if (password) {
+        await admin.auth().updateUser(uid, { password });
+        await admin.firestore().collection("users").doc(uid).update({
+          passwordSet: true
+        });
+      }
+
+      // DO NOT delete OTP here to allow for retries or page refreshes during the final step
+      // otpStore.delete(cleanPhone); 
+      
+      const customToken = await admin.auth().createCustomToken(uid);
+      res.json({ success: true, uid, customToken });
+    } catch (error: any) {
+      console.error("[Verify OTP Error]", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.post("/api/set-password", async (req, res) => {
+  const { uid, password } = req.body;
+  try {
+    await admin.auth().updateUser(uid, { password });
+    const customToken = await admin.auth().createCustomToken(uid);
+    res.json({ success: true, customToken });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -1132,9 +1546,32 @@ app.post("/api/send-email", async (req, res) => {
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
+app.get("/api/get-email-by-phone", async (req, res) => {
+  const { phone } = req.query;
+  if (!phone) return res.status(400).json({ error: "Phone is required" });
+  
+  const cleanPhone = sanitizePhone(phone as string);
+  try {
+    const snapshot = await admin.firestore().collection("users")
+      .where("phoneNumber", "==", cleanPhone)
+      .limit(1)
+      .get();
+      
+    if (!snapshot.empty) {
+      const userData = snapshot.docs[0].data();
+      return res.json({ success: true, email: userData.email });
+    } else {
+      // Fallback for case where user isn't in Firestore yet
+      return res.json({ success: true, email: `${cleanPhone}@hakkal.com` });
+    }
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Handle Server Start (Local, Render, etc. - except Vercel)
 if (!process.env.VERCEL) {
-  const PORT = process.env.PORT || 3000;
+  const PORT = process.env.PORT || 3001;
   app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port: ${PORT}`));
 }
 

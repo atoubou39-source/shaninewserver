@@ -79,11 +79,12 @@ export const PendingActivation = () => {
           </button>
         </div>
 
-        <div className="mt-12 pt-8 border-t border-gray-50">
-          <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest leading-loose">
-            Chef Shani's Flavor Lab <br />
-            Premium Sri Lankan Selection
-          </p>
+        <div className="mt-12 pt-8 border-t border-gray-50 flex justify-center">
+          <img
+            src="https://i.ibb.co/xKkzXtmz/Untitled-design-1.png"
+            alt={t.auth.welcomeBrand}
+            className="h-10 w-auto object-contain opacity-60"
+          />
         </div>
       </motion.div>
     </div>

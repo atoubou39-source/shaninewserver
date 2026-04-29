@@ -1,4 +1,4 @@
-# Shani's Flavor Lab - Deployment Instructions
+# Hakkal Trading Company - Deployment Instructions
 
 ## Build Status: READY FOR DEPLOYMENT
 
