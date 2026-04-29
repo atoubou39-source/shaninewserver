@@ -3,7 +3,7 @@ import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/aut
 import { auth } from '../firebase';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Lock, Mail, ChevronLeft, AlertCircle, Globe } from 'lucide-react';
+import { Lock, Phone, ChevronLeft, AlertCircle, Globe, Eye, EyeOff } from 'lucide-react';
 import { translations, Language } from '../translations';
 
 export const LoginPage = () => {
@@ -28,6 +28,7 @@ export const LoginPage = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [resetSent, setResetSent] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -164,7 +165,7 @@ export const LoginPage = () => {
               {lang === 'ar' ? 'رقم الجوال أو البريد الإلكتروني' : 'Phone Number or Email'}
             </label>
             <div className="relative">
-              <Mail className="absolute end-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <Phone className="absolute end-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input 
                 type="text" 
                 required
@@ -192,13 +193,20 @@ export const LoginPage = () => {
             <div className="relative">
               <Lock className="absolute end-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input 
-                type="password" 
+                type={showPassword ? "text" : "password"} 
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pe-12 ps-4 py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange focus:bg-white transition-all font-medium text-brand-navy"
+                className="w-full pe-12 ps-12 py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange focus:bg-white transition-all font-medium text-brand-navy"
                 placeholder="••••••••"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute start-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-brand-orange transition-colors"
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </div>
           </div>
 
