@@ -748,7 +748,7 @@ const Products = ({
           </p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-8 mb-16">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-8 mb-16">
           <AnimatePresence mode="popLayout">
             {products.length === 0 ? (
               <div className="md:col-span-3 py-20 text-center space-y-4">
@@ -777,11 +777,9 @@ const Products = ({
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9 }}
-                  whileHover={{ y: -8, shadow: "0 25px 50px -12px rgba(0, 0, 0, 0.15)" }}
-                  onClick={() => onViewProduct(p)}
-                  className="bg-white p-5 rounded-3xl shadow-md transition-all group border border-white hover:border-brand-orange/20 cursor-pointer flex flex-col h-full"
+                  className="bg-white p-3 md:p-5 rounded-2xl md:rounded-3xl shadow-sm hover:shadow-xl transition-all group border border-white hover:border-brand-orange/20 cursor-pointer flex flex-col h-full"
                 >
-                  <div className="aspect-square mb-6 overflow-hidden rounded-2xl bg-[#f3f3f3] relative">
+                  <div className="aspect-square mb-3 md:mb-6 overflow-hidden rounded-xl md:rounded-2xl bg-[#f3f3f3] relative">
                     <img 
                       src={p.image} 
                       alt={p.name} 
@@ -3460,7 +3458,6 @@ const CustomerShop = ({ products, onAddToCart, t, lang }: { products: Product[],
               transition={{ delay: i * 0.03 }}
               className="bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-brand-orange/20 transition-all group flex flex-col overflow-hidden"
             >
-              {/* Image — compact */}
               <div className="relative overflow-hidden bg-gray-50" style={{ aspectRatio: '1/1' }}>
                 <img
                   src={p.image}
@@ -4294,6 +4291,7 @@ const DashboardLayout = ({ children, user, role, t, lang, onToggleLang, cartCoun
           onOpenTerms={onOpenTerms || (() => {})}
           onOpenPrivacy={onOpenPrivacy || (() => {})}
           onOpenRefund={onOpenRefund || (() => {})}
+          onOpenCart={onOpenCart || (() => {})}
           t={t}
         />
       </main>
@@ -6233,10 +6231,11 @@ const SocialSection = ({ t }: { t: any }) => {
   );
 };
 
-const Footer = ({ onOpenTerms, onOpenPrivacy, onOpenRefund, t }: { 
+const Footer = ({ onOpenTerms, onOpenPrivacy, onOpenRefund, onOpenCart, t }: { 
   onOpenTerms: () => void,
   onOpenPrivacy: () => void,
   onOpenRefund: () => void,
+  onOpenCart: () => void,
   t: any
 }) => {
   return (
@@ -6295,9 +6294,9 @@ const Footer = ({ onOpenTerms, onOpenPrivacy, onOpenRefund, t }: {
           <div>
             <h4 className="text-brand-navy font-serif text-xl font-bold mb-10">{t.footer.contact}</h4>
             <div className="space-y-6 text-brand-slate text-sm font-medium">
-              <p><span className="text-brand-navy font-bold">{t.contactInfo.management}:</span> +966 57 5151 506</p>
-              <p><span className="text-brand-navy font-bold">{t.contactInfo.middleArea}:</span> +966 57 5151 507</p>
-              <p><span className="text-brand-navy font-bold">{t.contactInfo.westernArea}:</span> +966 57 5151 508</p>
+              <p><span className="text-brand-navy font-bold">{t.contactInfo.management}:</span> <span dir="ltr">+966 57 5151 506</span></p>
+              <p><span className="text-brand-navy font-bold">{t.contactInfo.middleArea}:</span> <span dir="ltr">+966 57 5151 507</span></p>
+              <p><span className="text-brand-navy font-bold">{t.contactInfo.westernArea}:</span> <span dir="ltr">+966 57 5151 508</span></p>
               <p><span className="text-brand-navy font-bold">{t.contactInfo.email}:</span> Info@hakkal-est.com</p>
               <p>
                 <span className="text-brand-navy font-bold">{t.contactInfo.address}:</span><br />
@@ -6314,14 +6313,32 @@ const Footer = ({ onOpenTerms, onOpenPrivacy, onOpenRefund, t }: {
         </div>
       </div>
 
-      {/* Floating Cart Button */}
-      <motion.button 
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.9 }}
-        className="fixed bottom-8 right-8 bg-brand-navy text-white p-4 rounded-full shadow-2xl z-40 hover:bg-brand-orange transition-colors"
-      >
-        <ShoppingBag size={24} />
-      </motion.button>
+      {/* Floating Buttons Container */}
+      <div className="fixed bottom-8 right-8 flex flex-col space-y-4 z-40">
+        {/* WhatsApp Button */}
+        <motion.a 
+          href="https://wa.me/966533420333"
+          target="_blank"
+          rel="noopener noreferrer"
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          className="bg-[#25D366] text-white p-4 rounded-full shadow-2xl hover:bg-[#128C7E] transition-colors flex items-center justify-center"
+        >
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+          </svg>
+        </motion.a>
+
+        {/* Floating Cart Button */}
+        <motion.button 
+          onClick={onOpenCart}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          className="bg-brand-navy text-white p-4 rounded-full shadow-2xl hover:bg-brand-orange transition-colors flex items-center justify-center"
+        >
+          <ShoppingBag size={24} />
+        </motion.button>
+      </div>
     </footer>
   );
 };
@@ -6374,11 +6391,32 @@ const Home = ({
       <Hero t={t} />
       <FeaturesBar t={t} />
       <Products products={products} onOrder={onAddToCart} onViewProduct={onViewProduct} user={user} userRole={userRole} onOpenAuth={onOpenAuth} t={t} />
+      
+      {/* Auto-sliding Image Banner */}
+      <section className="py-12 bg-white overflow-hidden">
+        <div className="max-w-7xl mx-auto px-6">
+          <motion.div 
+            animate={{ x: [0, -1000] }}
+            transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+            className="flex space-x-6 space-x-reverse"
+          >
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="flex-shrink-0 w-64 md:w-96 h-40 md:h-60 rounded-3xl overflow-hidden bg-gray-100 shadow-lg">
+                <img 
+                  src={`https://picsum.photos/seed/hakkal_${i}/800/400`} 
+                  alt="Hakkal Gallery" 
+                  className="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-500"
+                />
+              </div>
+            ))}
+          </motion.div>
+        </div>
+      </section>
+
       <Testimonials t={t} />
       <About t={t} />
       <Chef t={t} />
-      <SocialSection t={t} />
-      <Footer onOpenTerms={onOpenTerms} onOpenPrivacy={onOpenPrivacy} onOpenRefund={onOpenRefund} t={t} />
+      <Footer onOpenTerms={onOpenTerms} onOpenPrivacy={onOpenPrivacy} onOpenRefund={onOpenRefund} onOpenCart={onOpenCart} t={t} />
     </>
   );
 };
