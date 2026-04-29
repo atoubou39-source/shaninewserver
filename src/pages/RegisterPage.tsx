@@ -303,6 +303,9 @@ export const RegisterPage = () => {
                     className="w-full pe-12 ps-4 py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange focus:bg-white transition-all font-medium text-brand-navy text-center text-2xl tracking-[0.5em]"
                     placeholder="000000"
                     maxLength={6}
+                    autoComplete="one-time-code"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                   />
                 </div>
                 <p className="text-[10px] text-gray-400 text-center mt-2">
