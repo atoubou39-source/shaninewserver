@@ -79,7 +79,7 @@ export function DiscountsManager() {
   };
 
   const formatPrice = (price: number): string => {
-    return `SAR ${price.toLocaleString("en-US", {
+    return `⃁ ${price.toLocaleString("en-US", {
       minimumFractionDigits: 0,
       maximumFractionDigits: 2,
     })}`;
@@ -326,7 +326,7 @@ export function DiscountsManager() {
                           سعر التخفيض
                         </label>
                         <div className="flex items-center space-x-2">
-                          <span className="text-brand-navy/40">SAR</span>
+                          <span className="text-brand-navy/40">⃁</span>
                           <input
                             type="number"
                             value={currentDiscount}

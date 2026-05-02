@@ -259,16 +259,17 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-// Root route for basic connectivity check
-app.get("/", (req, res) => {
-  res.send("API Server is running correctly.");
-});
 
-// Explicit CORS for Vercel
+// Explicit CORS - Dynamic Origin Handling
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin;
+  // In production, you might want to restrict this to your specific domains
+  // For "work everywhere" mode, we reflect the requesting origin
+  res.header('Access-Control-Allow-Origin', origin || '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
@@ -349,7 +350,6 @@ app.get("/api/debug-headers", (req, res) => {
       }
 
       const uid = await authenticateOdoo();
-      const fields = ["name", "display_name", "email", "phone", "mobile", "id", "street", "city", "user_id", "sale_warn", "sale_warn_msg"];
       
       // Try multiple search strategies
       let customers: any = [];
@@ -368,39 +368,31 @@ app.get("/api/debug-headers", (req, res) => {
 
       console.log("[Odoo Verify] Strategy 1: Exact Match Search...", JSON.stringify(domain));
       if (domain.length > 0) {
-        customers = await (callOdoo as any)("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "res.partner", "search_read", [domain], { fields, limit: 1 });
-      }
-
-      // 2. Fuzzy Fallback if no exact match
-      if ((!Array.isArray(customers) || customers.length === 0) && (email || phone)) {
-        console.log("[Odoo Verify] Strategy 2: Fuzzy Fallback Search...");
-        let fuzzyDomain: any[] = [];
-        if (email && phone) {
-          const cleanPhone = phone.replace(/\D/g, "");
-          fuzzyDomain = ["|", ["email", "ilike", email.trim().toLowerCase()], "|", ["phone", "ilike", cleanPhone], ["mobile", "ilike", cleanPhone]];
-        } else if (email) {
-          fuzzyDomain = [["email", "ilike", email.trim().toLowerCase()]];
-        } else if (phone) {
-          const cleanPhone = phone.replace(/\D/g, "");
-          fuzzyDomain = ["|", ["phone", "ilike", cleanPhone], ["mobile", "ilike", cleanPhone]];
-        }
-        
-        if (fuzzyDomain.length > 0) {
-          customers = await (callOdoo as any)("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "res.partner", "search_read", [fuzzyDomain], { fields, limit: 1 });
-        }
+        // Fetch ALL fields for debugging
+        customers = await (callOdoo as any)("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "res.partner", "search_read", [domain], { limit: 5, order: "write_date desc" });
       }
 
       if (Array.isArray(customers) && customers.length > 0) {
-              const c = customers[0];
-              console.log(`[Odoo Verify] Customer data for ${c.name}:`, JSON.stringify({
-                user_id: c.user_id,
-                email: c.email,
-                phone: c.phone
-              }));
+              // ADVANCED MERGE: Look through all matches to find a salesperson
+              let salesperson = null;
+              let bestRecord = customers[0];
               
-              const salesperson = (c.user_id && Array.isArray(c.user_id)) ? { id: c.user_id[0], name: c.user_id[1] } : null;
+              for (const cust of customers) {
+                if (cust.user_id && Array.isArray(cust.user_id)) {
+                  salesperson = { id: cust.user_id[0], name: cust.user_id[1] };
+                  bestRecord = cust; // Prioritize the record that has the salesperson
+                  break;
+                }
+              }
+              
+              const c = bestRecord;
+              console.log(`[Odoo Verify] MERGED DATA FOUND:
+                - Name: ${c.name}
+                - Primary ID: ${c.id}
+                - Salesperson: ${salesperson ? salesperson.name : "NONE"}
+                - Records Found: ${customers.length}
+              `);
 
-        console.log(`[Odoo Verify] SUCCESS in ${Date.now() - start}ms for ${c.name} (Salesperson: ${salesperson ? salesperson.name : 'None'})`);
         res.json({ 
           success: true, 
           customer: { 
@@ -1100,11 +1092,49 @@ app.post("/api/odoo/orders", async (req, res) => {
     const uid = await authenticateOdoo();
     if (!uid) return res.status(401).json({ success: false, message: "Odoo Auth Failed" });
 
-    // 1. Find Partner
-    const partners = await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "res.partner", "search_read", [[["email", "=", customerEmail]]], { fields: ["id"], limit: 1 });
-    if (!Array.isArray(partners) || partners.length === 0) return res.status(403).json({ success: false, message: "Customer not found in Odoo" });
-
-    const partnerId = partners[0].id;
+    // 1. Find Partner (Flexible Search)
+    const cleanPhone = phone ? String(phone).replace(/[^\d]/g, '') : "";
+    const last9 = cleanPhone.slice(-9);
+    
+    console.log(`[Odoo Order] Searching for customer: ${customerEmail} | Phone: ${cleanPhone}`);
+    
+    let partnerId = null;
+    
+    // Attempt 1: Exact Email
+    if (customerEmail) {
+      const pEmail = await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "res.partner", "search", 
+        [[["email", "=", customerEmail]]], { limit: 1 });
+      if (Array.isArray(pEmail) && pEmail.length > 0) partnerId = pEmail[0];
+    }
+    
+    // Attempt 2: Flexible Phone
+    if (!partnerId && last9) {
+      const pPhone = await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "res.partner", "search", 
+        [["|", ["mobile", "ilike", last9], ["phone", "ilike", last9]]], { limit: 1 });
+      if (Array.isArray(pPhone) && pPhone.length > 0) partnerId = pPhone[0];
+    }
+    
+    // Attempt 3: Create Customer if still not found
+    if (!partnerId) {
+      console.log("[Odoo Order] Customer not found. Creating new partner...");
+      const newPartnerData: any = {
+        name: customerName || (customerEmail ? customerEmail.split('@')[0] : `Web Customer ${cleanPhone}`),
+        email: customerEmail || false,
+        mobile: phone || false,
+        street: (req.body.address || "").slice(0, 120),
+        comment: "Created automatically from Web Store order"
+      };
+      
+      try {
+        partnerId = await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "res.partner", "create", [newPartnerData]);
+        console.log("[Odoo Order] Created new partner ID:", partnerId);
+      } catch (e) {
+        console.error("[Odoo Order] Failed to create partner:", e.message);
+        // Last fallback: use a generic 'Web Sales' partner if ID 1 or similar exists, 
+        // but for now we'll throw to catch critical issues
+        throw new Error("Could not find or create customer in Odoo");
+      }
+    }
 
     // 2. Create Order
     const orderData: any = {
@@ -1256,12 +1286,36 @@ app.get("/api/check-phone", async (req, res) => {
 });
 
 app.post("/api/send-otp", async (req, res) => {
-  const { phone } = req.body;
+  const { phone, reason } = req.body;
   if (!phone) return res.status(400).json({ success: false, error: "رقم الجوال مطلوب" });
 
   try {
     const cleanPhone = sanitizePhone(phone);
     
+    // Check if user already exists in Firestore for specific reasons
+    if (reason === 'register' || reason === 'reset') {
+      const userSnapshot = await admin.firestore().collection("users")
+        .where("phoneNumber", "==", cleanPhone)
+        .limit(1)
+        .get();
+      
+      const exists = !userSnapshot.empty;
+      
+      if (reason === 'register' && exists) {
+        return res.status(400).json({ 
+          success: false, 
+          error: "هذا الرقم مسجل مسبقاً لدينا. يمكنك تسجيل الدخول مباشرة، أو استعادة كلمة المرور إذا كنت قد نسيتها." 
+        });
+      }
+      
+      if (reason === 'reset' && !exists) {
+        return res.status(404).json({ 
+          success: false, 
+          error: "عذراً، هذا الرقم غير مسجل في النظام كحساب مستخدم. يرجى إنشاء حساب جديد أولاً." 
+        });
+      }
+    }
+
     // Check if we already have a VALID OTP for this phone (not expired) in Firestore
     const otpDoc = await admin.firestore().collection("otps").doc(cleanPhone).get();
     const existing = otpDoc.exists ? otpDoc.data() : null;
@@ -1540,7 +1594,7 @@ app.post("/api/send-email", async (req, res) => {
       from: "onboarding@resend.dev",
       to: [customerEmail],
       subject: `Order Confirmation #${orderId}`,
-      html: `<p>Hi ${customerName}, your order has been received. Total: SAR ${total}</p>`
+      html: `<p>Hi ${customerName}, your order has been received. Total: ⃁ ${total}</p>`
     });
     res.json({ success: !error, data, error });
   } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -1550,29 +1604,70 @@ app.get("/api/get-email-by-phone", async (req, res) => {
   const { phone } = req.query;
   if (!phone) return res.status(400).json({ error: "Phone is required" });
   
-  const cleanPhone = sanitizePhone(phone as string);
+  const originalPhone = phone as string;
+  const cleanPhone = sanitizePhone(originalPhone);
+  
+  // Try multiple formats to be safe
+  const formatsToTry = [cleanPhone];
+  if (originalPhone !== cleanPhone) formatsToTry.push(originalPhone);
+  
+  // Also try common Saudi formats if it starts with 9665
+  if (cleanPhone.startsWith("9665") && cleanPhone.length === 12) {
+    formatsToTry.push("0" + cleanPhone.substring(3)); // 05...
+    formatsToTry.push(cleanPhone.substring(3)); // 5...
+  }
+
+  console.log(`[GetEmail] Searching for phone formats:`, formatsToTry);
+
   try {
-    const snapshot = await admin.firestore().collection("users")
-      .where("phoneNumber", "==", cleanPhone)
-      .limit(1)
-      .get();
-      
-    if (!snapshot.empty) {
-      const userData = snapshot.docs[0].data();
-      return res.json({ success: true, email: userData.email });
-    } else {
-      // Fallback for case where user isn't in Firestore yet
-      return res.json({ success: true, email: `${cleanPhone}@hakkal.com` });
+    const usersRef = admin.firestore().collection("users");
+    
+    // Try each format until we find one
+    for (const f of formatsToTry) {
+      const snapshot = await usersRef.where("phoneNumber", "==", f).limit(1).get();
+      if (!snapshot.empty) {
+        const userData = snapshot.docs[0].data();
+        console.log(`[GetEmail] Found user with format ${f}: ${userData.email}`);
+        return res.json({ success: true, email: userData.email });
+      }
     }
+    
+    // Final fallback
+    console.log(`[GetEmail] No user found in Firestore. Using fallback email for ${cleanPhone}`);
+    return res.json({ success: true, email: `${cleanPhone}@hakkal.com` });
   } catch (error: any) {
+    console.error("[GetEmail Error]", error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Serve static files from the 'dist' directory in production
+const distPath = path.resolve(process.cwd(), 'dist');
+console.log(`[Static] Serving files from: ${distPath}`);
+console.log(`[Static] Current Directory (cwd): ${process.cwd()}`);
+
+app.use(express.static(distPath));
+
+// Handle SPA routing - serve index.html for all non-API routes
+app.get('*', (req, res) => {
+  if (!req.path.startsWith('/api/')) {
+    const indexPath = path.join(distPath, 'index.html');
+    res.sendFile(indexPath, (err) => {
+      if (err) {
+        console.error(`[Static Error] Failed to serve index.html from ${indexPath}:`, err);
+        res.status(500).send("Build files not found. Please run 'npm run build' and restart the server.");
+      }
+    });
   }
 });
 
 // Handle Server Start (Local, Render, etc. - except Vercel)
 if (!process.env.VERCEL) {
-  const PORT = process.env.PORT || 3001;
-  app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port: ${PORT}`));
+  const PORT = Number(process.env.PORT) || 3000;
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on port: ${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  });
 }
 
 module.exports = app;

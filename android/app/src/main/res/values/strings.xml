@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Hakkal Trading</string>
+    <string name="title_activity_main">Hakkal Trading</string>
+    <string name="package_name">com.hakkal.hakkalcompany</string>
+    <string name="custom_url_scheme">com.hakkal.hakkalcompany</string>
+</resources>

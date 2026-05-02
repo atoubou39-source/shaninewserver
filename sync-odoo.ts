@@ -100,7 +100,7 @@ async function sync() {
           id: op.id,
           name: op.name,
           description: op.description_sale || "Imported from Odoo ERP system.",
-          price: `SAR ${(op.list_price || 0).toLocaleString()}`,
+          price: `⃁ ${(op.list_price || 0).toLocaleString()}`,
           image: imageUrl,
           isOdoo: true,
           updatedAt: new Date().toISOString(),

@@ -438,7 +438,7 @@ async function startServer() {
               `).join('') : '<p>No items found</p>'}
               <div style="border-top: 1px solid #e2e8f0; margin-top: 10px; padding-top: 10px; display: flex; justify-content: space-between; font-weight: bold; color: #f97316;">
                 <span>Total Amount</span>
-                <span>SAR ${total ? total.toLocaleString() : '0'}</span>
+                <span>⃁ ${total ? total.toLocaleString() : '0'}</span>
               </div>
             </div>
             <p>We will contact you soon for delivery details.</p>
@@ -558,7 +558,7 @@ async function startServer() {
             district: "Olaya",
             paymentMethod: "cod",
             items: [
-              { id: 1, name: "Saffron Super Negin 5g", price: "SAR 12,500", quantity: 2 }
+              { id: 1, name: "Saffron Super Negin 5g", price: "⃁ 12,500", quantity: 2 }
             ],
             total: 25000,
             status: "completed",
@@ -573,7 +573,7 @@ async function startServer() {
             district: "Olaya",
             paymentMethod: "bank_transfer",
             items: [
-              { id: 2, name: "Saffron Pushal 10g", price: "SAR 18,000", quantity: 1 }
+              { id: 2, name: "Saffron Pushal 10g", price: "⃁ 18,000", quantity: 1 }
             ],
             total: 18000,
             status: "pending_approval",

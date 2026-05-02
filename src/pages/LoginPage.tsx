@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { signInWithEmailAndPassword, signInWithCustomToken } from 'firebase/auth';
 import { auth } from '../firebase';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Lock, Phone, ChevronLeft, AlertCircle, Globe, Eye, EyeOff } from 'lucide-react';
+import { Lock, Phone, ChevronLeft, AlertCircle, Globe, Eye, EyeOff, Key } from 'lucide-react';
 import { translations, Language } from '../translations';
 
 export const LoginPage = () => {
@@ -23,19 +23,27 @@ export const LoginPage = () => {
     setLang(prev => prev === 'en' ? 'ar' : 'en');
   };
 
+  const [step, setStep] = useState<'login' | 'otp' | 'set-password'>('login');
   const [loginInput, setLoginInput] = useState('');
   const [password, setPassword] = useState('');
+  const [otp, setOtp] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [resetSent, setResetSent] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
+  const getApiUrl = (path: string) => {
+    const baseUrl = (import.meta as any).env?.VITE_API_BASE_URL || "https://shaninewserver.onrender.com";
+    return `${baseUrl}${path}`;
+  };
+
   const translateError = (error: string) => {
     if (lang !== 'ar') return error;
     const lower = error.toLowerCase();
-    if (lower.includes('no user record') || lower.includes('user-not-found')) return 'بيانات الدخول غير صحيحة.';
+    if (lower.includes('no user record') || lower.includes('user-not-found') || lower.includes('invalid-credential')) return 'بيانات الدخول غير صحيحة.';
     if (lower.includes('wrong-password')) return 'كلمة المرور غير صحيحة.';
     if (lower.includes('invalid-email')) return 'بيانات الدخول غير صحيحة.';
     if (lower.includes('too-many-requests')) return 'محاولات كثيرة جداً. يرجى المحاولة لاحقاً.';
@@ -49,7 +57,6 @@ export const LoginPage = () => {
     setError('');
 
     try {
-      // Phone Sanitization Helper
       const sanitizePhone = (phone: string): string => {
         let clean = phone.replace(/\D/g, "");
         if (clean.startsWith("00966")) clean = clean.substring(2);
@@ -60,57 +67,120 @@ export const LoginPage = () => {
       };
 
       let loginEmail = loginInput;
+      const cleanPhone = !loginInput.includes('@') ? sanitizePhone(loginInput) : '';
       
-      // If it looks like a phone number, look it up via backend
-      if (!loginInput.includes('@')) {
-        const cleanPhone = sanitizePhone(loginInput);
-        
-        try {
-          const baseUrl = (import.meta as any).env?.VITE_API_BASE_URL || "http://localhost:3001";
-          const response = await fetch(`${baseUrl}/api/get-email-by-phone?phone=${encodeURIComponent(cleanPhone)}`);
-          const data = await response.json();
-          
-          if (data.success && data.email) {
-            loginEmail = data.email;
-          } else {
-            // Fallback to generated email if lookup fails
-            loginEmail = `${cleanPhone}@hakkal.com`;
+      if (cleanPhone) {
+        loginEmail = `${cleanPhone}@hakkal.com`;
+      }
+
+      try {
+        // Fast path: try signing in with default email format first
+        await signInWithEmailAndPassword(auth, loginEmail, password);
+      } catch (authErr: any) {
+        // Fallback: if user not found, check if they have a custom email via API
+        // Note: auth/invalid-credential is used in newer SDKs to hide if user exists
+        if ((authErr.code === 'auth/user-not-found' || authErr.code === 'auth/invalid-credential') && cleanPhone) {
+          try {
+            console.log(`[Auth Fallback] Attempting to find real email for phone: ${cleanPhone}`);
+            const response = await fetch(getApiUrl(`/api/get-email-by-phone?phone=${encodeURIComponent(cleanPhone)}`));
+            const data = await response.json();
+            if (data.success && data.email && data.email !== loginEmail) {
+              console.log(`[Auth Fallback] Found custom email: ${data.email}. Retrying login...`);
+              await signInWithEmailAndPassword(auth, data.email, password);
+            } else {
+              throw authErr;
+            }
+          } catch (apiErr) {
+            console.error("[Auth Fallback Error]", apiErr);
+            throw authErr;
           }
-        } catch (lookupErr) {
-          console.error("Email lookup failed:", lookupErr);
-          // Fallback to generated email
-          loginEmail = `${cleanPhone}@hakkal.com`;
+        } else {
+          throw authErr;
         }
       }
 
-      await signInWithEmailAndPassword(auth, loginEmail, password);
-      const from = (location.state as any)?.from?.pathname || "/";
-      navigate(from);
+      const from = (location.state as any)?.from?.pathname || "/dashboard";
+      navigate(from, { replace: true });
+
     } catch (err: any) {
-      console.error(err);
       setError(translateError(err.code || err.message || t.auth.loginError));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleResetPassword = async () => {
+  const handleSendOTP = async () => {
     if (!loginInput) {
       setError(t.auth.enterEmailFirst);
       return;
     }
     setLoading(true);
+    setError("");
     try {
-      let resetEmail = loginInput;
-      if (!loginInput.includes('@')) {
-        const cleanPhone = loginInput.replace(/\D/g, '');
-        resetEmail = `${cleanPhone}@hakkal.com`;
+      const response = await fetch(getApiUrl("/api/send-otp"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: loginInput, reason: 'reset' }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setStep('otp');
+      } else {
+        setError(data.error || "Failed to send verification code");
       }
-      await sendPasswordResetEmail(auth, resetEmail);
-      setResetSent(true);
-      setError('');
-    } catch (err: any) {
-      setError(t.auth.failedSendReset);
+    } catch (err) {
+      setError("Connection error.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOTP = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch(getApiUrl("/api/verify-otp"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: loginInput, otp }),
+      });
+      const data = await response.json();
+      if (data.success && data.uid) {
+        setStep('set-password');
+      } else {
+        setError(data.error || "Invalid verification code");
+      }
+    } catch (err) {
+      setError("Verification failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSetNewPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      setError(t.auth.passwordsDoNotMatch);
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch(getApiUrl("/api/verify-otp"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: loginInput, otp, password: newPassword }),
+      });
+      const data = await response.json();
+      if (data.success && data.customToken) {
+        await signInWithCustomToken(auth, data.customToken);
+        navigate("/dashboard");
+      } else {
+        setError(data.error || "Failed to save password");
+      }
+    } catch (err) {
+      setError("Operation failed.");
     } finally {
       setLoading(false);
     }
@@ -141,8 +211,12 @@ export const LoginPage = () => {
               className="h-20 w-auto object-contain"
             />
           </div>
-          <h2 className="text-3xl font-serif text-brand-navy mb-3">{t.auth.login}</h2>
-          <p className="text-gray-400 text-sm font-medium">{t.auth.welcomeBrand}</p>
+          <h2 className="text-3xl font-serif text-brand-navy mb-3">
+            {step === 'login' ? t.auth.login : step === 'otp' ? 'تأكيد الرمز' : 'كلمة مرور جديدة'}
+          </h2>
+          <p className="text-gray-400 text-sm font-medium">
+            {step === 'login' ? t.auth.welcomeBrand : step === 'otp' ? 'أدخل الكود المرسل لجوالك' : 'أدخل كلمة المرور الجديدة'}
+          </p>
         </div>
 
         {error && (
@@ -156,82 +230,144 @@ export const LoginPage = () => {
           </motion.div>
         )}
 
-        {resetSent && (
-          <div className="mb-8 p-4 bg-green-50 text-green-600 rounded-2xl text-sm text-center font-bold">
-            {t.auth.resetLinkSent}
-          </div>
+        {step === 'login' && (
+          <form onSubmit={handleLogin} className="space-y-6 relative">
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block ms-1">
+                {lang === 'ar' ? 'رقم الجوال' : 'Phone Number'}
+              </label>
+              <div className="relative">
+                <Phone className="absolute end-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <input 
+                  type="text" 
+                  required
+                  value={loginInput}
+                  onChange={(e) => setLoginInput(e.target.value)}
+                  className="w-full pe-12 ps-4 py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange focus:bg-white transition-all font-medium text-brand-navy text-start"
+                  placeholder="05XXXXXXXX"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex justify-between items-center px-1">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">
+                  {t.auth.password}
+                </label>
+                <button 
+                  type="button"
+                  onClick={handleSendOTP}
+                  className="text-[10px] font-bold text-brand-orange hover:text-brand-orange-hover transition-colors tracking-widest uppercase"
+                >
+                  {t.auth.forgotPassword}
+                </button>
+              </div>
+              <div className="relative">
+                <Lock className="absolute end-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <input 
+                  type={showPassword ? "text" : "password"} 
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full pe-12 ps-12 py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange focus:bg-white transition-all font-medium text-brand-navy"
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute start-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-brand-orange transition-colors"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+
+            <button 
+              type="submit"
+              disabled={loading}
+              className="w-full bg-brand-navy text-white py-5 rounded-2xl text-[11px] font-bold tracking-[0.2em] shadow-xl shadow-brand-navy/10 hover:bg-brand-orange transition-all duration-300 disabled:opacity-50 text-center"
+            >
+              {loading ? t.auth.verifying : t.auth.loginBtn}
+            </button>
+          </form>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-6 relative">
-          <div className="space-y-2">
-            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block ms-1">
-              {lang === 'ar' ? 'رقم الجوال أو البريد الإلكتروني' : 'Phone Number or Email'}
-            </label>
-            <div className="relative">
-              <Phone className="absolute end-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-              <input 
-                type="text" 
-                required
-                value={loginInput}
-                onChange={(e) => setLoginInput(e.target.value)}
-                className="w-full pe-12 ps-4 py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange focus:bg-white transition-all font-medium text-brand-navy text-start"
-                placeholder={lang === 'ar' ? "05XXXXXXXX" : "email@example.com"}
-              />
+        {step === 'otp' && (
+          <form onSubmit={handleVerifyOTP} className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block ms-1">كود التحقق</label>
+              <div className="relative">
+                <Key className="absolute end-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <input 
+                  type="text" 
+                  required
+                  maxLength={6}
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                  className="w-full pe-12 ps-4 py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange text-center text-2xl font-bold tracking-[0.5em]"
+                  placeholder="000000"
+                />
+              </div>
             </div>
+            <button 
+              type="submit"
+              disabled={loading}
+              className="w-full bg-brand-navy text-white py-5 rounded-2xl text-[11px] font-bold tracking-[0.2em] hover:bg-brand-orange transition-all"
+            >
+              {loading ? "جاري التأكد..." : "تحقق من الكود"}
+            </button>
+            <button type="button" onClick={() => setStep('login')} className="w-full text-gray-400 text-[10px] font-bold uppercase text-center">رجوع</button>
+          </form>
+        )}
+
+        {step === 'set-password' && (
+          <form onSubmit={handleSetNewPassword} className="space-y-6">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block ms-1">كلمة المرور الجديدة</label>
+                <input 
+                  type="password" 
+                  required
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange"
+                  placeholder="••••••••"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block ms-1">تأكيد كلمة المرور</label>
+                <input 
+                  type="password" 
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange"
+                  placeholder="••••••••"
+                />
+              </div>
+            </div>
+            <button 
+              type="submit"
+              disabled={loading}
+              className="w-full bg-brand-navy text-white py-5 rounded-2xl text-[11px] font-bold tracking-[0.2em] hover:bg-brand-orange transition-all"
+            >
+              {loading ? "جاري الحفظ..." : "حفظ كلمة المرور والدخول"}
+            </button>
+          </form>
+        )}
+
+        {step === 'login' && (
+          <div className="mt-12 text-center">
+            <p className="text-gray-400 text-xs font-medium mb-4">{t.auth.noAccount}</p>
+            <Link 
+              to="/register" 
+              className="inline-flex items-center space-x-2 space-x-reverse text-brand-orange font-bold text-[11px] tracking-widest uppercase hover:text-brand-orange-hover transition-colors"
+            >
+              <span>{t.auth.register}</span>
+              <ChevronLeft size={16} className={lang === 'ar' ? "" : "rotate-180"} />
+            </Link>
           </div>
-
-          <div className="space-y-2">
-            <div className="flex justify-between items-center px-1">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">
-                {t.auth.password}
-              </label>
-              <button 
-                type="button"
-                onClick={handleResetPassword}
-                className="text-[10px] font-bold text-brand-orange hover:text-brand-orange-hover transition-colors tracking-widest uppercase"
-              >
-                {t.auth.forgotPassword}
-              </button>
-            </div>
-            <div className="relative">
-              <Lock className="absolute end-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-              <input 
-                type={showPassword ? "text" : "password"} 
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full pe-12 ps-12 py-5 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:border-brand-orange focus:bg-white transition-all font-medium text-brand-navy"
-                placeholder="••••••••"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute start-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-brand-orange transition-colors"
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-          </div>
-
-          <button 
-            type="submit"
-            disabled={loading}
-            className="w-full bg-brand-navy text-white py-5 rounded-2xl text-[11px] font-bold tracking-[0.2em] shadow-xl shadow-brand-navy/10 hover:bg-brand-orange transition-all duration-300 disabled:opacity-50 text-center"
-          >
-            {loading ? t.auth.verifying : t.auth.loginBtn}
-          </button>
-        </form>
-
-        <div className="mt-12 text-center">
-          <p className="text-gray-400 text-xs font-medium mb-4">{t.auth.noAccount}</p>
-          <Link 
-            to="/register" 
-            className="inline-flex items-center space-x-2 space-x-reverse text-brand-orange font-bold text-[11px] tracking-widest uppercase hover:text-brand-orange-hover transition-colors"
-          >
-            <span>{t.auth.register}</span>
-            <ChevronLeft size={16} className={lang === 'ar' ? "" : "rotate-180"} />
-          </Link>
-        </div>
+        )}
       </motion.div>
     </div>
   );

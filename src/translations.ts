@@ -37,7 +37,7 @@ export const translations = {
       loginToOrder: "LOGIN TO ORDER",
       showMore: "EXPLORE FULL COLLECTION (29 PRODUCTS)",
       showLess: "SHOW LESS",
-      pricePrefix: "SAR ",
+      pricePrefix: "⃁ ",
       loginMessage: "Login to see price and order",
       noProducts: "No products available at the moment",
       syncReminder: "Please ensure products are synced from the Admin panel.",
@@ -94,10 +94,10 @@ export const translations = {
       creatingAccount: "CREATING ACCOUNT...",
       tooManyAttempts: "Too many attempts. Please try again later.",
       loginError: "Login error. Please check your credentials.",
-      enterEmailFirst: "Please enter email first.",
-      failedSendReset: "Failed to send reset link.",
+      enterEmailFirst: "Please enter phone number first.",
+      failedSendReset: "Failed to send verification code.",
       welcomeBrand: "Welcome to Hakkal Trading",
-      resetLinkSent: "Password reset link sent to your email.",
+      resetLinkSent: "Verification code sent to your phone.",
     },
     pending: {
       title: "Account Pending Activation",
@@ -224,7 +224,7 @@ export const translations = {
       orders: "Orders",
       ordersText: "Orders are subject to availability and confirmation via email or WhatsApp.",
       pricing: "Pricing",
-      pricingText: "All prices are in Saudi Riyal (SAR).",
+      pricingText: "All prices are in the new currency.",
       payment: "Payment",
       paymentText: "Accepted methods: bank transfer, online payment, or cash on delivery (COD).",
       deliveryShipping: "Delivery & Shipping",
@@ -389,7 +389,12 @@ export const translations = {
         invoiceNotIssued: "Invoice not issued yet",
         updating: "Updating...",
         syncStatus: "Sync Status",
-        downloadPdf: "Download PDF"
+        downloadPdf: "Download PDF",
+        deleteAccount: "Delete Account",
+        deleteAccountConfirm: "Are you sure you want to delete your account? This action is permanent and cannot be undone. All your data will be removed from our systems.",
+        deleteAccountBtn: "DELETE MY ACCOUNT",
+        deleteAccountTitle: "Account Security",
+        deleteAccountWarning: "Warning: Deleting your account will remove all your order history and profile data."
       }
     }
   },
@@ -428,7 +433,7 @@ export const translations = {
       loginToOrder: "سجل دخول للطلب",
       showMore: "استكشف المجموعة الكاملة (29 منتج)",
       showLess: "عرض أقل",
-      pricePrefix: "ر.س ",
+      pricePrefix: "⃁ ",
       loginMessage: "سجل دخول لمشاهدة السعر والطلب",
       noProducts: "لا توجد منتجات متاحة حالياً",
       syncReminder: "يرجى التأكد من مزامنة المنتجات من لوحة الإدارة.",
@@ -485,10 +490,10 @@ export const translations = {
       creatingAccount: "جاري إنشاء الحساب...",
       tooManyAttempts: "محاولات كثيرة جداً. يرجى المحاولة لاحقاً.",
       loginError: "حدث خطأ أثناء تسجيل الدخول. يرجى التأكد من بياناتك.",
-      enterEmailFirst: "يرجى إدخال البريد الإلكتروني أولاً.",
-      failedSendReset: "فشل إرسال رابط إعادة التعيين. تأكد من صحة البريد.",
+      enterEmailFirst: "يرجى إدخال رقم الجوال أولاً.",
+      failedSendReset: "فشل إرسال كود التحقق.",
       welcomeBrand: "مرحباً بك في شركة حقال للتجارة",
-      resetLinkSent: "تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.",
+      resetLinkSent: "تم إرسال كود التحقق إلى جوالك.",
     },
     pending: {
       title: "حسابك قيد التفعيل",
@@ -607,7 +612,7 @@ export const translations = {
       orders: "الطلبات",
       ordersText: "الطلبات تخضع للتوفر والتأكيد عبر البريد الإلكتروني أو الواتساب.",
       pricing: "الأسعار",
-      pricingText: "جميع الأسعار بالريال السعودي (ر.س).",
+      pricingText: "جميع الأسعار بالعملة الجديدة.",
       payment: "الدفع",
       paymentText: "الطرق المقبولة: التحويل البنكي، الدفع الإلكتروني، أو الدفع عند الاستلام.",
       deliveryShipping: "التوصيل والشحن",
@@ -772,7 +777,12 @@ export const translations = {
         invoiceNotIssued: "لم تصدر الفاتورة بعد",
         updating: "جاري التحديث...",
         syncStatus: "تحديث الحالة",
-        downloadPdf: "تحميل PDF"
+        downloadPdf: "تحميل PDF",
+        deleteAccount: "حذف الحساب",
+        deleteAccountConfirm: "هل أنت متأكد من رغبتك في حذف حسابك؟ هذا الإجراء نهائي ولا يمكن التراجع عنه. سيتم إزالة جميع بياناتك من أنظمتنا.",
+        deleteAccountBtn: "حذف حسابي نهائياً",
+        deleteAccountTitle: "أمان الحساب",
+        deleteAccountWarning: "تحذير: حذف الحساب سيؤدي إلى إزالة سجل الطلبات وبيانات الملف الشخصي بالكامل."
       }
     },
     contactInfo: {

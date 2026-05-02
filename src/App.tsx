@@ -14,6 +14,7 @@ import {
   Instagram, 
   Youtube,
   ChevronRight,
+  ChevronLeft,
   ArrowRight,
   MousePointer2,
   Truck,
@@ -45,7 +46,8 @@ import {
   RefreshCw,
   ArrowUpCircle,
   Percent,
-  ShoppingCart
+  ShoppingCart,
+  AlertTriangle
 } from "lucide-react";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation, Navigate } from "react-router-dom";
@@ -71,6 +73,7 @@ import {
   signInWithCustomToken,
   sendPasswordResetEmail,
   signOut, 
+  deleteUser,
   User 
 } from "firebase/auth";
 import { db, auth, googleProvider } from "./firebase";
@@ -83,6 +86,8 @@ import { DiscountsManager } from "./components/admin/DiscountsManager";
 import { useAuth } from "./hooks/useAuth";
 
 import { translations, Language } from "./translations";
+import { usePushNotifications } from "./hooks/usePushNotifications";
+
 
 // --- Types ---
 
@@ -212,7 +217,7 @@ const INITIAL_PRODUCTS: Product[] = [
     "id": 23,
     "name": "Acoustic Bloc Screens",
     "description": "Premium Sri Lankan Selection.",
-    "price": "SAR 295",
+    "price": "⃁ 295",
     "image": "https://picsum.photos/seed/23/400/400",
     "isOdoo": true
   },
@@ -220,7 +225,7 @@ const INITIAL_PRODUCTS: Product[] = [
     "id": 37,
     "name": "Booking Fees",
     "description": "Premium Sri Lankan Selection.",
-    "price": "SAR 50",
+    "price": "⃁ 50",
     "image": "https://picsum.photos/seed/37/400/400",
     "isOdoo": true
   },
@@ -228,7 +233,7 @@ const INITIAL_PRODUCTS: Product[] = [
     "id": 15,
     "name": "Cabinet with Doors",
     "description": "Premium Sri Lankan Selection.",
-    "price": "SAR 140",
+    "price": "⃁ 140",
     "image": "https://picsum.photos/seed/15/400/400",
     "isOdoo": true
   },
@@ -236,7 +241,7 @@ const INITIAL_PRODUCTS: Product[] = [
     "id": 50,
     "name": "Cable Management Box",
     "description": "Premium Sri Lankan Selection.",
-    "price": "SAR 120",
+    "price": "⃁ 120",
     "image": "https://picsum.photos/seed/50/400/400",
     "isOdoo": true
   },
@@ -244,7 +249,7 @@ const INITIAL_PRODUCTS: Product[] = [
     "id": 49,
     "name": "Cable Management Box",
     "description": "Premium Sri Lankan Selection.",
-    "price": "SAR 100",
+    "price": "⃁ 100",
     "image": "https://picsum.photos/seed/49/400/400",
     "isOdoo": true
   },
@@ -252,7 +257,7 @@ const INITIAL_PRODUCTS: Product[] = [
     "id": 36,
     "name": "Chair floor protection",
     "description": "Office chairs can harm your floor: protect it.",
-    "price": "SAR 12",
+    "price": "⃁ 12",
     "image": "https://picsum.photos/seed/36/400/400",
     "isOdoo": true
   },
@@ -260,7 +265,7 @@ const INITIAL_PRODUCTS: Product[] = [
     "id": 16,
     "name": "Conference Chair",
     "description": "Premium Selection.",
-    "price": "SAR 33",
+    "price": "⃁ 33",
     "image": "https://picsum.photos/seed/16/400/400",
     "isOdoo": true
   },
@@ -268,7 +273,7 @@ const INITIAL_PRODUCTS: Product[] = [
     "id": 18,
     "name": "Corner Desk Left Sit",
     "description": "Premium Selection.",
-    "price": "SAR 85",
+    "price": "⃁ 85",
     "image": "https://picsum.photos/seed/18/400/400",
     "isOdoo": true
   },
@@ -276,7 +281,7 @@ const INITIAL_PRODUCTS: Product[] = [
     "id": 10,
     "name": "Corner Desk Right Sit",
     "description": "Premium Selection.",
-    "price": "SAR 147",
+    "price": "⃁ 147",
     "image": "https://picsum.photos/seed/10/400/400",
     "isOdoo": true
   },
@@ -284,7 +289,7 @@ const INITIAL_PRODUCTS: Product[] = [
     "id": 9,
     "name": "Customizable Desk",
     "description": "160x80cm, with large legs.",
-    "price": "SAR 750",
+    "price": "⃁ 750",
     "image": "https://picsum.photos/seed/9/400/400",
     "isOdoo": true
   }
@@ -338,35 +343,28 @@ const getStatusDetails = (status: string, t: any) => {
 };
 
 const getApiUrl = (path: string) => {
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  
+  // In production (served from the same origin), relative paths are best and work everywhere
+  if (import.meta.env.PROD) {
+    return cleanPath;
+  }
+
+  // In development, handle localhost switching
   const isLocalhost = typeof window !== 'undefined' && 
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-  const envBase = (import.meta as any).env?.VITE_API_BASE_URL;
-  const cleanPath = path.startsWith('/') ? path : `/${path}`;
-
-  // If VITE_API_BASE_URL is set and not the placeholder, use it
-  if (envBase && envBase !== "https://your-backend-domain.com") {
-    const cleanBase = envBase
-      .trim()
-      .replace(/^[/\)\s;`"']+/, "")
-      .replace(/[/\)\s;`"']+$/, "");
     
-    const finalBase = cleanBase.startsWith('http') ? cleanBase : `https://${cleanBase}`;
-    const finalUrl = finalBase.endsWith('/api') && cleanPath.startsWith('/api') 
-      ? `${finalBase}${cleanPath.substring(4)}` 
-      : `${finalBase}${cleanPath}`;
-    
-    console.log(`[API URL] Using ENV base: ${finalUrl}`);
-    return finalUrl;
-  }
-
-  // If localhost and no base URL, default to port 3001
   if (isLocalhost) {
-    const url = `http://localhost:3001${cleanPath}`;
-    console.log(`[API URL] Localhost detected, using: ${url}`);
-    return url;
+    // Try to match the backend port (3000 is our new default)
+    return `http://localhost:3000${cleanPath}`;
   }
 
-  console.log(`[API URL] Fallback to relative: ${cleanPath}`);
+  // Fallback to whatever is in env if provided, else relative
+  const envBase = (import.meta as any).env?.VITE_API_BASE_URL;
+  if (envBase && envBase.startsWith('http')) {
+    return `${envBase.replace(/\/$/, '')}${cleanPath}`;
+  }
+
   return cleanPath;
 };
 
@@ -600,71 +598,78 @@ const Navbar = ({
     </nav>
   );
 };
-
 const Hero = ({ t }: { t: any }) => {
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const slides = [
+    "https://i.postimg.cc/rshF2439/6.png",
+    "https://i.postimg.cc/rshF2439/6.png",
+    "https://i.postimg.cc/rshF2439/6.png",
+  ];
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % slides.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [slides.length]);
+
   return (
-    <section className="relative min-h-screen bg-white flex items-center pt-20 overflow-hidden">
-      {/* Background elements */}
-      <div className="absolute top-0 right-0 w-1/2 h-full opacity-5 pointer-events-none">
-        <div className="absolute top-1/4 right-0 w-96 h-96 bg-brand-orange rounded-full blur-[120px]" />
+    <section className="relative h-screen bg-white overflow-hidden pt-20">
+      {/* Slider Background */}
+      <div className="absolute inset-0 z-0">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentSlide}
+            initial={{ opacity: 0, scale: 1.05 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 1.5, ease: "easeInOut" }}
+            className="absolute inset-0 flex items-center justify-center"
+          >
+            <div className="absolute inset-0 bg-gradient-to-b from-white/10 via-transparent to-white/40 z-10" />
+            <img 
+              src={slides[currentSlide]} 
+              alt={`Slide ${currentSlide + 1}`}
+              className="w-full h-full object-cover md:object-contain select-none"
+              referrerPolicy="no-referrer"
+            />
+          </motion.div>
+        </AnimatePresence>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 w-full grid md:grid-cols-2 gap-12 items-center relative z-10 text-center md:text-left">
-        <motion.div
-          initial={{ opacity: 0, x: -50 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.8 }}
-          className="flex flex-col items-center md:items-start"
-        >
-          <div className="flex items-center space-x-3 space-x-reverse mb-6">
-            <div className="h-[1px] w-12 bg-brand-orange" />
-            <span className="text-brand-orange text-[10px] tracking-[0.4em] uppercase font-bold">
-              {t.hero.subtitle}
-            </span>
-          </div>
-          
-          <h1 className={`text-brand-navy ${t.hero.titleMain.includes('تحفة') ? 'text-6xl md:text-9xl font-bold leading-[1.2]' : 'text-5xl md:text-8xl font-serif leading-tight'} mb-8`}>
-            {t.hero.titleMain} <br />
-            {t.hero.titleSub}<span className={`${t.hero.titleMain.includes('تحفة') ? 'text-brand-orange' : 'text-brand-orange italic'}`}>{t.hero.titleItalic}</span>
-          </h1>
-          
-          <p className="text-brand-slate text-base md:text-lg max-w-md mb-10 leading-relaxed font-medium">
-            {t.hero.description}
-          </p>
-          
-          <div className="flex flex-col sm:flex-row items-center sm:items-start space-y-4 sm:space-y-0 sm:space-x-6 space-x-reverse w-full md:w-auto">
-            <button 
-              onClick={() => document.getElementById('collection')?.scrollIntoView({ behavior: 'smooth' })}
-              className="w-full sm:w-auto bg-brand-orange hover:bg-brand-orange-hover text-white px-10 py-5 text-[10px] tracking-[0.2em] font-bold transition-all shadow-xl shadow-brand-orange/20"
-            >
-              {t.hero.exploreBtn}
-            </button>
-            <button 
-              onClick={() => document.getElementById('chef')?.scrollIntoView({ behavior: 'smooth' })}
-              className="w-full sm:w-auto border border-brand-navy/10 hover:border-brand-navy/30 text-brand-navy px-10 py-5 text-[10px] tracking-[0.2em] font-bold transition-all"
-            >
-              {t.hero.meetChefBtn}
-            </button>
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 1, delay: 0.2 }}
-          className="relative mt-16 md:mt-0"
-        >
-          <div className="absolute inset-0 bg-brand-orange/5 rounded-full blur-[80px]" />
-          <img 
-            src="https://i.postimg.cc/rshF2439/6.png" 
-            alt="Product Collection Banner" 
-            className="w-full h-auto object-contain relative z-10"
-            referrerPolicy="no-referrer"
+      {/* Slider Navigation Dots */}
+      <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-20 flex space-x-3 space-x-reverse">
+        {slides.map((_, i) => (
+          <button
+            key={i}
+            onClick={() => setCurrentSlide(i)}
+            className={`w-2 h-2 rounded-full transition-all duration-500 ${
+              currentSlide === i ? "bg-brand-orange w-8" : "bg-brand-navy/20"
+            }`}
           />
-        </motion.div>
+        ))}
       </div>
 
-      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center space-y-2">
+      {/* Manual Navigation Arrows */}
+      <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-between px-4 md:px-10">
+        <button 
+          onClick={() => setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length)}
+          className="pointer-events-auto p-3 rounded-full bg-white/10 hover:bg-white/30 text-brand-navy backdrop-blur-sm transition-all group"
+          aria-label="Previous slide"
+        >
+          <ChevronRight className="group-hover:-translate-x-1 transition-transform" size={24} />
+        </button>
+        <button 
+          onClick={() => setCurrentSlide((prev) => (prev + 1) % slides.length)}
+          className="pointer-events-auto p-3 rounded-full bg-white/10 hover:bg-white/30 text-brand-navy backdrop-blur-sm transition-all group"
+          aria-label="Next slide"
+        >
+          <ChevronRight className="rotate-180 group-hover:translate-x-1 transition-transform" size={24} />
+        </button>
+      </div>
+
+      {/* Scroll Indicator */}
+      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center space-y-2 z-10">
         <div className="w-[1px] h-12 bg-brand-navy/10 relative">
           <motion.div 
             animate={{ top: ["0%", "100%"], opacity: [0, 1, 0] }}
@@ -677,6 +682,7 @@ const Hero = ({ t }: { t: any }) => {
     </section>
   );
 };
+
 
 const FeaturesBar = ({ t }: { t: any }) => {
   const features = [
@@ -1128,7 +1134,7 @@ const CustomerLoginPage = () => {
     try {
       // Sanitize phone for email
       const justDigits = phone.replace(/\D/g, "");
-      const email = `${justDigits}@customer.com`;
+      const email = `${justDigits}@hakkal.com`;
       await signInWithEmailAndPassword(auth, email, password);
       navigate("/dashboard");
     } catch (err: any) {
@@ -1435,7 +1441,7 @@ const AuthModal = ({
     setLoading(true);
     setError("");
     try {
-      const email = identifier.includes("@") ? identifier : `${identifier}@customer.com`;
+      const email = identifier.includes("@") ? identifier : `${identifier}@hakkal.com`;
       await signInWithEmailAndPassword(auth, email, password);
       onClose();
     } catch (err: any) {
@@ -1662,7 +1668,17 @@ const CartDrawer = ({
                             >
                               <Minus size={14} />
                             </button>
-                            <span className="w-8 text-center text-xs font-bold text-brand-navy">{item.quantity}</span>
+                            <input 
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              value={item.quantity}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/[^0-9]/g, '');
+                                if (val) onUpdateQuantity(item.id, parseInt(val) - item.quantity);
+                              }}
+                              className="w-10 text-center text-xs font-bold text-brand-navy bg-transparent border-none focus:outline-none focus:ring-0"
+                            />
                             <button 
                               onClick={() => onUpdateQuantity(item.id, 1)}
                               className="p-1.5 hover:bg-gray-50 text-gray-400 transition-colors"
@@ -1737,13 +1753,12 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
         // Step 1: Initial population from Auth
         setFormData(prev => {
           console.log("[Checkout] Step 1: Initial population", { currentSalesRep: prev.salesRep });
-          if (prev.customerName && prev.salesRep && prev.salesRep !== t.orders.dashboard.loading) return prev;
           return {
             ...prev,
             customerName: prev.customerName || user.displayName || "",
             email: prev.email || user.email || "",
             phone1: prev.phone1 || user.phoneNumber || "",
-            salesRep: prev.salesRep || (lang === 'ar' ? "جاري التحميل..." : "Loading..."),
+            salesRep: (lang === 'ar' ? "جاري التحميل..." : "Loading..."),
           };
         });
 
@@ -1896,10 +1911,10 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
       return;
     }
     
-    if (!formData.customerName?.trim() || !formData.email?.trim() || !formData.phone1?.trim() || !formData.address?.trim()) {
+    if (!formData.phone1?.trim()) {
       setModalContent({
         title: t.checkout.alert,
-        message: t.checkout.fillRequired,
+        message: (lang === 'ar' ? "يرجى إدخال رقم الهاتف" : "Please enter your phone number"),
         type: 'error'
       });
       return;
@@ -1911,9 +1926,9 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
     
     let cleanOrderData: any = null;
     try {
-      // Validate required fields before creating order
-      if (!formData.customerName?.trim() || !formData.email?.trim() || !formData.phone1?.trim() || !formData.address?.trim()) {
-        throw new Error("Missing required fields: customerName, email, phone1, or address");
+      // Validate mandatory fields (Phone is essential)
+      if (!formData.phone1?.trim()) {
+        throw new Error("Missing required field: phone1");
       }
 
       // Robust total calculation to avoid NaN
@@ -1930,11 +1945,11 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
 
       const orderData = {
         userId: user?.uid || null,
-        customerName: formData.customerName.trim(),
-        email: formData.email.trim(),
+        customerName: (formData.customerName || "").trim() || (lang === 'ar' ? "عميل جديد" : "New Customer"),
+        email: (formData.email || "").trim(),
         phone1: formData.phone1.trim(),
         phone2: (formData.phone2 || "").trim(),
-        address: formData.address.trim(),
+        address: (formData.address || "").trim(),
         city: formData.city?.trim() || "Not Provided",
         district: formData.district?.trim() || "Not Provided",
         salesRep: (formData.salesRep === t.orders.dashboard.loading || formData.salesRep === (lang === 'ar' ? "جاري التحميل..." : "Loading...")) 
@@ -2320,7 +2335,7 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
                         {items.map(item => (
                           <div key={item.id} className="flex justify-between items-center">
                             <span className="text-brand-navy font-medium">{item.name}</span>
-                            <span className="text-gray-500 text-sm">× {item.quantity} {item.price}</span>
+                            <span className="text-gray-500 text-sm">× {item.quantity} {t.products.pricePrefix}{item.price.replace(/[^\d.]/g, '')}</span>
                           </div>
                         ))}
                       </div>
@@ -2955,6 +2970,135 @@ const RefundModal = ({ isOpen, onClose, t }: { isOpen: boolean, onClose: () => v
 };
 
 // --- Customer Dashboard Components ---
+const DashboardCarousel = ({ lang, t }: { lang: Language, t: any }) => {
+  const banners = [
+    "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&q=80&w=1200",
+    "https://images.unsplash.com/photo-1532336414038-cf19250c5757?auto=format&fit=crop&q=80&w=1200",
+    "https://images.unsplash.com/photo-1506368249639-73a05d6f6488?auto=format&fit=crop&q=80&w=1200",
+    "https://images.unsplash.com/photo-1599940824399-b87987ceb72a?auto=format&fit=crop&q=80&w=1200"
+  ];
+  
+  const isRtl = lang === 'ar';
+  const bannerCount = banners.length;
+  
+  // 3 sets of banners for seamless infinite scroll
+  const extendedBanners = [...banners, ...banners, ...banners];
+  const [index, setIndex] = useState(bannerCount);
+  const [isTransitioning, setIsTransitioning] = useState(true);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setIndex((prev) => prev + 1);
+      setIsTransitioning(true);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const nextSlide = () => {
+    setIsTransitioning(true);
+    setIndex(prev => prev + 1);
+  };
+
+  const prevSlide = () => {
+    setIsTransitioning(true);
+    setIndex(prev => prev - 1);
+  };
+
+  const handleTransitionEnd = () => {
+    if (index >= bannerCount * 2) {
+      setIsTransitioning(false);
+      setIndex(index - bannerCount);
+    } else if (index < bannerCount) {
+      setIsTransitioning(false);
+      setIndex(index + bannerCount);
+    }
+  };
+
+  const activeDot = index % bannerCount;
+
+  return (
+    <div className="relative w-full mb-12 select-none group">
+      <div className="relative h-52 md:h-96 overflow-hidden rounded-[2.5rem]">
+        <motion.div 
+          className="flex h-full"
+          style={{ 
+            gap: '16px',
+            paddingLeft: '7.5%',
+            paddingRight: '7.5%'
+          }}
+          drag="x"
+          dragConstraints={{ left: 0, right: 0 }}
+          onDragEnd={(_, info) => {
+            if (info.offset.x > 50) prevSlide();
+            else if (info.offset.x < -50) nextSlide();
+          }}
+          animate={{ 
+            x: isRtl 
+              ? `calc(${index} * (85% + 16px))` 
+              : `calc(-${index} * (85% + 16px))` 
+          }}
+          transition={isTransitioning ? { type: "spring", stiffness: 150, damping: 25 } : { duration: 0 }}
+          onAnimationComplete={handleTransitionEnd}
+        >
+          {extendedBanners.map((src, i) => (
+            <motion.div 
+              key={i} 
+              className="relative min-w-[85%] h-full flex-shrink-0 rounded-[2.5rem] overflow-hidden shadow-xl border-2 border-white/50 bg-gray-50"
+              animate={{ 
+                scale: (index === i) ? 1 : 0.92,
+                opacity: (index === i) ? 1 : 0.6,
+              }}
+              transition={{ duration: 0.5 }}
+            >
+              <img
+                src={src}
+                alt=""
+                className="w-full h-full object-cover pointer-events-none"
+                draggable={false}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
+            </motion.div>
+          ))}
+        </motion.div>
+
+        {/* Navigation Arrows */}
+        <div className="absolute inset-0 flex items-center justify-between px-4 md:px-10 pointer-events-none">
+          <button 
+            onClick={prevSlide}
+            className="pointer-events-auto p-3 rounded-full bg-white/20 hover:bg-white/40 text-white backdrop-blur-md transition-all opacity-0 group-hover:opacity-100 shadow-lg"
+          >
+            {isRtl ? <ChevronRight size={24} /> : <ChevronLeft size={24} />}
+          </button>
+          <button 
+            onClick={nextSlide}
+            className="pointer-events-auto p-3 rounded-full bg-white/20 hover:bg-white/40 text-white backdrop-blur-md transition-all opacity-0 group-hover:opacity-100 shadow-lg"
+          >
+            {isRtl ? <ChevronLeft size={24} /> : <ChevronRight size={24} />}
+          </button>
+        </div>
+      </div>
+      
+      {/* Dots */}
+      <div className="flex justify-center space-x-3 space-x-reverse mt-6">
+        {banners.map((_, i) => (
+          <button 
+            key={i}
+            onClick={() => {
+              setIsTransitioning(true);
+              setIndex(bannerCount + i);
+            }}
+            className={`h-2 rounded-full transition-all duration-500 ${
+              activeDot === i 
+                ? "bg-brand-orange w-8 shadow-md shadow-brand-orange/20" 
+                : "bg-gray-300 w-2 hover:bg-gray-400"
+            }`}
+            aria-label={`Go to slide ${i + 1}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
 
 const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory }: { orders: Order[], user: User | null, t: any, lang: Language, onViewHistory: (orderName: string, firebaseId?: string, status?: string, createdAt?: string) => void }) => {
   const [isSyncing, setIsSyncing] = useState(false);
@@ -2967,7 +3111,7 @@ const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory }: { o
 
   const downloadInvoicePDF = (order: Order) => {
     const dir = isRtl ? 'rtl' : 'ltr';
-    const date = new Date(order.createdAt).toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const date = new Date(order.createdAt).toLocaleDateString(isRtl ? 'ar-SA-u-ca-gregory' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     const invoiceNum = order.invoiceName || order.odooOrderName || `#${order.firebaseId.slice(0,8).toUpperCase()}`;
     const html = `<!DOCTYPE html><html dir="${dir}" lang="${isRtl ? 'ar' : 'en'}">
 <head>
@@ -3042,13 +3186,13 @@ const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory }: { o
           <tr>
             <td>${item.name || item.productName || '-'}</td>
             <td>${item.quantity || item.qty || 1}</td>
-            <td>${item.price?.toLocaleString() || '-'} ${isRtl ? 'ر.س' : 'SAR'}</td>
-            <td>${((item.price || 0) * (item.quantity || item.qty || 1)).toLocaleString()} ${isRtl ? 'ر.س' : 'SAR'}</td>
+            <td>${item.price?.toLocaleString() || '-'} ⃁</td>
+            <td>${((item.price || 0) * (item.quantity || item.qty || 1)).toLocaleString()} ⃁</td>
           </tr>
         `).join('')}
         <tr class="total-row">
           <td colspan="3">${isRtl ? 'الإجمالي' : 'TOTAL'}</td>
-          <td>${order.total?.toLocaleString()} ${isRtl ? 'ر.س' : 'SAR'}</td>
+          <td>${order.total?.toLocaleString()} ⃁</td>
         </tr>
       </tbody>
     </table>
@@ -3139,6 +3283,7 @@ const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory }: { o
   
   return (
     <div className="space-y-8">
+
       <div className="flex justify-between items-center">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
@@ -3163,7 +3308,8 @@ const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory }: { o
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
         {[
           { 
             label: t.orders.dashboard.totalOrders, 
@@ -3192,52 +3338,57 @@ const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory }: { o
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.1 }}
-            className="bg-white p-8 rounded-[2rem] shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
+            className="bg-white p-6 md:p-8 rounded-2xl md:rounded-[2.5rem] shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
           >
-            <div className={`flex items-center justify-between mb-4 ${lang === 'ar' ? 'flex-row-reverse' : ''}`}>
-              <div className={`w-12 h-12 ${card.bg} rounded-2xl flex items-center justify-center ${card.text}`}>
-                <card.icon size={24} />
+            <div className={`flex items-center justify-between mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <div className={`w-10 h-10 md:w-12 md:h-12 ${card.bg} rounded-xl md:rounded-2xl flex items-center justify-center ${card.text}`}>
+                <card.icon size={20} className="md:w-6 md:h-6" />
               </div>
-              <span className="text-2xl font-serif font-bold text-brand-navy">{card.value}</span>
+              <span className="text-xl md:text-2xl font-serif font-bold text-brand-navy">{card.value}</span>
             </div>
-            <p className={`text-gray-400 text-[10px] font-bold uppercase tracking-widest ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{card.label}</p>
+            <p className={`text-gray-400 text-[10px] font-bold uppercase tracking-widest ${isRtl ? 'text-right' : 'text-left'}`}>{card.label}</p>
           </motion.div>
         ))}
       </div>
 
+      {/* Recent Orders Section */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
-        className="bg-white rounded-[2rem] shadow-sm border border-gray-100 p-8"
+        className="bg-white rounded-2xl md:rounded-[2.5rem] shadow-sm border border-gray-100 p-5 md:p-8"
       >
-        <div className={`flex items-center justify-between mb-8 ${lang === 'ar' ? 'flex-row-reverse' : ''}`}>
-          <h3 className="text-xl font-serif text-brand-navy font-bold">{t.orders.dashboard.recentOrders}</h3>
-          <button className="text-brand-orange text-xs font-bold uppercase tracking-widest hover:underline">
+        <div className={`flex items-center justify-between mb-6 md:mb-8 ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <h3 className="text-lg md:text-xl font-serif text-brand-navy font-bold">{t.orders.dashboard.recentOrders}</h3>
+          <button 
+            onClick={() => window.location.href = '/dashboard/orders'}
+            className="text-brand-orange text-[10px] font-bold uppercase tracking-widest hover:underline"
+          >
             {t.orders.dashboard.viewAll}
           </button>
         </div>
         
-        <div className="overflow-x-auto">
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-50">
-                <th className={`pb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.orderId}</th>
-                <th className={`pb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.date}</th>
-                <th className={`pb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.invoiceId}</th>
-                <th className={`pb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.total}</th>
-                <th className={`pb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.status}</th>
+                <th className={`pb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${isRtl ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.orderId}</th>
+                <th className={`pb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${isRtl ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.date}</th>
+                <th className={`pb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${isRtl ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.invoiceId}</th>
+                <th className={`pb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${isRtl ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.total}</th>
+                <th className={`pb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${isRtl ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.status}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {customerOrders.slice(0, 5).map((order) => (
                 <tr key={order.firebaseId} className="group hover:bg-gray-50/50 transition-colors">
-                  <td className={`py-5 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
+                  <td className={`py-5 ${isRtl ? 'text-right' : 'text-left'}`}>
                     <span className="text-[10px] font-mono text-gray-400 bg-gray-50 px-2 py-1 rounded">#{order.firebaseId.slice(0, 8).toUpperCase()}</span>
                   </td>
-                  <td className={`py-5 text-xs text-gray-500 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{new Date(order.createdAt).toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US')}</td>
-                  <td className={`py-5 ${lang === 'ar' ? 'text-right' : 'text-left'}`} style={{ minWidth: '140px' }}>
-                    <div className={`flex items-center gap-2 flex-wrap ${lang === 'ar' ? 'flex-row-reverse justify-end' : ''}`}>
+                  <td className={`py-5 text-xs text-gray-500 ${isRtl ? 'text-right' : 'text-left'}`}>{new Date(order.createdAt).toLocaleDateString(isRtl ? 'ar-SA-u-ca-gregory' : 'en-US')}</td>
+                  <td className={`py-5 ${isRtl ? 'text-right' : 'text-left'}`} style={{ minWidth: '140px' }}>
+                    <div className={`flex items-center gap-2 flex-wrap ${isRtl ? 'flex-row-reverse justify-end' : ''}`}>
                       {order.invoiceName ? (
                         <span className="text-[10px] font-mono font-bold text-brand-navy bg-gray-100 px-2 py-1 rounded-lg border border-gray-200 leading-tight">
                           {order.invoiceName}
@@ -3259,8 +3410,8 @@ const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory }: { o
                       </button>
                     </div>
                   </td>
-                  <td className={`py-5 text-xs font-bold text-brand-navy ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{t.products.pricePrefix}{order.total.toLocaleString()}</td>
-                  <td className={`py-5 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
+                  <td className={`py-5 text-xs font-bold text-brand-navy ${isRtl ? 'text-right' : 'text-left'}`}>{t.products.pricePrefix}{order.total.toLocaleString()}</td>
+                  <td className={`py-5 ${isRtl ? 'text-right' : 'text-left'}`}>
                     {(() => {
                       const { label, color } = getStatusDetails(order.status, t);
                       return (
@@ -3276,22 +3427,58 @@ const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory }: { o
                   </td>
                 </tr>
               ))}
-              {customerOrders.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="py-20 text-center">
-                    <div className="flex flex-col items-center justify-center space-y-4">
-                      <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center text-gray-300">
-                        <ShoppingBag size={32} />
-                      </div>
-                      <p className="text-gray-400 italic text-sm">{t.orders.dashboard.noOrders}</p>
-                    </div>
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
+
+        {/* Mobile List View */}
+        <div className="md:hidden space-y-4">
+          {customerOrders.slice(0, 5).map((order) => {
+            const { label, color } = getStatusDetails(order.status, t);
+            return (
+              <div key={order.firebaseId} className="p-4 rounded-2xl border border-gray-100 space-y-4">
+                <div className={`flex justify-between items-start ${isRtl ? 'flex-row-reverse' : ''}`}>
+                  <div>
+                    <span className="text-[9px] font-mono text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">#{order.firebaseId.slice(0, 8).toUpperCase()}</span>
+                    <p className={`text-[10px] text-gray-500 mt-1 ${isRtl ? 'text-right' : 'text-left'}`}>{new Date(order.createdAt).toLocaleDateString(isRtl ? 'ar-SA-u-ca-gregory' : 'en-US')}</p>
+                  </div>
+                  <button
+                    onClick={() => onViewHistory(order.odooOrderName || '', order.firebaseId, order.status, order.createdAt)}
+                    className={`px-3 py-1.5 rounded-lg text-[9px] font-bold border shadow-sm ${color}`}
+                  >
+                    {label}
+                  </button>
+                </div>
+                <div className={`flex justify-between items-end ${isRtl ? 'flex-row-reverse' : ''}`}>
+                  <div className={isRtl ? 'text-right' : 'text-left'}>
+                    <p className="text-[9px] text-gray-400 uppercase font-bold tracking-widest mb-1">{t.orders.dashboard.total}</p>
+                    <p className="text-sm font-bold text-brand-navy">{t.products.pricePrefix}{order.total.toLocaleString()}</p>
+                  </div>
+                  <button
+                    onClick={() => downloadInvoicePDF(order)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gray-50 text-brand-navy text-[10px] font-bold hover:bg-gray-100 transition-all border border-gray-100"
+                  >
+                    <FileText size={14} className="text-brand-orange" />
+                    <span>{isRtl ? 'الفاتورة' : 'Invoice'} PDF</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {customerOrders.length === 0 && (
+          <div className="py-12 text-center">
+            <div className="flex flex-col items-center justify-center space-y-4">
+              <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center text-gray-300">
+                <ShoppingBag size={24} />
+              </div>
+              <p className="text-gray-400 italic text-xs">{t.orders.dashboard.noOrders}</p>
+            </div>
+          </div>
+        )}
       </motion.div>
+
     </div>
   );
 };
@@ -3494,7 +3681,7 @@ const CustomerShop = ({ products, onAddToCart, t, lang }: { products: Product[],
                 </p>
                 <div className={`flex items-center justify-between mt-auto pt-1.5 border-t border-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
                   <span className="text-brand-orange font-bold text-sm">
-                    {t.products.pricePrefix}{typeof p.price === 'number' ? p.price.toLocaleString() : p.price}
+                    {t.products.pricePrefix}{String(p.price).replace(/SAR|ر\.س|SR|ريال/gi, "").replace(/[^\d.]/g, "").trim()}
                   </span>
                   <button
                     onClick={() => handleAdd(p)}
@@ -3537,7 +3724,7 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
 
   const downloadInvoicePDF = (order: Order) => {
     const dir = isRtl ? 'rtl' : 'ltr';
-    const date = new Date(order.createdAt).toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const date = new Date(order.createdAt).toLocaleDateString(isRtl ? 'ar-SA-u-ca-gregory' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     const invoiceNum = order.invoiceName || order.odooOrderName || `#${order.firebaseId.slice(0,8).toUpperCase()}`;
     const html = `<!DOCTYPE html><html dir="${dir}" lang="${isRtl ? 'ar' : 'en'}">
 <head>
@@ -3605,9 +3792,9 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
       </tr></thead>
       <tbody>
         ${(order.items || []).map((item: any) => `
-          <tr><td>${item.name || item.productName || '-'}</td><td>${item.quantity || item.qty || 1}</td><td>${item.price?.toLocaleString() || '-'} ${isRtl ? 'ر.س' : 'SAR'}</td><td>${((item.price||0)*(item.quantity||item.qty||1)).toLocaleString()} ${isRtl ? 'ر.س' : 'SAR'}</td></tr>
+          <tr><td>${item.name || item.productName || '-'}</td><td>${item.quantity || item.qty || 1}</td><td>${item.price?.toLocaleString() || '-'} ⃁</td><td>${((item.price||0)*(item.quantity||item.qty||1)).toLocaleString()} ⃁</td></tr>
         `).join('')}
-        <tr class="total-row"><td colspan="3">${isRtl ? 'الإجمالي' : 'TOTAL'}</td><td>${order.total?.toLocaleString()} ${isRtl ? 'ر.س' : 'SAR'}</td></tr>
+        <tr class="total-row"><td colspan="3">${isRtl ? 'الإجمالي' : 'TOTAL'}</td><td>${order.total?.toLocaleString()} ⃁</td></tr>
       </tbody>
     </table>
   </div>
@@ -3868,7 +4055,8 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
         transition={{ delay: 0.1 }}
         className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden"
       >
-        <div className="overflow-x-auto">
+        {/* Desktop View: Table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50/50 border-b border-gray-100">
               <tr>
@@ -3888,7 +4076,7 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
                   <td className={`px-8 py-6 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
                     <span className="text-[10px] font-mono text-gray-400 bg-gray-50 px-2 py-1 rounded">#{order.firebaseId.slice(0, 8).toUpperCase()}</span>
                   </td>
-                  <td className={`px-8 py-6 text-xs text-gray-500 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{new Date(order.createdAt).toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US')}</td>
+                  <td className={`px-8 py-6 text-xs text-gray-500 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{new Date(order.createdAt).toLocaleDateString(lang === 'ar' ? 'ar-SA-u-ca-gregory' : 'en-US')}</td>
                   <td className={`px-8 py-6 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
                     <div className="flex flex-col space-y-1.5">
                       {order.items.map((item, i) => (
@@ -3993,7 +4181,7 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
               ))}
               {customerOrders.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-8 py-32 text-center">
+                  <td colSpan={8} className="px-8 py-32 text-center">
                     <div className="flex flex-col items-center justify-center space-y-4">
                       <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center text-gray-200">
                         <ShoppingBag size={40} />
@@ -4009,6 +4197,109 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
             </tbody>
           </table>
         </div>
+
+        {/* Mobile View: Cards */}
+        <div className="md:hidden divide-y divide-gray-100">
+          {customerOrders.map((order) => {
+            const { label, color } = getStatusDetails(order.status, t);
+            return (
+              <div key={order.firebaseId} className="p-6 space-y-4">
+                <div className={`flex justify-between items-start ${lang === 'ar' ? 'flex-row-reverse' : 'flex-row'}`}>
+                  <div className={lang === 'ar' ? 'text-right' : 'text-left'}>
+                    <span className="text-[10px] font-mono text-gray-400 bg-gray-50 px-2 py-1 rounded">#{order.firebaseId.slice(0, 8).toUpperCase()}</span>
+                    <div className="text-xs text-gray-400 mt-1">
+                      {new Date(order.createdAt).toLocaleDateString(lang === 'ar' ? 'ar-SA-u-ca-gregory' : 'en-US')}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => onViewHistory(order.odooOrderName || '', order.firebaseId, order.status, order.createdAt)}
+                    className={`px-3 py-1 rounded-lg text-[10px] font-bold border shadow-sm transition-all ${color}`}
+                  >
+                    {label}
+                  </button>
+                </div>
+
+                <div className={`space-y-3 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
+                  <div className="space-y-1.5">
+                    {order.items.map((item, i) => (
+                      <div key={i} className={`flex items-center space-x-2 ${lang === 'ar' ? 'flex-row-reverse space-x-reverse' : ''}`}>
+                        <span className="text-xs text-brand-navy font-bold">{item.quantity}×</span>
+                        <span className="text-xs text-gray-600">{item.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-between items-center pt-2 border-t border-gray-50">
+                    <span className="text-xs text-gray-400">{t.orders.dashboard.total}</span>
+                    <span className="text-sm font-bold text-brand-navy">{t.products.pricePrefix}{order.total.toLocaleString()}</span>
+                  </div>
+                </div>
+
+                <div className={`flex items-center gap-2 flex-wrap ${lang === 'ar' ? 'flex-row-reverse' : 'flex-row'}`}>
+                  {order.odooOrderName ? (
+                    <button 
+                      onClick={async () => {
+                        const newWindow = window.open('', '_blank');
+                        if (newWindow) {
+                          newWindow.document.write(`<div style="font-family:sans-serif;padding:20px;text-align:center;">${t.orders.dashboard.loadingQuotation}</div>`);
+                          try {
+                            const resp = await fetch(getApiUrl(`/api/odoo/order-portal/${encodeURIComponent(order.odooOrderName!)}`));
+                            const data = await resp.json();
+                            if (data.success && data.url) newWindow.location.href = data.url;
+                            else newWindow.document.write(`<div style="font-family:sans-serif;padding:20px;text-align:center;color:red;">${t.orders.dashboard.quotationNotFound}</div>`);
+                          } catch(e) {
+                            newWindow.document.write(`<div style="font-family:sans-serif;padding:20px;text-align:center;color:red;">${t.orders.dashboard.quotationError}</div>`);
+                          }
+                        }
+                      }}
+                      className="text-[10px] font-mono font-bold text-brand-orange bg-brand-orange/10 px-3 py-1.5 rounded-lg border border-brand-orange/20"
+                    >
+                      {order.odooOrderName}
+                    </button>
+                  ) : (
+                    <div className="flex items-center space-x-1 space-x-reverse bg-gray-50 px-3 py-1.5 rounded-lg border border-dashed border-gray-200">
+                      <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-pulse" />
+                      <span className="text-[10px] text-gray-400 italic">{t.orders.dashboard.syncing}</span>
+                    </div>
+                  )}
+
+                  {order.invoiceName && (
+                    <span className="text-[10px] font-mono font-bold text-brand-navy bg-blue-50 px-2 py-1.5 rounded-lg border border-blue-200">
+                      {order.invoiceName}
+                    </span>
+                  )}
+
+                  <button
+                    onClick={() => downloadInvoicePDF(order)}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-brand-navy text-white text-[10px] font-bold"
+                  >
+                    <FileText size={11} />
+                    <span>PDF</span>
+                  </button>
+
+                  {order.odooOrderName && (
+                    <button 
+                      onClick={() => syncIndividualOrder(order)}
+                      disabled={isSyncingIndividual === order.firebaseId}
+                      className={`p-2 rounded-lg border border-gray-100 ${
+                        isSyncingIndividual === order.firebaseId ? 'bg-gray-50 text-gray-300' : 'text-brand-orange bg-white'
+                      }`}
+                    >
+                      <RefreshCw size={14} className={isSyncingIndividual === order.firebaseId ? 'animate-spin' : ''} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          {customerOrders.length === 0 && (
+            <div className="p-12 text-center space-y-4">
+              <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center text-gray-200 mx-auto">
+                <ShoppingBag size={32} />
+              </div>
+              <p className="text-gray-400 italic text-sm">{t.orders.dashboard.noOrdersYet}</p>
+            </div>
+          )}
+        </div>
       </motion.div>
     </div>
   );
@@ -4016,6 +4307,8 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
 
 const CustomerProfile = ({ user, t, lang }: { user: User | null, t: any, lang: Language }) => {
   const [profile, setProfile] = useState<any>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -4024,6 +4317,29 @@ const CustomerProfile = ({ user, t, lang }: { user: User | null, t: any, lang: L
       });
     }
   }, [user]);
+
+  const handleDeleteAccount = async () => {
+    if (!user) return;
+    setIsDeleting(true);
+    try {
+      // 1. Delete user doc from Firestore
+      await deleteDoc(doc(db, "users", user.uid));
+      // 2. Delete user from Firebase Auth
+      await deleteUser(user);
+      // Success - user will be signed out automatically and redirected
+      window.location.href = '/';
+    } catch (error: any) {
+      console.error("Delete account error:", error);
+      if (error.code === 'auth/requires-recent-login') {
+        alert(lang === 'ar' ? 'يرجى تسجيل الخروج ثم تسجيل الدخول مرة أخرى لإتمام هذه العملية (يتطلب ابل واجهزة الاندرويد مصادقة حديثة لعمليات الحذف).' : 'Please log out and log back in to perform this action (Apple and Android devices require a recent login for account deletion).');
+      } else {
+        alert(lang === 'ar' ? 'فشل حذف الحساب. يرجى المحاولة لاحقاً.' : 'Failed to delete account. Please try again later.');
+      }
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteModal(false);
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -4043,8 +4359,8 @@ const CustomerProfile = ({ user, t, lang }: { user: User | null, t: any, lang: L
         className="max-w-2xl bg-white rounded-[2rem] shadow-sm border border-gray-100 p-10"
       >
         <div className="space-y-10">
-          <div className={`flex items-center space-x-6 ${lang === 'ar' ? 'flex-row-reverse space-x-reverse' : ''}`}>
-            <div className="w-20 h-20 bg-brand-orange/10 rounded-3xl flex items-center justify-center text-brand-orange">
+          <div className={`flex items-center gap-6 ${lang === 'ar' ? 'flex-row-reverse' : ''}`}>
+            <div className="w-20 h-20 bg-brand-orange/10 rounded-3xl flex items-center justify-center text-brand-orange flex-shrink-0">
               <UserIcon size={40} />
             </div>
             <div className={lang === 'ar' ? 'text-right' : 'text-left'}>
@@ -4068,12 +4384,12 @@ const CustomerProfile = ({ user, t, lang }: { user: User | null, t: any, lang: L
             </div>
             <div className={lang === 'ar' ? 'text-right' : 'text-left'}>
               <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">{t.orders.dashboard.joinedDate}</label>
-              <p className="text-brand-navy font-medium">{profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US') : 'N/A'}</p>
+              <p className="text-brand-navy font-medium">{profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString(lang === 'ar' ? 'ar-SA-u-ca-gregory' : 'en-US') : 'N/A'}</p>
             </div>
           </div>
 
-          <div className="bg-brand-cream/50 p-6 rounded-2xl border border-brand-orange/10 mt-8">
-            <div className={`flex items-center space-x-2 mb-3 ${lang === 'ar' ? 'flex-row-reverse space-x-reverse' : ''}`}>
+          <div className="bg-brand-cream/50 p-6 rounded-2xl border border-brand-orange/10">
+            <div className={`flex items-center gap-2 mb-3 ${lang === 'ar' ? 'flex-row-reverse' : ''}`}>
               <div className="w-1.5 h-1.5 bg-brand-orange rounded-full" />
               <p className="text-[10px] text-brand-orange font-bold uppercase tracking-widest">{t.orders.dashboard.note}</p>
             </div>
@@ -4081,8 +4397,83 @@ const CustomerProfile = ({ user, t, lang }: { user: User | null, t: any, lang: L
               {t.orders.dashboard.profileNote}
             </p>
           </div>
+
+          {/* Account Management Section */}
+          <div className="pt-10 border-t border-gray-100 mt-8">
+            <h4 className={`text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-6 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
+              {t.orders.dashboard.deleteAccountTitle}
+            </h4>
+            
+            <div className={`flex flex-col md:flex-row items-start md:items-center justify-between gap-6 p-6 rounded-[1.5rem] bg-red-50/30 border border-red-100 ${lang === 'ar' ? 'flex-row-reverse' : ''}`}>
+              <div className={lang === 'ar' ? 'text-right' : 'text-left'}>
+                <p className="text-sm font-bold text-red-600 mb-1">{t.orders.dashboard.deleteAccount}</p>
+                <p className="text-xs text-red-500/70 max-w-sm">{t.orders.dashboard.deleteAccountWarning}</p>
+              </div>
+              <button 
+                onClick={() => setShowDeleteModal(true)}
+                className="px-6 py-3 bg-white text-red-600 border-2 border-red-100 hover:bg-red-600 hover:text-white transition-all duration-300 rounded-xl text-[10px] font-black tracking-widest uppercase shadow-sm"
+              >
+                {t.orders.dashboard.deleteAccountBtn}
+              </button>
+            </div>
+          </div>
         </div>
       </motion.div>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {showDeleteModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowDeleteModal(false)}
+              className="absolute inset-0 bg-brand-navy/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white rounded-[2.5rem] shadow-2xl p-8 md:p-12 max-w-md w-full overflow-hidden"
+            >
+              <div className="flex flex-col items-center text-center">
+                <div className="w-20 h-20 bg-red-50 rounded-3xl flex items-center justify-center text-red-600 mb-6">
+                  <AlertTriangle size={40} />
+                </div>
+                <h3 className="text-2xl font-serif text-brand-navy font-bold mb-4">
+                  {t.orders.dashboard.deleteAccount}
+                </h3>
+                <p className="text-gray-500 leading-relaxed mb-8">
+                  {t.orders.dashboard.deleteAccountConfirm}
+                </p>
+                
+                <div className="flex flex-col gap-3 w-full">
+                  <button 
+                    disabled={isDeleting}
+                    onClick={handleDeleteAccount}
+                    className="w-full py-4 bg-red-600 text-white rounded-2xl font-bold text-sm hover:bg-red-700 transition-all shadow-lg shadow-red-200 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isDeleting ? (
+                      <>
+                        <RefreshCw className="animate-spin" size={18} />
+                        {lang === 'ar' ? 'جاري الحذف...' : 'DELETING...'}
+                      </>
+                    ) : t.orders.dashboard.deleteAccountBtn}
+                  </button>
+                  <button 
+                    disabled={isDeleting}
+                    onClick={() => setShowDeleteModal(false)}
+                    className="w-full py-4 bg-gray-100 text-gray-600 rounded-2xl font-bold text-sm hover:bg-gray-200 transition-all"
+                  >
+                    {t.orders.dashboard.close}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -4141,17 +4532,17 @@ const DashboardLayout = ({ children, user, role, t, lang, onToggleLang, cartCoun
   const isRtl = lang === 'ar';
 
   return (
-    <div className={`min-h-screen bg-gray-50 flex ${isRtl ? 'flex-row-reverse' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className="min-h-screen bg-gray-50 flex" dir={isRtl ? 'rtl' : 'ltr'}>
       {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-20 md:hidden"
+          className="fixed inset-0 bg-black/50 z-[60] md:hidden"
           onClick={() => setMobileMenuOpen(false)}
         />
       )}
 
       {/* Sidebar */}
-      <aside className={`w-64 bg-brand-navy text-white flex flex-col fixed h-full z-30 ${isRtl ? 'right-0' : 'left-0'} shadow-2xl transition-transform duration-300 md:translate-x-0 ${
+      <aside className={`w-64 bg-brand-navy text-white flex flex-col fixed h-full z-[70] ${isRtl ? 'right-0' : 'left-0'} shadow-2xl transition-transform duration-300 md:translate-x-0 ${
         mobileMenuOpen ? 'translate-x-0' : (isRtl ? 'translate-x-full' : '-translate-x-full')
       }`}>
         <div className="p-8 border-b border-white/10">
@@ -4187,7 +4578,7 @@ const DashboardLayout = ({ children, user, role, t, lang, onToggleLang, cartCoun
             </div>
             <div className="overflow-hidden">
               <p className="text-[12px] font-bold text-white truncate">{profile?.facilityName || (lang === 'ar' ? 'منشأة غير محددة' : 'Unknown Facility')}</p>
-              <p className="text-[10px] text-white/60 truncate mt-0.5">{user.displayName || user.email}</p>
+              <p className="text-[10px] text-white/60 truncate mt-0.5">{profile?.phoneNumber || user.email}</p>
             </div>
           </div>
         </div>
@@ -4228,25 +4619,25 @@ const DashboardLayout = ({ children, user, role, t, lang, onToggleLang, cartCoun
       </aside>
 
       {/* Main Content */}
-      <main className={`flex-1 min-h-screen bg-gray-50 ${isRtl ? 'md:mr-64' : 'md:ml-64'}`}>
+      <main className={`flex-1 min-h-screen bg-gray-50 ${isRtl ? 'md:mr-64' : 'md:ml-64'} pb-24 md:pb-0`}>
         {/* Top Header */}
-        <header className={`bg-white border-b border-gray-100 h-20 flex items-center justify-between px-4 md:px-10 sticky top-0 z-10 ${isRtl ? 'flex-row-reverse' : ''}`}>
-          <div className={`flex items-center ${isRtl ? 'flex-row-reverse space-x-reverse space-x-4' : 'space-x-4'}`}>
-            <button className="md:hidden text-brand-navy" onClick={() => setMobileMenuOpen(true)}>
-              <Menu size={24} />
+        <header className="bg-white border-b border-gray-100 h-16 md:h-20 flex items-center justify-between px-4 md:px-10 sticky top-0 z-10" dir={isRtl ? 'rtl' : 'ltr'}>
+          <div className="flex items-center gap-4">
+            <button className="md:hidden text-brand-navy p-2" onClick={() => setMobileMenuOpen(true)}>
+              <Menu size={20} />
             </button>
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden md:block">
+            <span className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden sm:block">
               {location.pathname.startsWith('/admin') ? t.orders.dashboard.administration : t.orders.dashboard.customerAccount}
             </span>
           </div>
-          <div className={`flex items-center ${isRtl ? 'flex-row-reverse space-x-reverse space-x-4 md:space-x-6' : 'space-x-4 md:space-x-6'}`}>
+          <div className="flex items-center gap-4 md:gap-6">
             {/* Language Switcher */}
             <button 
               onClick={onToggleLang}
-              className={`flex items-center space-x-2 space-x-reverse text-brand-navy hover:text-brand-orange transition-colors border-gray-100`}
+              className="flex items-center gap-2 text-brand-navy hover:text-brand-orange transition-colors border-gray-100"
             >
               <Globe size={18} />
-              <span className="text-[10px] font-bold tracking-widest hidden md:inline">{lang === 'en' ? 'AR' : 'EN'}</span>
+              <span className="text-[11px] font-black tracking-widest uppercase">{lang}</span>
             </button>
 
             {/* Cart Button */}
@@ -4267,18 +4658,32 @@ const DashboardLayout = ({ children, user, role, t, lang, onToggleLang, cartCoun
               </button>
             )}
 
-            <div className={`hidden md:flex items-center ${isRtl ? 'flex-row-reverse space-x-reverse space-x-3 pl-6 border-l' : 'space-x-3 pr-6 border-r'} border-gray-100`}>
-              <div className={isRtl ? 'text-left' : 'text-right'}>
-                <p className="text-xs font-bold text-brand-navy leading-none">{profile?.facilityName || (lang === 'ar' ? 'منشأة غير محددة' : 'Unknown Facility')}</p>
-                <p className="text-[10px] text-gray-400 mt-1">{user.displayName || user.email}</p>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-brand-cream flex items-center justify-center text-brand-orange font-bold text-sm">
-                {profile?.facilityName?.charAt(0) || user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}
-              </div>
+            <div className={`hidden md:flex items-center gap-3 ${isRtl ? 'pl-6 border-l' : 'pr-6 border-r'} border-gray-100`}>
+              {isRtl ? (
+                <>
+                  <div className="w-10 h-10 rounded-xl bg-brand-cream flex items-center justify-center text-brand-orange font-bold text-sm">
+                    {profile?.facilityName?.charAt(0) || user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs font-bold text-brand-navy leading-none">{profile?.facilityName || (isRtl ? 'منشأة غير محددة' : 'Unknown Facility')}</p>
+                    <p className="text-[10px] text-gray-400 mt-1">{user.displayName || user.email}</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-right">
+                    <p className="text-xs font-bold text-brand-navy leading-none">{profile?.facilityName || (isRtl ? 'منشأة غير محددة' : 'Unknown Facility')}</p>
+                    <p className="text-[10px] text-gray-400 mt-1">{user.displayName || user.email}</p>
+                  </div>
+                  <div className="w-10 h-10 rounded-xl bg-brand-cream flex items-center justify-center text-brand-orange font-bold text-sm">
+                    {profile?.facilityName?.charAt(0) || user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}
+                  </div>
+                </>
+              )}
             </div>
             <button 
               onClick={handleLogout}
-              className={`group flex items-center text-red-500 hover:text-red-600 transition-all font-bold text-[10px] tracking-widest uppercase ${isRtl ? 'flex-row-reverse space-x-reverse space-x-2' : 'space-x-2'}`}
+              className="group flex items-center gap-2 text-red-500 hover:text-red-600 transition-all font-bold text-[10px] tracking-widest uppercase"
             >
               <LogOut size={16} className={`${isRtl ? 'group-hover:translate-x-1' : 'group-hover:-translate-x-1'} transition-transform hidden md:block`} />
               <span className="hidden md:inline">{t.orders.dashboard.logout}</span>
@@ -4287,6 +4692,7 @@ const DashboardLayout = ({ children, user, role, t, lang, onToggleLang, cartCoun
         </header>
 
         <div className="p-10">
+          {role !== 'admin' && <DashboardCarousel lang={lang} t={t} />}
           {children}
         </div>
 
@@ -4606,7 +5012,7 @@ const OrderManager = ({
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-xs text-gray-500">{new Date(order.createdAt).toLocaleDateString(isRtl ? 'ar-SA' : 'en-US')}</span>
+                      <span className="text-xs text-gray-500">{new Date(order.createdAt).toLocaleDateString(isRtl ? 'ar-SA-u-ca-gregory' : 'en-US')}</span>
                     </td>
                     <td className="px-6 py-4">
                       {order.odooOrderName ? (
@@ -4653,7 +5059,7 @@ const OrderManager = ({
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-sm font-bold text-brand-orange">SAR {order.total.toLocaleString()}</span>
+                      <span className="text-sm font-bold text-brand-orange">⃁ {order.total.toLocaleString()}</span>
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
@@ -4719,10 +5125,10 @@ const OrderManager = ({
                       <span className="text-sm font-medium text-gray-600">{o.partner_id[1]}</span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-xs text-gray-500">{new Date(o.date_order).toLocaleDateString(isRtl ? 'ar-SA' : 'en-US')}</span>
+                      <span className="text-xs text-gray-500">{new Date(o.date_order).toLocaleDateString(isRtl ? 'ar-SA-u-ca-gregory' : 'en-US')}</span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-sm font-bold text-brand-orange">SAR {o.amount_total?.toLocaleString()}</span>
+                      <span className="text-sm font-bold text-brand-orange">⃁ {o.amount_total?.toLocaleString()}</span>
                     </td>
                     <td className={`px-6 py-4 ${isRtl ? 'text-left' : 'text-right'}`}>
                       <span 
@@ -4797,12 +5203,12 @@ const OrderManager = ({
                           <span className="text-sm font-bold text-brand-navy">{item.name}</span>
                           <span className="text-xs text-gray-400">{t.orders.dashboard.quantity}: {item.quantity}</span>
                         </div>
-                        <span className="text-sm font-bold text-brand-navy">{item.price}</span>
+                        <span className="text-sm font-bold text-brand-navy">{t.products.pricePrefix}{String(item.price).replace(/[^\d.]/g, '')}</span>
                       </div>
                     ))}
                     <div className="pt-4 border-t border-gray-200 flex justify-between items-center">
                       <span className="text-sm font-bold text-brand-navy uppercase tracking-widest">{t.orders.dashboard.total}</span>
-                      <span className="text-xl font-serif font-bold text-brand-orange">SAR {selectedOrder.total.toLocaleString()}</span>
+                      <span className="text-xl font-serif font-bold text-brand-orange">{t.products.pricePrefix}{selectedOrder.total.toLocaleString()}</span>
                     </div>
                   </div>
                 </div>
@@ -5357,7 +5763,7 @@ const DashboardOverview = ({ products, orders }: { products: Product[], orders: 
                   <img src={p.image} alt={p.name} className="w-12 h-12 rounded-lg object-cover bg-gray-100" />
                   <div>
                     <p className="text-sm font-bold text-brand-navy">{p.name}</p>
-                    <p className="text-xs text-gray-400">{p.price}</p>
+                    <p className="text-xs text-gray-400">{String(p.price).replace(/SAR|ر\.س|SR|ريال/gi, "").replace(/[^\d.]/g, "").trim()}</p>
                   </div>
                 </div>
                 <ChevronRight size={16} className="text-gray-300" />
@@ -5377,7 +5783,7 @@ const DashboardOverview = ({ products, orders }: { products: Product[], orders: 
                   </div>
                   <div>
                     <p className="text-sm font-bold text-brand-navy">{order.customerName}</p>
-                    <p className="text-xs text-gray-400">SAR {order.total.toLocaleString()}</p>
+                    <p className="text-xs text-gray-400">⃁ {order.total.toLocaleString()}</p>
                   </div>
                 </div>
                 <div className="flex items-center space-x-3">
@@ -5416,8 +5822,8 @@ const ProductManager = ({ products, setModalContent }: { products: Product[], se
           setModalContent({ title: "Error", message: "Invalid discount price", type: 'error' });
           return;
         }
-        await updateDoc(doc(db, "products", fbId), { discountPrice: `SAR ${numVal.toLocaleString()}` });
-        setModalContent({ title: "Updated", message: `Discount set for ${product.name}: SAR ${numVal.toLocaleString()}`, type: 'success' });
+        await updateDoc(doc(db, "products", fbId), { discountPrice: `⃁ ${numVal.toLocaleString()}` });
+        setModalContent({ title: "Updated", message: `Discount set for ${product.name}: ⃁ ${numVal.toLocaleString()}`, type: 'success' });
       }
       setEditingDiscount(null);
       setDiscountValue("");
@@ -5528,7 +5934,7 @@ const ProductManager = ({ products, setModalContent }: { products: Product[], se
                 value={newProduct.price}
                 onChange={(e) => setNewProduct({...newProduct, price: e.target.value})}
                 className="w-full p-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange"
-                placeholder="e.g. SAR 1,500.00"
+                placeholder="e.g. ⃁ 1,500.00"
               />
             </div>
             <div className="space-y-2">
@@ -5578,7 +5984,7 @@ const ProductManager = ({ products, setModalContent }: { products: Product[], se
                     <span className="text-sm font-bold text-brand-navy">{p.name}</span>
                   </div>
                 </td>
-                <td className="px-8 py-4 text-sm text-gray-600 font-medium">{p.price}</td>
+                <td className="px-8 py-4 text-sm text-gray-600 font-medium">{String(p.price).replace(/SAR|ر\.س|SR|ريال/gi, "").replace(/[^\d.]/g, "").trim()}</td>
                 <td className="px-6 py-4">
                   {editingDiscount === (p.firebaseId || String(p.id)) ? (
                     <div className="flex items-center gap-2">
@@ -5597,7 +6003,7 @@ const ProductManager = ({ products, setModalContent }: { products: Product[], se
                   ) : (
                     <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setEditingDiscount(p.firebaseId || String(p.id)); setDiscountValue(p.discountPrice ? p.discountPrice.replace(/[^\d.]/g, '') : ''); }}>
                       {p.discountPrice ? (
-                        <span className="text-sm font-bold text-red-500">{p.discountPrice}</span>
+                        <span className="text-sm font-bold text-red-500">{String(p.discountPrice).replace(/SAR|ر\.س|SR|ريال/gi, "").replace(/[^\d.]/g, "").trim()}</span>
                       ) : (
                         <span className="text-xs text-gray-400 italic">No discount</span>
                       )}
@@ -5652,7 +6058,7 @@ const OdooManager = ({ products, setModalContent, t }: { products: Product[], se
         id: odooProduct.id,
         name: odooProduct.name,
         description: odooProduct.description_sale || "Imported from Odoo ERP system.",
-        price: `SAR ${(odooProduct.list_price || 0).toLocaleString()}`,
+        price: `⃁ ${String(odooProduct.list_price || 0).replace(/SAR|ر\.س|SR|ريال/gi, "").replace(/[^\d.]/g, "").trim()}`,
         image: imageUrl,
         isOdoo: true,
         updatedAt: new Date().toISOString()
@@ -5702,7 +6108,7 @@ const OdooManager = ({ products, setModalContent, t }: { products: Product[], se
           id: op.id,
           name: op.name,
           description: op.description_sale || "Imported from Odoo ERP system.",
-          price: `SAR ${(op.list_price || 0).toLocaleString()}`,
+          price: `⃁ ${String(op.list_price || 0).replace(/SAR|ر\.س|SR|ريال/gi, "").replace(/[^\d.]/g, "").trim()}`,
           image: imageUrl,
           isOdoo: true,
           updatedAt: new Date().toISOString()
@@ -5874,7 +6280,7 @@ const OdooManager = ({ products, setModalContent, t }: { products: Product[], se
                   <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
                     <td className="px-8 py-4 text-sm font-bold text-brand-navy">{p.name}</td>
                     <td className="px-8 py-4 text-sm text-gray-400 font-mono">#{p.id}</td>
-                    <td className="px-8 py-4 text-sm text-brand-orange font-bold">SAR {p.list_price?.toLocaleString()}</td>
+                    <td className="px-8 py-4 text-sm text-brand-orange font-bold">⃁ {p.list_price?.toLocaleString()}</td>
                     <td className="px-8 py-4 text-right">
                       <button 
                         onClick={() => syncToStore(p)}
@@ -5909,7 +6315,7 @@ const OdooManager = ({ products, setModalContent, t }: { products: Product[], se
                   <tr key={o.id} className="hover:bg-gray-50/50 transition-colors">
                     <td className="px-8 py-4 text-sm font-bold text-brand-navy">{o.name}</td>
                     <td className="px-8 py-4 text-sm text-gray-600">{o.partner_id[1]}</td>
-                    <td className="px-8 py-4 text-sm font-bold text-brand-navy">SAR {o.amount_total?.toLocaleString()}</td>
+                    <td className="px-8 py-4 text-sm font-bold text-brand-navy">⃁ {o.amount_total?.toLocaleString()}</td>
                     <td className="px-8 py-4 text-right">
                       <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase border ${
                         o.state === 'sale' ? 'bg-green-100 text-green-700 border-green-200' :
@@ -6321,7 +6727,7 @@ const Footer = ({ onOpenTerms, onOpenPrivacy, onOpenRefund, onOpenCart, t }: {
       <div className="fixed bottom-8 right-8 flex flex-col space-y-4 z-40">
         {/* WhatsApp Button */}
         <motion.a 
-          href="https://wa.me/966533420333"
+          href="https://wa.me/966575151506"
           target="_blank"
           rel="noopener noreferrer"
           whileHover={{ scale: 1.1 }}
@@ -6405,6 +6811,8 @@ const Home = ({
 };
 
 export default function App() {
+  usePushNotifications();
+
   const [lang, setLang] = useState<Language>(() => {
     const saved = localStorage.getItem('app_lang');
     return (saved as Language) || 'en';
@@ -6594,6 +7002,17 @@ export default function App() {
     }));
   };
 
+  const setManualQuantity = (id: number, value: string) => {
+    const qty = parseInt(value);
+    if (isNaN(qty)) return;
+    setCart(prev => prev.map(item => {
+      if (item.id === id) {
+        return { ...item, quantity: Math.max(1, qty) };
+      }
+      return item;
+    }));
+  };
+
   const removeFromCart = (id: number) => {
     setCart(prev => prev.filter(item => item.id !== id));
   };
@@ -6653,7 +7072,7 @@ export default function App() {
               id: op.id,
               name: op.name,
               description: op.description_sale || "Product imported from Odoo ERP.",
-              price: `SAR ${(op.list_price || 0).toLocaleString()}`,
+              price: `⃁ ${String(op.list_price || 0).replace(/SAR|ر\.س|SR|ريال/gi, "").replace(/[^\d.]/g, "").trim()}`,
               image: op.image_1920 ? (op.image_1920.toString().startsWith('data:') ? op.image_1920 : `data:image/png;base64,${op.image_1920}`) : "https://picsum.photos/seed/product/400/400",
               isOdoo: true
             }));
@@ -6676,10 +7095,16 @@ export default function App() {
     // 2. Firestore Listener (Will fail gracefully if quota exceeded)
     const q = query(collection(db, "products"), orderBy("createdAt", "desc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const allProducts = snapshot.docs.map(doc => ({
-        ...doc.data(),
-        firebaseId: doc.id
-      })) as any[];
+      const allProducts = snapshot.docs.map(doc => {
+        const data = doc.data() as any;
+        return {
+          ...data,
+          // Remove SAR, ر.س and other non-numeric chars (except dot) from prices coming from DB
+          price: (data.price || "").toString().replace(/SAR|ر\.س|SR|ريال/gi, "").replace(/[^\d.]/g, "").trim(),
+          discountPrice: data.discountPrice ? data.discountPrice.toString().replace(/SAR|ر\.س|SR|ريال/gi, "").replace(/[^\d.]/g, "").trim() : undefined,
+          firebaseId: doc.id
+        };
+      }) as any[];
       
       if (allProducts.length > 0) {
         setProducts(prev => {
@@ -6827,28 +7252,8 @@ export default function App() {
 
   return (
     <BrowserRouter>
-
       <Routes>
-        <Route path="/" element={
-          !user
-            ? <Navigate to="/auth" replace />
-            : <Home 
-                products={products} 
-                onAddToCart={addToCart} 
-                cartCount={cart.length}
-                onOpenCart={() => setIsCartOpen(true)}
-                onOpenAuth={() => setIsAuthModalOpen(true)}
-                onOpenTerms={() => setIsTermsOpen(true)}
-                onOpenPrivacy={() => setIsPrivacyOpen(true)}
-                onOpenRefund={() => setIsRefundOpen(true)}
-                onViewProduct={handleViewProduct}
-                user={user}
-                userRole={userRole}
-                lang={lang}
-                onToggleLang={toggleLang}
-                t={t}
-              />
-        } />
+        <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/register" element={<RegisterPage />} />
@@ -7026,7 +7431,7 @@ export default function App() {
 
       {/* Global Message Modal */}
       {modalContent && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <motion.div 
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}

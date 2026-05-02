@@ -93,19 +93,29 @@ export const RegisterPage = () => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
+  const sanitizePhone = (phone: string): string => {
+    let clean = phone.replace(/\D/g, "");
+    if (clean.startsWith("00966")) clean = clean.substring(2);
+    if (clean.startsWith("05") && clean.length === 10) clean = "966" + clean.substring(1);
+    else if (clean.startsWith("5") && clean.length === 9) clean = "966" + clean;
+    else if (!clean.startsWith("966") && clean.length === 9) clean = "966" + clean;
+    return clean;
+  };
+
   const handleRegister = async (e: React.FormEvent) => {
     if (e) e.preventDefault();
     setLoading(true);
     setStatus({ type: 'idle', message: '' });
 
     try {
+      const cleanPhone = sanitizePhone(formData.phone);
       // 1. Send OTP via backend
-      console.log(`[Register] Sending OTP to ${formData.phone}`);
+      console.log(`[Register] Sending OTP to ${cleanPhone}`);
       const sendOtpUrl = getApiUrl('/api/send-otp');
       const response = await fetch(sendOtpUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: formData.phone })
+        body: JSON.stringify({ phone: cleanPhone, reason: 'register' })
       });
 
       const data = await response.json();
@@ -154,12 +164,13 @@ export const RegisterPage = () => {
     setStatus({ type: 'idle', message: '' });
 
     try {
+      const cleanPhone = sanitizePhone(formData.phone);
       const verifyUrl = getApiUrl('/api/verify-otp');
       const response = await fetch(verifyUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          phone: formData.phone, 
+          phone: cleanPhone, 
           otp: otp,
           password: formData.password,
           email: formData.email,

@@ -21,8 +21,8 @@ const callOdoo = (service: string, method: string, ...args: any[]): Promise<any>
       const url = new URL(baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`);
       const isSecure = url.protocol === "https:";
       const client = isSecure 
-        ? xmlrpc.createSecureClient({ host: url.hostname, port: 443, path: "/xmlrpc/2/" + service, rejectUnauthorized: false })
-        : xmlrpc.createClient({ host: url.hostname, port: 80, path: "/xmlrpc/2/" + service });
+        ? xmlrpc.createSecureClient({ host: url.hostname, port: 443, path: "/xmlrpc/2/" + service, rejectUnauthorized: false } as any)
+        : xmlrpc.createClient({ host: url.hostname, port: 80, path: "/xmlrpc/2/" + service } as any);
 
       client.methodCall(method, args, (err: any, value: any) => {
         if (err) reject(err);
