@@ -285,6 +285,11 @@ app.use((req, res, next) => {
   next();
 });
 
+// Health-check endpoint (used by Render for keep-alive pings)
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", uptime: process.uptime(), time: new Date().toISOString() });
+});
+
 // Diagnostic route to check Odoo configuration status
 app.get("/api/odoo/config-check", (req, res) => {
   res.json({
@@ -1487,7 +1492,7 @@ app.post("/api/auth/login", async (req, res) => {
       return res.status(401).json({ success: false, error: "Invalid credentials" });
     }
     
-    const passMatch = authDb.verifyPassword(user, password);
+    const passMatch = await authDb.verifyPassword(user, password);
     console.log(`[Auth Login] User found: ${user.uid}, Password match: ${passMatch}`);
 
     if (!passMatch) {

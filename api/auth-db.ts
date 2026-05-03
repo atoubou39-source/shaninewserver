@@ -104,7 +104,7 @@ export function createUser(data: {
   if (existing) throw new Error('User already exists with this phone or email');
   
   const uid = data.phone; // use phone as uid
-  const passwordHash = bcrypt.hashSync(data.password, 12);
+  const passwordHash = bcrypt.hashSync(data.password, 10);
   const adminEmails = (process.env.ADMIN_EMAIL || 'atoubou39@gmail.com').split(',');
   const isAdmin = adminEmails.includes(data.email) || data.role === 'admin';
   
@@ -130,8 +130,8 @@ export function createUser(data: {
   return user;
 }
 
-export function verifyPassword(user: UserRecord, password: string): boolean {
-  return bcrypt.compareSync(password, user.passwordHash);
+export async function verifyPassword(user: UserRecord, password: string): Promise<boolean> {
+  return bcrypt.compare(password, user.passwordHash);
 }
 
 export function updateUser(uid: string, updates: Partial<UserRecord>): UserRecord | null {
@@ -152,7 +152,7 @@ export function updatePassword(uid: string, newPassword: string): boolean {
   const users = loadUsers();
   if (!users[uid]) return false;
   
-  users[uid].passwordHash = bcrypt.hashSync(newPassword, 12);
+  users[uid].passwordHash = bcrypt.hashSync(newPassword, 10);
   users[uid].updatedAt = new Date().toISOString();
   usersCache = users;
   saveUsers();

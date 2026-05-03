@@ -30,6 +30,7 @@ export const LoginPage = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -50,12 +51,19 @@ export const LoginPage = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setLoadingMessage('');
     setError('');
+    // Show waking-up message after 3 seconds if still loading (Render cold start)
+    const wakeTimer = setTimeout(() => {
+      setLoadingMessage(lang === 'ar' ? '⏳ جاري تشغيل الخادم... انتظر قليلاً' : '⏳ Waking up server, please wait...');
+    }, 3000);
     try {
       await authLogin(loginInput, password);
+      clearTimeout(wakeTimer);
       const from = (location.state as any)?.from?.pathname || "/dashboard";
       navigate(from, { replace: true });
     } catch (err: any) {
+      clearTimeout(wakeTimer);
       const msg = err.message || '';
       if (msg.includes('pendingActivation') || msg.includes('pending activation')) {
         setError(lang === 'ar' ? 'حسابك قيد المراجعة، يرجى الانتظار حتى يتم التفعيل.' : 'Account pending activation.');
@@ -64,6 +72,7 @@ export const LoginPage = () => {
       }
     } finally {
       setLoading(false);
+      setLoadingMessage('');
     }
   };
 
@@ -248,6 +257,9 @@ export const LoginPage = () => {
             >
               {loading ? t.auth.verifying : t.auth.loginBtn}
             </button>
+            {loadingMessage && (
+              <p className="text-center text-xs text-brand-slate animate-pulse mt-2">{loadingMessage}</p>
+            )}
           </form>
         )}
 

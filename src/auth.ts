@@ -85,9 +85,37 @@ async function apiGet(path: string) {
 // ── Auth Actions ───────────────────────────────────────────────
 
 export async function login(phone: string, password: string): Promise<AuthUser> {
-  const data = await apiPost('/api/auth/login', { phone, password });
-  saveSession(data.token, data.user);
-  return data.user;
+  const MAX_RETRIES = 2;
+  const RETRY_DELAY_MS = 2500;
+  let lastError: any;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES + 1; attempt++) {
+    try {
+      const res = await fetch(getApiUrl('/api/auth/login'), {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ phone, password }),
+        signal: AbortSignal.timeout(15000), // 15 second timeout per attempt
+      });
+      const data = await res.json();
+
+      // If credentials are wrong, do NOT retry – fail immediately
+      if (res.status === 401) throw new Error(data.error || 'Invalid credentials');
+      if (!res.ok && !data.success) throw new Error(data.error || 'Request failed');
+
+      saveSession(data.token, data.user);
+      return data.user;
+    } catch (err: any) {
+      lastError = err;
+      // Only retry on network/timeout errors, not on auth errors
+      const isAuthError = err.message?.includes('Invalid credentials') ||
+                          err.message?.includes('pending activation');
+      if (isAuthError || attempt > MAX_RETRIES) break;
+      // Wait before retrying (server cold start wake-up time)
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+    }
+  }
+  throw lastError;
 }
 
 export async function register(phone: string, password: string, name: string, email?: string): Promise<AuthUser> {
