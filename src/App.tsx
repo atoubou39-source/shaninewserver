@@ -51,32 +51,6 @@ import {
 } from "lucide-react";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation, Navigate } from "react-router-dom";
-import { 
-  collection, 
-  onSnapshot, 
-  addDoc, 
-  deleteDoc, 
-  updateDoc,
-  doc, 
-  setDoc, 
-  getDoc,
-  query,
-  orderBy,
-  where,
-  or,
-  deleteField
-} from "firebase/firestore";
-import { 
-  onAuthStateChanged, 
-  signInWithPopup, 
-  signInWithEmailAndPassword,
-  signInWithCustomToken,
-  sendPasswordResetEmail,
-  signOut, 
-  deleteUser,
-  User 
-} from "firebase/auth";
-import { db, auth, googleProvider } from "./firebase";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
@@ -84,7 +58,7 @@ import { PendingActivation } from "./pages/PendingActivation";
 import { CustomerSyncDashboard } from "./components/admin/CustomerSyncDashboard";
 import { DiscountsManager } from "./components/admin/DiscountsManager";
 import { useAuth } from "./hooks/useAuth";
-
+import { logout as authLogout, getStoredUser } from "./auth";
 import { translations, Language } from "./translations";
 import { usePushNotifications } from "./hooks/usePushNotifications";
 

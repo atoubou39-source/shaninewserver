@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { signInWithEmailAndPassword, signInWithCustomToken } from 'firebase/auth';
-import { auth } from '../firebase';
+import { login as authLogin, saveSession } from '../auth';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { Lock, Phone, ChevronLeft, AlertCircle, Globe, Eye, EyeOff, Key } from 'lucide-react';
@@ -55,55 +54,17 @@ export const LoginPage = () => {
     e.preventDefault();
     setLoading(true);
     setError('');
-
     try {
-      const sanitizePhone = (phone: string): string => {
-        let clean = phone.replace(/\D/g, "");
-        if (clean.startsWith("00966")) clean = clean.substring(2);
-        if (clean.startsWith("05") && clean.length === 10) clean = "966" + clean.substring(1);
-        else if (clean.startsWith("5") && clean.length === 9) clean = "966" + clean;
-        else if (!clean.startsWith("966") && clean.length === 9) clean = "966" + clean;
-        return clean;
-      };
-
-      let loginEmail = loginInput;
-      const cleanPhone = !loginInput.includes('@') ? sanitizePhone(loginInput) : '';
-      
-      if (cleanPhone) {
-        loginEmail = `${cleanPhone}@hakkal.com`;
-      }
-
-      try {
-        // Fast path: try signing in with default email format first
-        await signInWithEmailAndPassword(auth, loginEmail, password);
-      } catch (authErr: any) {
-        // Fallback: if user not found, check if they have a custom email via API
-        // Note: auth/invalid-credential is used in newer SDKs to hide if user exists
-        if ((authErr.code === 'auth/user-not-found' || authErr.code === 'auth/invalid-credential') && cleanPhone) {
-          try {
-            console.log(`[Auth Fallback] Attempting to find real email for phone: ${cleanPhone}`);
-            const response = await fetch(getApiUrl(`/api/get-email-by-phone?phone=${encodeURIComponent(cleanPhone)}`));
-            const data = await response.json();
-            if (data.success && data.email && data.email !== loginEmail) {
-              console.log(`[Auth Fallback] Found custom email: ${data.email}. Retrying login...`);
-              await signInWithEmailAndPassword(auth, data.email, password);
-            } else {
-              throw authErr;
-            }
-          } catch (apiErr) {
-            console.error("[Auth Fallback Error]", apiErr);
-            throw authErr;
-          }
-        } else {
-          throw authErr;
-        }
-      }
-
+      await authLogin(loginInput, password);
       const from = (location.state as any)?.from?.pathname || "/dashboard";
       navigate(from, { replace: true });
-
     } catch (err: any) {
-      setError(translateError(err.code || err.message || t.auth.loginError));
+      const msg = err.message || '';
+      if (msg.includes('pendingActivation') || msg.includes('pending activation')) {
+        setError(lang === 'ar' ? 'حسابك قيد المراجعة، يرجى الانتظار حتى يتم التفعيل.' : 'Account pending activation.');
+      } else {
+        setError(translateError(msg));
+      }
     } finally {
       setLoading(false);
     }
@@ -167,14 +128,15 @@ export const LoginPage = () => {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(getApiUrl("/api/verify-otp"), {
+      const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || 'https://shaninewserver.onrender.com';
+      const response = await fetch(`${API_BASE}/api/set-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: loginInput, otp, password: newPassword }),
+        body: JSON.stringify({ phone: loginInput, password: newPassword }),
       });
       const data = await response.json();
-      if (data.success && data.customToken) {
-        await signInWithCustomToken(auth, data.customToken);
+      if (data.success && data.token) {
+        saveSession(data.token, data.user || { uid: data.uid, phone: loginInput, email: '', name: '', isAdmin: false, role: 'customer', accountActivated: true });
         navigate("/dashboard");
       } else {
         setError(data.error || "Failed to save password");

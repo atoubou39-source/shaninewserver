@@ -4,40 +4,49 @@ const path = require("path");
 const { Resend } = require("resend");
 const dotenv = require("dotenv");
 const axios = require("axios");
-const admin = require("firebase-admin");
+const jwt = require("jsonwebtoken");
 const xmlrpc = require("xmlrpc");
+import * as authDb from "./auth-db";
 
 dotenv.config();
 
 const app = express();
 
-// Firebase Configuration from Environment Variables
-const firebaseConfig = {
-  projectId: process.env.FIREBASE_PROJECT_ID || "shani-74636",
-  clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-  privateKey: process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : undefined,
+// ── JWT Configuration ──────────────────────────────────────────
+const JWT_SECRET = process.env.JWT_SECRET || "hakkal-super-secret-jwt-key-2024-change-in-production";
+const JWT_EXPIRES_IN = "30d"; // Token valid for 30 days
+
+console.log("[JWT] Auth system initialized (Firebase-free mode)");
+
+// JWT Helper functions
+const signToken = (payload: object) => jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+
+const verifyToken = (token: string) => {
+  try {
+    return jwt.verify(token, JWT_SECRET) as any;
+  } catch {
+    return null;
+  }
 };
 
-// Initialize Firebase Admin
-if (!admin.apps.length) {
-  try {
-    if (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
-      console.log("[Firebase] Initializing with environment variables");
-      admin.initializeApp({
-        credential: admin.credential.cert({
-          projectId: process.env.FIREBASE_PROJECT_ID || "shani-74636",
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-          privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-        }),
-      });
-    } else {
-      console.log("[Firebase] No credentials found in environment variables, skipping admin initialization or using default");
-      // Don't call initializeApp if no credentials to avoid crash on Render
-    }
-  } catch (e) {
-    console.error("[Firebase] Initialization error:", e.message);
-  }
-}
+// Auth middleware - verifies JWT from Authorization header
+const requireAuth = (req: any, res: any, next: any) => {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+  if (!token) return res.status(401).json({ success: false, error: "Authentication required" });
+  const decoded = verifyToken(token);
+  if (!decoded) return res.status(401).json({ success: false, error: "Invalid or expired token" });
+  req.user = decoded;
+  next();
+};
+
+// Admin middleware
+const requireAdmin = (req: any, res: any, next: any) => {
+  requireAuth(req, res, () => {
+    if (!req.user?.isAdmin) return res.status(403).json({ success: false, error: "Admin access required" });
+    next();
+  });
+};
 
 // Odoo Configuration
 const odooConfig = {
@@ -1242,17 +1251,6 @@ app.post("/api/odoo/orders", async (req, res) => {
       }
       
       console.log("[Odoo Order] Order created successfully as Draft:", orderNameResult);
-      
-      /* 
-      // LEGACY: Auto-confirm and Invoice logic (Disabled by user request)
-      await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "sale.order", "action_confirm", [[orderId]]);
-      const invoiceIds = await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "sale.order", "_create_invoices", [[orderId]]);
-      if (Array.isArray(invoiceIds) && invoiceIds.length > 0) {
-        await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "account.move", "action_post", [[invoiceIds[0]]]);
-        const invInfo = await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "account.move", "read", [[invoiceIds[0]]], { fields: ["name"] });
-        if (Array.isArray(invInfo) && invInfo.length > 0) invoiceName = invInfo[0].name;
-      }
-      */
     } catch (e) {
       console.error("[Odoo Order] Error fetching order name:", e.message);
     }
@@ -1270,7 +1268,7 @@ app.post("/api/odoo/orders", async (req, res) => {
   }
 });
 
-// OTP Management
+// OTP Management - Local in-memory store (Firebase-free)
 const otpStore = new Map<string, { code: string, expires: number, odooName?: string, odooId?: number, odooData?: any }>();
 
 app.get("/api/check-phone", async (req, res) => {
@@ -1281,17 +1279,8 @@ app.get("/api/check-phone", async (req, res) => {
 
   try {
     const cleanPhone = sanitizePhone(phone);
-    const formattedPhone = `+${cleanPhone}`;
-    let exists = false;
-    try {
-      await admin.auth().getUserByPhoneNumber(formattedPhone);
-      exists = true;
-    } catch (e) {
-      // Check Firestore as fallback
-      const snapshot = await admin.firestore().collection("users").where("phoneNumber", "==", cleanPhone).limit(1).get();
-      exists = !snapshot.empty;
-    }
-    res.json({ exists });
+    const user = authDb.findUserByPhone(cleanPhone);
+    res.json({ exists: !!user });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -1304,23 +1293,16 @@ app.post("/api/send-otp", async (req, res) => {
   try {
     const cleanPhone = sanitizePhone(phone);
     
-    // Check if user already exists in Firestore for specific reasons
+    // Check local auth db for register/reset validation
     if (reason === 'register' || reason === 'reset') {
-      const userSnapshot = await admin.firestore().collection("users")
-        .where("phoneNumber", "==", cleanPhone)
-        .limit(1)
-        .get();
-      
-      const exists = !userSnapshot.empty;
-      
-      if (reason === 'register' && exists) {
+      const existingUser = authDb.findUserByPhone(cleanPhone);
+      if (reason === 'register' && existingUser) {
         return res.status(400).json({ 
           success: false, 
           error: "هذا الرقم مسجل مسبقاً لدينا. يمكنك تسجيل الدخول مباشرة، أو استعادة كلمة المرور إذا كنت قد نسيتها." 
         });
       }
-      
-      if (reason === 'reset' && !exists) {
+      if (reason === 'reset' && !existingUser) {
         return res.status(404).json({ 
           success: false, 
           error: "عذراً، هذا الرقم غير مسجل في النظام كحساب مستخدم. يرجى إنشاء حساب جديد أولاً." 
@@ -1328,52 +1310,30 @@ app.post("/api/send-otp", async (req, res) => {
       }
     }
 
-    // Check if we already have a VALID OTP for this phone (not expired) in Firestore
-    const otpDoc = await admin.firestore().collection("otps").doc(cleanPhone).get();
-    const existing = otpDoc.exists ? otpDoc.data() : null;
-    
-    if (existing && existing.expires > Date.now()) {
-      console.log(`[OTP] Using existing valid OTP for ${cleanPhone} from Firestore. CODE: ${existing.code}`);
-      
-      // Still send the SMS again if requested
-      const message = `كود التحقق الخاص بك لمتجر شركة حقال للتجارة هو: ${existing.code}`;
+    // Check for existing valid OTP in memory
+    const existingOtp = otpStore.get(cleanPhone);
+    if (existingOtp && existingOtp.expires > Date.now()) {
+      console.log(`[OTP] Resending existing valid OTP for ${cleanPhone}`);
+      const message = `كود التحقق الخاص بك لمتجر شركة حقال للتجارة هو: ${existingOtp.code}`;
       const result = await sendMadarSMS(cleanPhone, message);
-      
-      if (result.success) {
-        return res.json({ success: true, message: "Code resent" });
-      } else {
-        return res.status(500).json({ success: false, error: result.error, debug: result.debug });
-      }
+      if (result.success) return res.json({ success: true, message: "Code resent" });
+      return res.status(500).json({ success: false, error: result.error, debug: result.debug });
     }
 
-    // 1. Verify if phone exists in Odoo before sending SMS
+    // Verify phone in Odoo
     console.log(`[OTP] Verifying phone in Odoo: ${cleanPhone}`);
     const uid = await authenticateOdoo();
-    
-    // Multi-Stage Ultra-Flexible Search
     const last9 = cleanPhone.slice(-9);
-    const last8 = cleanPhone.slice(-8);
     const last7 = cleanPhone.slice(-7);
-    
-    // Create a very fuzzy search pattern for the digits
-    // e.g., 533420333 -> %5%3%3%4%2%0%3%3%3%
     const fuzzyPattern = `%${last9.split("").join("%")}%`;
-    
-    // Additional pattern for partial matches like "342 0333"
     const partialPattern = `%${last7.substring(0, 3)}%${last7.substring(3)}%`;
-    
-    console.log(`[OTP] Multi-Stage Search for: ${cleanPhone} (L9:${last9}, Fuzzy:${fuzzyPattern}, Partial:${partialPattern})`);
 
-    // We have 14 conditions below. In Odoo Domain, for 'OR' operations, 
-    // we need exactly (N-1) '|' operators. So for 14 conditions, we need 13 '|'.
     const odooCustomers = await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "res.partner", "search_read", 
-      [["|", "|", "|", "|", "|", "|", "|", "|", "|", "|", "|", "|", "|",
+      [["||", "||", "||", "||", "||", "||", "||", "||", "||", "||", "||", "||", "||",
         ["mobile", "ilike", cleanPhone], 
         ["phone", "ilike", cleanPhone],
         ["mobile", "ilike", last9],
         ["phone", "ilike", last9],
-        ["mobile", "ilike", last8],
-        ["phone", "ilike", last8],
         ["mobile", "ilike", last7],
         ["phone", "ilike", last7],
         ["mobile", "ilike", fuzzyPattern],
@@ -1381,60 +1341,42 @@ app.post("/api/send-otp", async (req, res) => {
         ["mobile", "ilike", partialPattern],
         ["phone", "ilike", partialPattern],
         ["mobile", "ilike", `%${last7}%`],
-        ["phone", "ilike", `%${last7}%`]
+        ["phone", "ilike", `%${last7}%`],
+        ["email", "ilike", `${cleanPhone}@`]
       ]], 
       { fields: ["id", "name", "phone", "mobile"], limit: 1 }
     );
 
-    console.log(`[OTP] Odoo Search Results: ${Array.isArray(odooCustomers) ? odooCustomers.length : 0}`);
-
     if (!Array.isArray(odooCustomers) || odooCustomers.length === 0) {
-      // DEBUG: Fetch a few random customers to see what's in there
-      let sample = "No data found";
-      try {
-        const samples = await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "res.partner", "search_read", [[]], { fields: ["name", "phone"], limit: 5 });
-        if (Array.isArray(samples)) {
-          sample = samples.map(s => `${s.name}: ${s.phone || 'no phone'}`).join(", ");
-        }
-      } catch (e) { sample = `Error listing samples: ${e.message}`; }
-
       return res.status(404).json({ 
         success: false, 
-        error: "هذا الرقم غير مسجل في نظام اودو كعميل",
-        debug: `DB: ${odooConfig.db} | Sample Data: [${sample}]`
+        error: "هذا الرقم غير مسجل في نظام اودو كعميل"
       });
     }
 
     console.log(`[OTP] Found customer in Odoo: ${odooCustomers[0].name}`);
 
-    // 2. Generate and Send SMS
+    // Generate OTP
     const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expires = Date.now() + 10 * 60 * 1000; // Increased to 10 mins
+    const expires = Date.now() + 10 * 60 * 1000; // 10 minutes
 
-    // Store in Firestore for persistence across server restarts
-    await admin.firestore().collection("otps").doc(cleanPhone).set({
+    // Store in memory
+    otpStore.set(cleanPhone, {
       code,
       expires,
       odooName: odooCustomers[0].name,
       odooId: odooCustomers[0].id,
       odooData: odooCustomers[0],
-      createdAt: new Date().toISOString()
     });
 
     const message = `كود التحقق الخاص بك لمتجر شركة حقال للتجارة هو: ${code}`;
-    console.log(`[OTP] Sending message to ${cleanPhone}: ${message}. CODE: ${code}`);
+    console.log(`[OTP] Sending to ${cleanPhone}: CODE: ${code}`);
     const result = await sendMadarSMS(cleanPhone, message);
 
     if (result.success) {
-      console.log(`[OTP] Successfully stored and sent ${code} to ${cleanPhone}`);
       res.json({ success: true });
     } else {
-      console.error(`[OTP] Failed to send SMS to ${cleanPhone}:`, result.error);
-      res.status(500).json({ 
-        success: false, 
-        error: result.error || "فشل إرسال الرسالة القصيرة",
-        debug: result.debug
-      });
+      res.status(500).json({ success: false, error: result.error || "فشل إرسال الرسالة القصيرة", debug: result.debug });
     }
   } catch (error: any) {
     console.error("[OTP Error]", error);
@@ -1446,160 +1388,277 @@ app.post("/api/verify-otp", async (req, res) => {
   const { phone, otp, password, email: reqEmail, name: reqName } = req.body;
   const cleanPhone = sanitizePhone(phone);
   
-  // Get OTP from Firestore instead of memory
-  const otpDoc = await admin.firestore().collection("otps").doc(cleanPhone).get();
-  const stored = otpDoc.exists ? otpDoc.data() : null;
+  // Get OTP from in-memory store
+  const stored = otpStore.get(cleanPhone);
 
-  console.log(`[OTP Verify] Attempt for ${cleanPhone}. Code provided: ${otp}, Stored code: ${stored?.code}, Expires: ${stored ? new Date(stored.expires).toISOString() : 'N/A'}`);
+  console.log(`[OTP Verify] Attempt for ${cleanPhone}. Provided: ${otp}, Stored: ${stored?.code}`);
 
   if (!stored) {
     return res.status(400).json({ success: false, error: "الكود غير موجود، يرجى إعادة إرسال الرمز" });
   }
-
   if (stored.expires < Date.now()) {
+    otpStore.delete(cleanPhone);
     return res.status(400).json({ success: false, error: "الكود منتهي الصلاحية، يرجى إعادة إرسال الرمز" });
   }
-
   if (stored.code !== otp) {
     return res.status(400).json({ success: false, error: "رمز التحقق غير صحيح" });
   }
 
+  // OTP valid — determine uid for backward-compat response
   const { odooId, odooData, odooName } = stored;
   const email = reqEmail || (odooData?.email) || `${cleanPhone}@hakkal.com`;
   const displayName = reqName || odooName || odooData?.name || "Customer";
+  const uid = cleanPhone; // local uid = phone
 
-  // If we reach here, OTP is valid
+  // Create or update user in local auth db if password provided (register flow)
   try {
-      let uid = "";
-      const fullPhone = `+${cleanPhone}`;
-      const findUser = async (retryCount = 0): Promise<string> => {
-        try {
-          const userRecord = await admin.auth().getUserByPhoneNumber(fullPhone);
-          return userRecord.uid;
-        } catch (e: any) {
-          if ((e.message.includes('RESOURCE_EXHAUSTED') || e.code === 'auth/quota-exceeded') && retryCount < 2) {
-            console.log(`[Firebase Auth] Quota hit, retrying in 1s... (Attempt ${retryCount + 1})`);
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            return findUser(retryCount + 1);
-          }
-          throw e;
-        }
-      };
-
-      try {
-        uid = await findUser();
-      } catch (e: any) {
-        console.error("[Firebase Auth Search Failed]", e.message);
-      }
-
-      const usersRef = admin.firestore().collection("users");
-      const snapshot = await usersRef.where("phoneNumber", "==", cleanPhone).limit(1).get();
-      
-      if (!snapshot.empty) {
-        uid = snapshot.docs[0].id;
-      } else if (!uid) {
-        // AUTO-REGISTER only if not found in Auth AND not found in Firestore
-        // Get Odoo UID first!
-        const odooUid = await authenticateOdoo();
-        
-        // Super-Flexible search: extract the core digits (last 9 digits usually)
-        const coreDigits = cleanPhone.slice(-9);
-        const searchPattern = `%${coreDigits.split("").join("%")}%`;
-        
-        console.log(`[Odoo Search] Searching for core digits: ${coreDigits} using Odoo UID: ${odooUid}`);
-
-        const odooCustomers = await callOdoo("object", "execute_kw", odooConfig.db, odooUid, getOdooCredential(), "res.partner", "search_read", [[
-          "|", "|",
-          ["mobile", "like", coreDigits],
-          ["phone", "like", coreDigits],
-          ["mobile", "like", searchPattern]
-        ]], { fields: ["id", "name", "email", "mobile", "phone", "street", "city"], limit: 1 }) as any[];
-        
-        const email = reqEmail || (odooCustomers && odooCustomers.length > 0 && odooCustomers[0].email ? odooCustomers[0].email : `${cleanPhone}@hakkal.com`);
-        const displayName = reqName || (stored as any).odooName || (odooCustomers && odooCustomers.length > 0 ? odooCustomers[0].name : "Odoo Customer");
-        const odooId = (stored as any).odooId || (odooCustomers && odooCustomers.length > 0 ? odooCustomers[0].id : null);
-        const odooData = (stored as any).odooData || (odooCustomers && odooCustomers.length > 0 ? odooCustomers[0] : {});
-        
-        try {
-          const newUser = await admin.auth().createUser({
-            phoneNumber: fullPhone,
-            email: email,
-            displayName: displayName
-          });
-          uid = newUser.uid;
-        } catch (authError: any) {
-          if (authError.code === 'auth/email-already-exists' || authError.code === 'auth/phone-number-already-exists') {
-            // User might exist in Auth but not in Firestore yet
-            console.log("[Firebase Auth] User already exists in Auth, trying to fetch...");
-            const existingUser = await admin.auth().getUserByPhoneNumber(fullPhone);
-            uid = existingUser.uid;
-          } else {
-            throw authError;
-          }
-        }
-        
-        await admin.firestore().collection("users").doc(uid).set({
-          facilityName: displayName,
-          phoneNumber: cleanPhone,
-          email: email,
-          odooPartnerId: odooId,
-          odoo_partner: odooData,
-          role: "customer",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          accountActivated: true,
-          status: "active",
-          passwordSet: !!password
-        }, { merge: true });
+    if (password) {
+      const existingUser = authDb.findUserByPhone(cleanPhone);
+      if (!existingUser) {
+        authDb.createUser({ phone: cleanPhone, email, password, name: displayName, odooPartnerId: odooId });
       } else {
-        // User exists in Auth but not in Firestore - create minimal record
-        console.log("[Firestore] Creating missing record for existing Auth user:", uid);
-        await admin.firestore().collection("users").doc(uid).set({
-          phoneNumber: cleanPhone,
-          role: "customer",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          accountActivated: true,
-          status: "active",
-          passwordSet: !!password
-        }, { merge: true });
+        authDb.updatePassword(uid, password);
       }
-      
-      // If password provided, update it now
-      if (password) {
-        await admin.auth().updateUser(uid, { password });
-        await admin.firestore().collection("users").doc(uid).update({
-          passwordSet: true
-        });
-      }
-
-      // DO NOT delete OTP here to allow for retries or page refreshes during the final step
-      // otpStore.delete(cleanPhone); 
-      
-      const customToken = await admin.auth().createCustomToken(uid);
-      res.json({ success: true, uid, customToken });
-    } catch (error: any) {
-      console.error("[Verify OTP Error]", error);
-      res.status(500).json({ success: false, error: error.message });
     }
+
+    // Clean OTP
+    otpStore.delete(cleanPhone);
+
+    // Generate JWT token for direct login after OTP
+    const token = signToken({ uid, phone: cleanPhone, email, name: displayName, isAdmin: false, role: 'customer' });
+
+    res.json({ success: true, uid, token, customToken: token }); // customToken kept for compat
+  } catch (error: any) {
+    console.error("[Verify OTP Error]", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
-app.post("/api/set-password", async (req, res) => {
-  const { uid, password } = req.body;
+// ── NEW JWT AUTH ROUTES (Firebase-free) ───────────────────────
+
+// POST /api/auth/login
+app.post("/api/auth/login", async (req, res) => {
+  const { phone, password } = req.body;
+  if (!phone || !password) return res.status(400).json({ success: false, error: "Phone and password required" });
+  
   try {
-    await admin.auth().updateUser(uid, { password });
-    const customToken = await admin.auth().createCustomToken(uid);
-    res.json({ success: true, customToken });
+    const cleanPhone = sanitizePhone(phone);
+    const user = authDb.findUserByPhone(cleanPhone);
+    
+    if (!user || !authDb.verifyPassword(user, password)) {
+      return res.status(401).json({ success: false, error: "Invalid phone number or password" });
+    }
+    
+    if (!user.accountActivated && !user.isAdmin) {
+      return res.status(403).json({ success: false, error: "Account pending activation", pendingActivation: true });
+    }
+    
+    const token = signToken({
+      uid: user.uid,
+      phone: user.phone,
+      email: user.email,
+      name: user.name,
+      isAdmin: user.isAdmin,
+      role: user.role,
+    });
+    
+    console.log(`[Auth Login] Success: ${user.uid}`);
+    res.json({
+      success: true,
+      token,
+      user: {
+        uid: user.uid,
+        phone: user.phone,
+        email: user.email,
+        name: user.name,
+        isAdmin: user.isAdmin,
+        role: user.role,
+        accountActivated: user.accountActivated,
+        odooPartnerId: user.odooPartnerId,
+      }
+    });
+  } catch (error: any) {
+    console.error("[Auth Login Error]", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/auth/register  (called after OTP verified)
+app.post("/api/auth/register", async (req, res) => {
+  const { phone, password, name, email: customEmail } = req.body;
+  if (!phone || !password || !name) {
+    return res.status(400).json({ success: false, error: "Phone, password, and name are required" });
+  }
+  
+  try {
+    const cleanPhone = sanitizePhone(phone);
+    const email = customEmail || `${cleanPhone}@hakkal.com`;
+    
+    // Check if already registered
+    const existing = authDb.findUserByPhone(cleanPhone);
+    if (existing) {
+      return res.status(409).json({ success: false, error: "Phone number already registered" });
+    }
+    
+    // Look up Odoo to find partner
+    let odooPartnerId: number | undefined;
+    try {
+      const odooUid = await authenticateOdoo();
+      if (odooUid) {
+        const partners = await callOdoo("object", "execute_kw",
+          odooConfig.db, odooUid, getOdooCredential(),
+          "res.partner", "search_read",
+          [["|", ["mobile", "ilike", cleanPhone.slice(-9)], ["phone", "ilike", cleanPhone.slice(-9)]]],
+          { fields: ["id"], limit: 1 }
+        );
+        if (Array.isArray(partners) && partners.length > 0) {
+          odooPartnerId = partners[0].id;
+          console.log(`[Auth Register] Found Odoo partner: ${odooPartnerId}`);
+        }
+      }
+    } catch (e: any) {
+      console.warn("[Auth Register] Could not lookup Odoo partner:", e.message);
+    }
+    
+    const user = authDb.createUser({ phone: cleanPhone, email, password, name, odooPartnerId });
+    
+    const token = signToken({
+      uid: user.uid,
+      phone: user.phone,
+      email: user.email,
+      name: user.name,
+      isAdmin: user.isAdmin,
+      role: user.role,
+    });
+    
+    console.log(`[Auth Register] Created user: ${user.uid}`);
+    res.json({
+      success: true,
+      token,
+      uid: user.uid,
+      user: {
+        uid: user.uid,
+        phone: user.phone,
+        email: user.email,
+        name: user.name,
+        isAdmin: user.isAdmin,
+        role: user.role,
+        accountActivated: user.accountActivated,
+      }
+    });
+  } catch (error: any) {
+    console.error("[Auth Register Error]", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/auth/me  - Verify token & return user info
+app.get("/api/auth/me", requireAuth, (req: any, res) => {
+  const user = authDb.findUserByUid(req.user.uid);
+  if (!user) return res.status(404).json({ success: false, error: "User not found" });
+  res.json({
+    success: true,
+    user: {
+      uid: user.uid,
+      phone: user.phone,
+      email: user.email,
+      name: user.name,
+      isAdmin: user.isAdmin,
+      role: user.role,
+      accountActivated: user.accountActivated,
+      odooPartnerId: user.odooPartnerId,
+    }
+  });
+});
+
+// POST /api/auth/change-password
+app.post("/api/auth/change-password", requireAuth, (req: any, res) => {
+  const { currentPassword, newPassword } = req.body;
+  const user = authDb.findUserByUid(req.user.uid);
+  if (!user || !authDb.verifyPassword(user, currentPassword)) {
+    return res.status(401).json({ success: false, error: "Current password is incorrect" });
+  }
+  authDb.updatePassword(user.uid, newPassword);
+  res.json({ success: true, message: "Password updated successfully" });
+});
+
+// POST /api/set-password  (called after OTP reset - no auth required)
+app.post("/api/set-password", async (req, res) => {
+  const { phone, password } = req.body;
+  if (!phone || !password) return res.status(400).json({ success: false, error: "Phone and password required" });
+  
+  try {
+    const cleanPhone = sanitizePhone(phone);
+    const user = authDb.findUserByPhone(cleanPhone);
+    if (!user) return res.status(404).json({ success: false, error: "User not found" });
+    
+    authDb.updatePassword(user.uid, password);
+    
+    const token = signToken({
+      uid: user.uid,
+      phone: user.phone,
+      email: user.email,
+      name: user.name,
+      isAdmin: user.isAdmin,
+      role: user.role,
+    });
+    
+    res.json({ success: true, token, uid: user.uid });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
+});
+
+// GET /api/auth/users (admin only)
+app.get("/api/auth/users", requireAdmin, (req: any, res) => {
+  const users = authDb.getAllUsers().map(u => ({
+    uid: u.uid,
+    phone: u.phone,
+    email: u.email,
+    name: u.name,
+    role: u.role,
+    isAdmin: u.isAdmin,
+    accountActivated: u.accountActivated,
+    odooPartnerId: u.odooPartnerId,
+    createdAt: u.createdAt,
+  }));
+  res.json({ success: true, data: users });
+});
+
+// POST /api/auth/activate (admin only)
+app.post("/api/auth/activate", requireAdmin, (req: any, res) => {
+  const { uid } = req.body;
+  const ok = authDb.activateUser(uid);
+  if (!ok) return res.status(404).json({ success: false, error: "User not found" });
+  res.json({ success: true, message: "User activated" });
+});
+
+// DELETE /api/auth/user (admin or self)
+app.delete("/api/auth/user/:uid", requireAuth, (req: any, res) => {
+  const targetUid = req.params.uid;
+  if (!req.user.isAdmin && req.user.uid !== targetUid) {
+    return res.status(403).json({ success: false, error: "Forbidden" });
+  }
+  const ok = authDb.deleteUser(targetUid);
+  if (!ok) return res.status(404).json({ success: false, error: "User not found" });
+  res.json({ success: true, message: "User deleted" });
+});
+
+// GET /api/get-email-by-phone (legacy compat - now from local db)
+app.get("/api/get-email-by-phone", (req, res) => {
+  const { phone } = req.query;
+  if (!phone) return res.status(400).json({ error: "Phone is required" });
+  const cleanPhone = sanitizePhone(phone as string);
+  const user = authDb.findUserByPhone(cleanPhone);
+  if (user) return res.json({ success: true, email: user.email });
+  // Fallback
+  return res.json({ success: true, email: `${cleanPhone}@hakkal.com` });
 });
 
 // Email Notification
 app.post("/api/send-email", async (req, res) => {
   const { customerEmail, customerName, items, total, orderId } = req.body;
   if (!process.env.RESEND_API_KEY) return res.status(500).json({ error: "Resend key missing" });
-  
   try {
     const resend = new Resend(process.env.RESEND_API_KEY.trim());
     const { data, error } = await resend.emails.send({
@@ -1610,47 +1669,6 @@ app.post("/api/send-email", async (req, res) => {
     });
     res.json({ success: !error, data, error });
   } catch (e: any) { res.status(500).json({ error: e.message }); }
-});
-
-app.get("/api/get-email-by-phone", async (req, res) => {
-  const { phone } = req.query;
-  if (!phone) return res.status(400).json({ error: "Phone is required" });
-  
-  const originalPhone = phone as string;
-  const cleanPhone = sanitizePhone(originalPhone);
-  
-  // Try multiple formats to be safe
-  const formatsToTry = [cleanPhone];
-  if (originalPhone !== cleanPhone) formatsToTry.push(originalPhone);
-  
-  // Also try common Saudi formats if it starts with 9665
-  if (cleanPhone.startsWith("9665") && cleanPhone.length === 12) {
-    formatsToTry.push("0" + cleanPhone.substring(3)); // 05...
-    formatsToTry.push(cleanPhone.substring(3)); // 5...
-  }
-
-  console.log(`[GetEmail] Searching for phone formats:`, formatsToTry);
-
-  try {
-    const usersRef = admin.firestore().collection("users");
-    
-    // Try each format until we find one
-    for (const f of formatsToTry) {
-      const snapshot = await usersRef.where("phoneNumber", "==", f).limit(1).get();
-      if (!snapshot.empty) {
-        const userData = snapshot.docs[0].data();
-        console.log(`[GetEmail] Found user with format ${f}: ${userData.email}`);
-        return res.json({ success: true, email: userData.email });
-      }
-    }
-    
-    // Final fallback
-    console.log(`[GetEmail] No user found in Firestore. Using fallback email for ${cleanPhone}`);
-    return res.json({ success: true, email: `${cleanPhone}@hakkal.com` });
-  } catch (error: any) {
-    console.error("[GetEmail Error]", error);
-    res.status(500).json({ error: error.message });
-  }
 });
 
 // Serve static files from the 'dist' directory in production

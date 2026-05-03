@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { createUserWithEmailAndPassword, signInWithCustomToken } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { auth, db } from '../firebase';
+import { saveSession } from '../auth';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserPlus, Mail, Phone, Lock, ChevronLeft, AlertCircle, CheckCircle2, Globe, User as UserIcon, ShieldCheck, Eye, EyeOff } from 'lucide-react';
@@ -185,9 +183,29 @@ export const RegisterPage = () => {
 
       const data = await response.json();
       if (data.success && data.uid) {
-        // We no longer sign in automatically. Instead, redirect to login.
-        // await signInWithCustomToken(auth, data.customToken);
-        
+        // New flow: user is created server-side, OTP verified
+        // Now register them in our local auth system
+        try {
+          const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || 'https://shaninewserver.onrender.com';
+          const cleanPhone = sanitizePhone(formData.phone);
+          const regRes = await fetch(`${API_BASE}/api/auth/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              phone: cleanPhone,
+              password: formData.password,
+              name: formData.name,
+              email: formData.email || undefined
+            })
+          });
+          const regData = await regRes.json();
+          if (regData.success && regData.token) {
+            saveSession(regData.token, regData.user);
+          }
+        } catch (e) {
+          console.warn('[Register] Could not save JWT session, will need to login manually');
+        }
+
         setStatus({ 
           type: 'success', 
           message: lang === 'ar' 
@@ -195,14 +213,13 @@ export const RegisterPage = () => {
             : 'Account created successfully! Please login with your phone and password.' 
         });
         
-        // Redirect to login after 3 seconds
-        setTimeout(() => navigate('/login'), 3000);
+        // Redirect to dashboard or login after 3 seconds
+        setTimeout(() => navigate('/dashboard'), 3000);
       } else {
         setStatus({ 
           type: 'error', 
           message: translateError(data.error || (lang === 'ar' ? 'رمز التحقق غير صحيح أو منتهي' : 'Invalid or expired code'))
         });
-        // If OTP fails, maybe go back to OTP step
         if (data.error?.includes('رمز') || data.error?.includes('كود') || data.error?.includes('OTP')) {
           setStep('otp');
         }
