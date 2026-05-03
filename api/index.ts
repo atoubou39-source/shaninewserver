@@ -167,10 +167,16 @@ const sanitizePhone = (phone: string): string => {
   // If it starts with 5 and length is 9, convert to 9665...
   else if (clean.startsWith("5") && clean.length === 9) {
     clean = "966" + clean;
-  } 
-  // If it's 9 digits but doesn't start with 966, assume it's a local number without 0
-  else if (!clean.startsWith("966") && clean.length === 9) {
-    clean = "966" + clean;
+  }
+
+  // Dedup: if exact double-length (user typed number twice), take first half
+  if (clean.length === 24 && clean.startsWith('966')) {
+    clean = clean.substring(0, 12);
+  }
+  
+  // Cap at 12 digits (Saudi number max: 966XXXXXXXXX)
+  if (clean.startsWith('966') && clean.length > 12) {
+    clean = clean.substring(0, 12);
   }
   
   return clean;
