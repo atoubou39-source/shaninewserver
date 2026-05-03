@@ -725,6 +725,7 @@ const Products = ({
   cart,
   onOrder,
   onUpdateQuantity,
+  onSetManualQuantity,
   onRemoveFromCart,
   onViewProduct,
   user,
@@ -737,6 +738,7 @@ const Products = ({
   cart: CartItem[],
   onOrder: (p: Product) => void,
   onUpdateQuantity: (id: number, delta: number) => void,
+  onSetManualQuantity: (id: number, val: string) => void,
   onRemoveFromCart: (id: number) => void,
   onViewProduct: (p: Product) => void,
   user: User | null,
@@ -818,7 +820,15 @@ const Products = ({
                           >
                             <Trash2 size={18} />
                           </button>
-                          <span className="text-white font-bold text-lg min-w-[24px] text-center">{cartItem.quantity}</span>
+                          
+                          <input 
+                            type="number"
+                            value={cartItem.quantity}
+                            onChange={(e) => { e.stopPropagation(); onSetManualQuantity(p.id, e.target.value); }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-white/10 text-white font-bold text-lg w-12 text-center border-none focus:ring-0 rounded-lg"
+                          />
+
                           <button 
                             onClick={(e) => { e.stopPropagation(); onUpdateQuantity(p.id, 1); }}
                             className="p-2.5 bg-white/10 rounded-xl hover:bg-white/20 text-white transition-colors"
@@ -3525,7 +3535,7 @@ const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory }: { o
   );
 };
 
-const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onRemoveFromCart, t, lang }: { products: Product[], cart: CartItem[], onAddToCart: (p: Product) => void, onUpdateQuantity: (id: number, delta: number) => void, onRemoveFromCart: (id: number) => void, t: any, lang: Language }) => {
+const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManualQuantity, onRemoveFromCart, t, lang }: { products: Product[], cart: CartItem[], onAddToCart: (p: Product) => void, onUpdateQuantity: (id: number, delta: number) => void, onSetManualQuantity: (id: number, val: string) => void, onRemoveFromCart: (id: number) => void, t: any, lang: Language }) => {
   const isRtl = lang === 'ar';
   const [search, setSearch] = useState('');
   const [showOffer, setShowOffer] = useState(true);
@@ -3617,7 +3627,13 @@ const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onRemoveF
                         {cartItem ? (
                            <div className="flex items-center bg-brand-navy rounded-xl p-1 gap-2">
                              <button onClick={() => onRemoveFromCart(p.id)} className="p-1.5 bg-white/10 rounded-lg hover:bg-white/20 text-white"><Trash2 size={14}/></button>
-                             <span className="text-white font-bold text-sm min-w-[20px] text-center">{cartItem.quantity}</span>
+                             <input 
+                               type="number"
+                               value={cartItem.quantity}
+                               onChange={(e) => { e.stopPropagation(); onSetManualQuantity(p.id, e.target.value); }}
+                               onClick={(e) => e.stopPropagation()}
+                               className="bg-white/10 text-white font-bold text-sm w-10 text-center border-none focus:ring-0 rounded-lg"
+                             />
                              <button onClick={() => onUpdateQuantity(p.id, 1)} className="p-1.5 bg-white/10 rounded-lg hover:bg-white/20 text-white"><Plus size={14}/></button>
                            </div>
                         ) : (
@@ -3715,7 +3731,13 @@ const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onRemoveF
                         >
                           <Trash2 size={16} />
                         </button>
-                        <span className="text-white font-bold text-base min-w-[24px] text-center">{cartItem.quantity}</span>
+                        <input 
+                          type="number"
+                          value={cartItem.quantity}
+                          onChange={(e) => { e.stopPropagation(); onSetManualQuantity(p.id, e.target.value); }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="bg-white/10 text-white font-bold text-base w-12 text-center border-none focus:ring-0 rounded-lg"
+                        />
                         <button 
                           onClick={(e) => { e.stopPropagation(); onUpdateQuantity(p.id, 1); }}
                           className="p-2 bg-white/10 rounded-xl hover:bg-white/20 text-white transition-colors"
@@ -6857,6 +6879,7 @@ const Home = ({
   cart,
   onAddToCart, 
   onUpdateQuantity,
+  onSetManualQuantity,
   onRemoveFromCart,
   cartCount, 
   onOpenCart,
@@ -6875,6 +6898,7 @@ const Home = ({
   cart: CartItem[],
   onAddToCart: (p: Product) => void,
   onUpdateQuantity: (id: number, delta: number) => void,
+  onSetManualQuantity: (id: number, val: string) => void,
   onRemoveFromCart: (id: number) => void,
   cartCount: number,
   onOpenCart: () => void,
@@ -6908,6 +6932,7 @@ const Home = ({
         cart={cart}
         onOrder={onAddToCart} 
         onUpdateQuantity={onUpdateQuantity}
+        onSetManualQuantity={onSetManualQuantity}
         onRemoveFromCart={onRemoveFromCart}
         onViewProduct={onViewProduct} 
         user={user} 
@@ -7104,7 +7129,6 @@ export default function App() {
       }
       return [...prev, { ...product, quantity: 1 }];
     });
-    setIsCartOpen(true);
   };
 
   const updateQuantity = (id: number, delta: number) => {
@@ -7474,6 +7498,7 @@ export default function App() {
                 cart={cart}
                 onAddToCart={addToCart} 
                 onUpdateQuantity={updateQuantity}
+                onSetManualQuantity={setManualQuantity}
                 onRemoveFromCart={removeFromCart}
                 t={t} 
                 lang={lang} 
