@@ -116,7 +116,7 @@ export function createUser(data: {
     name: data.name,
     role: isAdmin ? 'admin' : 'customer',
     isAdmin,
-    accountActivated: isAdmin, // admins auto-activated; customers need activation
+    accountActivated: true, // Auto-activated on registration
     odooPartnerId: data.odooPartnerId,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
