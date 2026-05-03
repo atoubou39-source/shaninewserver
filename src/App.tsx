@@ -862,7 +862,7 @@ const Products = ({
                                {activePill === p.id ? (
                                  <div className="w-full bg-brand-navy rounded-xl py-3 flex items-center justify-between px-6 shadow-lg border border-white/10">
                                    <button 
-                                     onClick={(e) => { e.stopPropagation(); onUpdateQuantity(p.id, -1); }}
+                                     onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onUpdateQuantity(p.id, -1); }}
                                      className="p-1 hover:bg-white/10 text-white transition-colors"
                                    >
                                      <Minus size={18} />
@@ -877,7 +877,7 @@ const Products = ({
                                      className="bg-transparent text-white font-bold text-lg w-12 text-center border-none focus:ring-0 p-0"
                                    />
                                    <button 
-                                     onClick={(e) => { e.stopPropagation(); onUpdateQuantity(p.id, 1); }}
+                                     onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onUpdateQuantity(p.id, 1); }}
                                      className="p-1 hover:bg-white/10 text-white transition-colors"
                                    >
                                      <Plus size={18} />
@@ -3760,7 +3760,7 @@ const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManu
                         {activePill === p.id ? (
                           <div className="bg-brand-navy rounded-lg flex items-center p-0.5 shadow-md border border-white/10 scale-110">
                             <button 
-                              onClick={(e) => { e.stopPropagation(); onUpdateQuantity(p.id, -1); }}
+                              onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onUpdateQuantity(p.id, -1); }}
                               className="p-1 hover:bg-white/10 text-white transition-colors"
                             >
                               <Minus size={12} />
@@ -3775,7 +3775,7 @@ const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManu
                               className="bg-transparent text-white font-bold text-[11px] w-7 text-center border-none focus:ring-0 p-0"
                             />
                             <button 
-                              onClick={(e) => { e.stopPropagation(); onUpdateQuantity(p.id, 1); }}
+                              onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); onUpdateQuantity(p.id, 1); }}
                               className="p-1 hover:bg-white/10 text-white transition-colors"
                             >
                               <Plus size={12} />
