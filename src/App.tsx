@@ -347,13 +347,13 @@ const getApiUrl = (path: string) => {
   const envBase = import.meta.env.VITE_API_BASE_URL;
 
   // 1. If we have a base URL in ENV, use it as priority (works for cross-domain)
-  if (envBase && envBase.startsWith('http')) {
+  if (envBase && envBase.startsWith('http') && envBase !== "https://your-backend-domain.com") {
     return `${envBase.replace(/\/$/, '')}${cleanPath}`;
   }
 
-  // 2. In production fallback to relative path if no base URL
+  // 2. In production fallback to Render backend if no base URL is properly injected
   if (import.meta.env.PROD) {
-    return cleanPath;
+    return `https://shaninewserver.onrender.com${cleanPath}`;
   }
 
   // 3. In development, handle localhost switching

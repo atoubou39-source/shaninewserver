@@ -31,6 +31,11 @@ const getApiUrl = (path: string) => {
     return `${finalBase}${cleanPath}`;
   }
 
+  // Fallback for production if env is missing
+  if (!isLocalhost) {
+    return `https://shaninewserver.onrender.com${cleanPath}`;
+  }
+
   // Fallback to relative path
   return cleanPath;
 };

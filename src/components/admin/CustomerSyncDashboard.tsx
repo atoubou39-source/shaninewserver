@@ -42,7 +42,7 @@ const getApiUrl = (path: string) => {
   if (envBase && envBase !== "https://your-backend-domain.com") {
     const cleanBase = envBase
       .trim()
-      .replace(/^[\/\)\s;`"']+/ , "")
+      .replace(/^[\/\)\s;`"']+/, "")
       .replace(/[\/\)\s;`"']+$/, "");
     
     const finalBase = cleanBase.startsWith('http') ? cleanBase : `https://${cleanBase}`;
@@ -52,6 +52,11 @@ const getApiUrl = (path: string) => {
       return `${finalBase}${cleanPath.substring(4)}`;
     }
     return `${finalBase}${cleanPath}`;
+  }
+
+  // Fallback for production if env is missing
+  if (!isLocalhost) {
+    return `https://shaninewserver.onrender.com${cleanPath}`;
   }
 
   // Fallback to relative path
