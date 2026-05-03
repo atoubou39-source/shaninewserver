@@ -49,7 +49,7 @@ export function isLoggedIn(): boolean {
 
 // ── API Helper ─────────────────────────────────────────────────
 
-export const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
+export const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || (typeof window !== 'undefined' && window.location.hostname.includes('localhost') ? 'http://localhost:3000' : 'https://shaninewserver.onrender.com');
 
 export function getApiUrl(path: string) {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
