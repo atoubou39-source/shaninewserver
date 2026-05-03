@@ -722,7 +722,10 @@ const FeaturesBar = ({ t }: { t: any }) => {
 
 const Products = ({ 
   products, 
+  cart,
   onOrder,
+  onUpdateQuantity,
+  onRemoveFromCart,
   onViewProduct,
   user,
   userRole,
@@ -731,7 +734,10 @@ const Products = ({
   t
 }: { 
   products: Product[], 
+  cart: CartItem[],
   onOrder: (p: Product) => void,
+  onUpdateQuantity: (id: number, delta: number) => void,
+  onRemoveFromCart: (id: number) => void,
   onViewProduct: (p: Product) => void,
   user: User | null,
   userRole: string | null,
@@ -778,14 +784,16 @@ const Products = ({
                 )}
               </div>
             ) : (
-              visibleProducts.map((p) => (
+              visibleProducts.map((p) => {
+                const cartItem = cart.find(ci => ci.id === p.id);
+                return (
                 <motion.div 
                   key={p.id}
                   layout
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9 }}
-                  className="bg-white p-3 md:p-5 rounded-2xl md:rounded-3xl shadow-sm hover:shadow-xl transition-all group border border-white hover:border-brand-orange/20 cursor-pointer flex flex-col h-full"
+                  className="bg-white p-3 md:p-5 rounded-2xl md:rounded-3xl shadow-sm hover:shadow-xl transition-all group border border-white hover:border-brand-orange/20 cursor-pointer flex flex-col h-full relative"
                 >
                   <div className="aspect-square mb-3 md:mb-6 overflow-hidden rounded-xl md:rounded-2xl bg-[#f3f3f3] relative">
                     <img 
@@ -799,11 +807,36 @@ const Products = ({
                         {Math.round((1 - parseFloat(p.discountPrice.replace(/[^\d.]/g, '')) / parseFloat(p.price.replace(/[^\d.]/g, ''))) * 100)}% {t.products.off || 'OFF'}
                       </div>
                     )}
-                    <div className="absolute inset-0 bg-brand-navy/0 group-hover:bg-brand-navy/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                      <div className="bg-white text-brand-navy p-4 rounded-full shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform">
-                        <Eye size={20} />
+                    
+                    {/* BLUE QUANTITY SELECTOR (OVERLAY) */}
+                    {cartItem && (
+                      <div className="absolute inset-0 bg-brand-navy/10 flex items-center justify-center p-4">
+                        <div className="bg-brand-navy rounded-2xl flex items-center p-2 gap-4 shadow-xl transform scale-100 transition-all border border-white/20">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); onRemoveFromCart(p.id); }}
+                            className="p-2.5 bg-white/10 rounded-xl hover:bg-white/20 text-white transition-colors"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                          <span className="text-white font-bold text-lg min-w-[24px] text-center">{cartItem.quantity}</span>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); onUpdateQuantity(p.id, 1); }}
+                            className="p-2.5 bg-white/10 rounded-xl hover:bg-white/20 text-white transition-colors"
+                          >
+                            <Plus size={18} />
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    )}
+
+                    {!cartItem && (
+                      <div className="absolute inset-0 bg-brand-navy/0 group-hover:bg-brand-navy/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                        <div className="bg-white text-brand-navy p-4 rounded-full shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform">
+                          <Eye size={20} />
+                        </div>
+                      </div>
+                    )}
+                    
                     {/* Brand Logo */}
                     <div className="absolute bottom-3 start-3 bg-white/90 backdrop-blur-sm rounded-xl shadow-sm px-2.5 py-1.5 flex items-center justify-center border border-brand-navy/5">
                       <img
@@ -840,16 +873,24 @@ const Products = ({
                               </p>
                             )}
                           </div>
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onOrder(p);
-                            }}
-                            className="w-full bg-[#0f172a] text-white py-4 rounded-xl text-[11px] tracking-[0.1em] font-bold flex items-center justify-center space-x-2 space-x-reverse hover:bg-brand-orange transition-all duration-300"
-                          >
-                            <ShoppingBag size={16} />
-                            <span className={lang === 'ar' ? "font-action-arabic" : ""}>{t.products.addToCart}</span>
-                          </button>
+                          
+                          {cartItem ? (
+                            <div className="w-full bg-brand-navy/5 border border-brand-navy/10 py-4 rounded-xl flex items-center justify-center gap-2">
+                              <div className="w-2 h-2 bg-brand-orange rounded-full animate-pulse" />
+                              <span className="text-[10px] font-bold text-brand-navy tracking-widest uppercase">{lang === 'ar' ? 'تمت الإضافة للسلة' : 'Added to Cart'}</span>
+                            </div>
+                          ) : (
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOrder(p);
+                              }}
+                              className="w-full bg-[#0f172a] text-white py-4 rounded-xl text-[11px] tracking-[0.1em] font-bold flex items-center justify-center space-x-2 space-x-reverse hover:bg-brand-orange transition-all duration-300"
+                            >
+                              <ShoppingBag size={16} />
+                              <span className={lang === 'ar' ? "font-action-arabic" : ""}>{t.products.addToCart}</span>
+                            </button>
+                          )}
                         </>
                       ) : (
                         <div className="space-y-4">
@@ -871,7 +912,8 @@ const Products = ({
                     </div>
                   </div>
                 </motion.div>
-              ))
+                );
+              })
             )}
           </AnimatePresence>
         </div>
@@ -3483,19 +3525,11 @@ const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory }: { o
   );
 };
 
-const CustomerShop = ({ products, onAddToCart, t, lang }: { products: Product[], onAddToCart: (p: Product) => void, t: any, lang: Language }) => {
+const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onRemoveFromCart, t, lang }: { products: Product[], cart: CartItem[], onAddToCart: (p: Product) => void, onUpdateQuantity: (id: number, delta: number) => void, onRemoveFromCart: (id: number) => void, t: any, lang: Language }) => {
   const isRtl = lang === 'ar';
   const [search, setSearch] = useState('');
-  const [addedId, setAddedId] = useState<number | null>(null);
   const [showOffer, setShowOffer] = useState(true);
-
-  // إعادة إظهار البوب آب كل 5 دقائق
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setShowOffer(true);
-    }, 5 * 60 * 1000); // 5 minutes
-    return () => clearInterval(interval);
-  }, []);
+  const navigate = useNavigate();
 
   const filtered = useMemo(() =>
     products.filter(p =>
@@ -3503,14 +3537,15 @@ const CustomerShop = ({ products, onAddToCart, t, lang }: { products: Product[],
       p.description?.toLowerCase().includes(search.toLowerCase())
     ), [products, search]);
 
-  const handleAdd = (p: Product) => {
-    onAddToCart(p);
-    setAddedId(p.id);
-    setTimeout(() => setAddedId(null), 1500);
-  };
+  const cartTotal = useMemo(() => {
+    return cart.reduce((sum, item) => {
+      const p = parseFloat((item.discountPrice || item.price).replace(/[^\d.]/g, ''));
+      return sum + (p * item.quantity);
+    }, 0);
+  }, [cart]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-24">
       {/* Offers Modal Popup */}
       <AnimatePresence>
         {showOffer && (() => {
@@ -3561,16 +3596,15 @@ const CustomerShop = ({ products, onAddToCart, t, lang }: { products: Product[],
                 {/* Discounted Products */}
                 <div className="overflow-y-auto flex-1 p-4 space-y-3">
                   {discounted.map(p => {
+                    const cartItem = cart.find(ci => ci.id === p.id);
                     const orig = parseFloat(p.price.replace(/[^\d.]/g, ''));
                     const disc = parseFloat(p.discountPrice!.replace(/[^\d.]/g, ''));
                     const pct  = Math.round((1 - disc / orig) * 100);
                     return (
                       <div key={p.id} className={`flex items-center gap-4 bg-gray-50 rounded-2xl p-3 hover:bg-orange-50 transition-colors ${isRtl ? 'flex-row-reverse' : ''}`}>
-                        {/* Image */}
                         <div className="w-16 h-16 rounded-xl overflow-hidden bg-white flex-shrink-0 shadow-sm">
                           <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
                         </div>
-                        {/* Info */}
                         <div className={`flex-1 min-w-0 ${isRtl ? 'text-right' : 'text-left'}`}>
                           <p className="text-brand-navy font-bold text-sm line-clamp-1">{p.name}</p>
                           <div className={`flex items-center gap-2 mt-1 ${isRtl ? 'flex-row-reverse' : ''}`}>
@@ -3579,21 +3613,26 @@ const CustomerShop = ({ products, onAddToCart, t, lang }: { products: Product[],
                             <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">-{pct}%</span>
                           </div>
                         </div>
-                        {/* Add button */}
-                        <button
-                          onClick={() => { handleAdd(p); }}
-                          className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all shadow-md ${
-                            addedId === p.id ? 'bg-green-500 text-white scale-110' : 'bg-brand-navy text-white hover:bg-brand-orange hover:scale-105'
-                          }`}
-                        >
-                          {addedId === p.id ? <Check size={16} /> : <Plus size={16} />}
-                        </button>
+                        
+                        {cartItem ? (
+                           <div className="flex items-center bg-brand-navy rounded-xl p-1 gap-2">
+                             <button onClick={() => onRemoveFromCart(p.id)} className="p-1.5 bg-white/10 rounded-lg hover:bg-white/20 text-white"><Trash2 size={14}/></button>
+                             <span className="text-white font-bold text-sm min-w-[20px] text-center">{cartItem.quantity}</span>
+                             <button onClick={() => onUpdateQuantity(p.id, 1)} className="p-1.5 bg-white/10 rounded-lg hover:bg-white/20 text-white"><Plus size={14}/></button>
+                           </div>
+                        ) : (
+                          <button
+                            onClick={() => onAddToCart(p)}
+                            className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-brand-navy text-white hover:bg-brand-orange transition-all shadow-md"
+                          >
+                            <Plus size={16} />
+                          </button>
+                        )}
                       </div>
                     );
                   })}
                 </div>
 
-                {/* Footer */}
                 <div className="p-4 border-t border-gray-100 flex-shrink-0">
                   <button
                     onClick={() => setShowOffer(false)}
@@ -3615,7 +3654,6 @@ const CustomerShop = ({ products, onAddToCart, t, lang }: { products: Product[],
           <p className="text-gray-400 text-sm mt-0.5">{filtered.length} {isRtl ? 'منتج' : 'products'}</p>
         </div>
 
-        {/* Search Bar */}
         <div className={`relative flex-shrink-0 w-full sm:w-72`}>
           <Search size={16} className={`absolute top-1/2 -translate-y-1/2 text-gray-400 ${isRtl ? 'right-3' : 'left-3'}`} />
           <input
@@ -3641,64 +3679,123 @@ const CustomerShop = ({ products, onAddToCart, t, lang }: { products: Product[],
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-          {filtered.map((p, i) => (
-            <motion.div
-              key={p.id}
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.03 }}
-              className="bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-brand-orange/20 transition-all group flex flex-col overflow-hidden"
-            >
-              <div className="relative overflow-hidden bg-gray-50" style={{ aspectRatio: '1/1' }}>
-                <img
-                  src={p.image}
-                  alt={p.name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                />
-                {/* Brand badge */}
-                <div className="absolute bottom-1.5 start-1.5 bg-white/90 backdrop-blur-sm rounded-lg shadow-sm p-1">
+          {filtered.map((p, i) => {
+            const cartItem = cart.find(ci => ci.id === p.id);
+            return (
+              <motion.div
+                key={p.id}
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.03 }}
+                className="bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-brand-orange/20 transition-all group flex flex-col overflow-hidden relative"
+              >
+                <div className="relative overflow-hidden bg-gray-50" style={{ aspectRatio: '1/1' }}>
                   <img
-                    src="https://i.ibb.co/FTqMcyG/Untitled-design.png"
-                    alt="Brand"
-                    className="h-5 w-auto object-contain mix-blend-multiply"
+                    src={p.image}
+                    alt={p.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
-                </div>
-                {/* Quick Add overlay */}
-                <button
-                  onClick={() => handleAdd(p)}
-                  className="absolute inset-0 bg-brand-navy/0 group-hover:bg-brand-navy/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100"
-                >
-                  <div className="bg-white text-brand-navy rounded-full p-2 shadow-xl transform scale-75 group-hover:scale-100 transition-transform">
-                    {addedId === p.id ? <Check size={18} className="text-green-500" /> : <ShoppingCart size={18} />}
+                  
+                  {/* Brand badge */}
+                  <div className="absolute bottom-1.5 start-1.5 bg-white/90 backdrop-blur-sm rounded-lg shadow-sm p-1">
+                    <img
+                      src="https://i.ibb.co/FTqMcyG/Untitled-design.png"
+                      alt="Brand"
+                      className="h-5 w-auto object-contain mix-blend-multiply"
+                    />
                   </div>
-                </button>
-              </div>
 
-              {/* Info */}
-              <div className={`p-2.5 flex flex-col flex-1 ${isRtl ? 'text-right' : 'text-left'}`}>
-                <p className="text-brand-navy font-bold text-xs leading-snug line-clamp-2 mb-1 group-hover:text-brand-orange transition-colors">
-                  {p.name}
-                </p>
-                <div className={`flex items-center justify-between mt-auto pt-1.5 border-t border-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                  <span className="text-brand-orange font-bold text-sm">
-                    {t.products.pricePrefix}{String(p.price).replace(/SAR|ر\.س|SR|ريال/gi, "").replace(/[^\d.]/g, "").trim()}
-                  </span>
-                  <button
-                    onClick={() => handleAdd(p)}
-                    className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all shadow-sm ${
-                      addedId === p.id
-                        ? 'bg-green-500 text-white scale-110'
-                        : 'bg-brand-navy text-white hover:bg-brand-orange hover:scale-110 active:scale-95'
-                    }`}
-                  >
-                    {addedId === p.id ? <Check size={14} /> : <Plus size={14} />}
-                  </button>
+                  {/* BLUE QUANTITY SELECTOR (OVERLAY) */}
+                  {cartItem && (
+                    <div className="absolute inset-0 bg-brand-navy/10 flex items-center justify-center p-3">
+                      <div className="bg-brand-navy rounded-2xl flex items-center p-1.5 gap-3 shadow-xl transform scale-100 transition-all border border-white/20">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); onRemoveFromCart(p.id); }}
+                          className="p-2 bg-white/10 rounded-xl hover:bg-white/20 text-white transition-colors"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                        <span className="text-white font-bold text-base min-w-[24px] text-center">{cartItem.quantity}</span>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); onUpdateQuantity(p.id, 1); }}
+                          className="p-2 bg-white/10 rounded-xl hover:bg-white/20 text-white transition-colors"
+                        >
+                          <Plus size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {!cartItem && (
+                    <button
+                      onClick={() => onAddToCart(p)}
+                      className="absolute inset-0 bg-brand-navy/0 group-hover:bg-brand-navy/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100"
+                    >
+                      <div className="bg-white text-brand-navy rounded-full p-2.5 shadow-xl transform scale-75 group-hover:scale-100 transition-transform">
+                        <ShoppingCart size={20} />
+                      </div>
+                    </button>
+                  )}
                 </div>
-              </div>
-            </motion.div>
-          ))}
+
+                <div className={`p-2.5 flex flex-col flex-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                  <p className="text-brand-navy font-bold text-[11px] leading-snug line-clamp-2 mb-1 group-hover:text-brand-orange transition-colors">
+                    {p.name}
+                  </p>
+                  <div className={`flex items-center justify-between mt-auto pt-1.5 border-t border-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <span className="text-brand-orange font-bold text-sm">
+                      {t.products.pricePrefix}{String(p.price).replace(/SAR|ر\.س|SR|ريال/gi, "").replace(/[^\d.]/g, "").trim()}
+                    </span>
+                    {!cartItem && (
+                      <button
+                        onClick={() => onAddToCart(p)}
+                        className="w-7 h-7 bg-brand-navy text-white rounded-xl flex items-center justify-center hover:bg-brand-orange hover:scale-110 transition-all active:scale-95 shadow-sm"
+                      >
+                        <Plus size={14} />
+                      </button>
+                    )}
+                    {cartItem && (
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-1.5 h-1.5 bg-brand-orange rounded-full animate-pulse" />
+                        <span className="text-[10px] font-bold text-brand-navy uppercase">{isRtl ? 'في السلة' : 'In Cart'}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
         </div>
       )}
+
+      {/* STICKY CHECKOUT BAR */}
+      <AnimatePresence>
+        {cart.length > 0 && (
+          <motion.div
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            className="fixed bottom-0 left-0 right-0 z-40 bg-white/80 backdrop-blur-xl border-t border-brand-navy/10 p-4 pb-8 md:pb-4 shadow-2xl"
+          >
+            <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+              <div className={isRtl ? 'text-right' : 'text-left'}>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{isRtl ? 'إجمالي السلة' : 'Total Basket'}</p>
+                <p className="text-xl font-serif font-bold text-brand-navy">
+                  {t.products.pricePrefix}{cartTotal.toLocaleString()}
+                </p>
+              </div>
+              <button
+                onClick={() => navigate('/dashboard/shop', { state: { openCart: true } })} // Fallback if direct trigger needed, but we can call parent
+                className="flex-1 max-w-sm bg-brand-navy text-white py-4 rounded-2xl font-bold text-sm tracking-widest hover:bg-brand-orange transition-all shadow-xl shadow-brand-navy/10 flex items-center justify-center gap-2"
+              >
+                <ShoppingBag size={18} />
+                <span>{isRtl ? 'إتمام الطلب الآن' : 'CHECKOUT NOW'}</span>
+                <span className="bg-white/20 px-2 py-0.5 rounded-full text-[10px]">{cart.length}</span>
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -6757,7 +6854,10 @@ const Footer = ({ onOpenTerms, onOpenPrivacy, onOpenRefund, onOpenCart, t }: {
 
 const Home = ({ 
   products, 
+  cart,
   onAddToCart, 
+  onUpdateQuantity,
+  onRemoveFromCart,
   cartCount, 
   onOpenCart,
   onOpenAuth,
@@ -6772,7 +6872,10 @@ const Home = ({
   t
 }: { 
   products: Product[], 
+  cart: CartItem[],
   onAddToCart: (p: Product) => void,
+  onUpdateQuantity: (id: number, delta: number) => void,
+  onRemoveFromCart: (id: number) => void,
   cartCount: number,
   onOpenCart: () => void,
   onOpenAuth: () => void,
@@ -6800,7 +6903,19 @@ const Home = ({
       />
       <Hero t={t} />
       <FeaturesBar t={t} />
-      <Products products={products} onOrder={onAddToCart} onViewProduct={onViewProduct} user={user} userRole={userRole} onOpenAuth={onOpenAuth} lang={lang} t={t} />
+      <Products 
+        products={products} 
+        cart={cart}
+        onOrder={onAddToCart} 
+        onUpdateQuantity={onUpdateQuantity}
+        onRemoveFromCart={onRemoveFromCart}
+        onViewProduct={onViewProduct} 
+        user={user} 
+        userRole={userRole} 
+        onOpenAuth={onOpenAuth} 
+        lang={lang} 
+        t={t} 
+      />
       
       <Testimonials t={t} />
       <About t={t} />
@@ -7354,7 +7469,15 @@ export default function App() {
         <Route path="/dashboard/shop" element={
           <ProtectedRoute>
             <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
-              <CustomerShop products={products} onAddToCart={addToCart} t={t} lang={lang} />
+              <CustomerShop 
+                products={products} 
+                cart={cart}
+                onAddToCart={addToCart} 
+                onUpdateQuantity={updateQuantity}
+                onRemoveFromCart={removeFromCart}
+                t={t} 
+                lang={lang} 
+              />
             </DashboardLayout>
           </ProtectedRoute>
         } />
