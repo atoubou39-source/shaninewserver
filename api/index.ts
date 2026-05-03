@@ -734,7 +734,10 @@ app.get("/api/odoo/order-portal/:orderName", async (req, res) => {
     }
 
     const order = orders[0];
-    let url = odooConfig.url.trim().replace(/\/$/, "") + order.access_url;
+    const baseUrl = odooConfig.url.trim().replace(/\/$/, "");
+    const accessPath = order.access_url.startsWith("/") ? order.access_url : `/${order.access_url}`;
+    let url = `${baseUrl}${accessPath}`;
+    
     if (order.access_token) {
       url += `?access_token=${order.access_token}`;
     }
@@ -1468,11 +1471,27 @@ app.post("/api/auth/login", async (req, res) => {
   if (!phone || !password) return res.status(400).json({ success: false, error: "Phone and password required" });
   
   try {
-    const cleanPhone = sanitizePhone(phone);
-    const user = authDb.findUserByPhone(cleanPhone);
+    console.log(`[Auth Login Attempt] Input: ${phone}, isEmail: ${phone.includes("@")}`);
     
-    if (!user || !authDb.verifyPassword(user, password)) {
-      return res.status(401).json({ success: false, error: "Invalid phone number or password" });
+    let user = null;
+    if (phone.includes("@")) {
+      user = authDb.findUserByEmail(phone);
+    } else {
+      const cleanPhone = sanitizePhone(phone);
+      user = authDb.findUserByPhone(cleanPhone);
+      console.log(`[Auth Login Attempt] Cleaned phone: ${cleanPhone}`);
+    }
+    
+    if (!user) {
+      console.log(`[Auth Login] User not found: ${phone}`);
+      return res.status(401).json({ success: false, error: "Invalid credentials" });
+    }
+    
+    const passMatch = authDb.verifyPassword(user, password);
+    console.log(`[Auth Login] User found: ${user.uid}, Password match: ${passMatch}`);
+
+    if (!passMatch) {
+      return res.status(401).json({ success: false, error: "Invalid credentials" });
     }
     
     if (!user.accountActivated && !user.isAdmin) {
@@ -1703,6 +1722,12 @@ console.log(`[Static] Serving files from: ${distPath}`);
 console.log(`[Static] Current Directory (cwd): ${process.cwd()}`);
 
 app.use(express.static(distPath));
+
+// Catch-all for API routes to prevent HTML responses
+app.all('/api/*', (req, res) => {
+  console.log(`[API 404] Method: ${req.method}, Path: ${req.path}`);
+  res.status(404).json({ success: false, error: "API endpoint not found" });
+});
 
 // Handle SPA routing - serve index.html for all non-API routes
 app.get('*', (req, res) => {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { login as authLogin, saveSession } from '../auth';
+import { login as authLogin, saveSession, getApiUrl, API_BASE } from '../auth';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { Lock, Phone, ChevronLeft, AlertCircle, Globe, Eye, EyeOff, Key } from 'lucide-react';
@@ -34,10 +34,7 @@ export const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const getApiUrl = (path: string) => {
-    const baseUrl = (import.meta as any).env?.VITE_API_BASE_URL || "https://shaninewserver.onrender.com";
-    return `${baseUrl}${path}`;
-  };
+
 
   const translateError = (error: string) => {
     if (lang !== 'ar') return error;
@@ -128,7 +125,7 @@ export const LoginPage = () => {
     setLoading(true);
     setError("");
     try {
-      const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || 'https://shaninewserver.onrender.com';
+
       const response = await fetch(`${API_BASE}/api/set-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

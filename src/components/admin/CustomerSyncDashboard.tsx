@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getApiUrl } from '../../auth';
 import { db } from '../../firebase';
 import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
@@ -30,38 +31,7 @@ interface Customer {
   role: string;
 }
 
-const getApiUrl = (path: string) => {
-  const isLocalhost = typeof window !== 'undefined' && 
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-  const envBase = (import.meta as any).env?.VITE_API_BASE_URL;
-  
-  // Clean the path
-  const cleanPath = path.startsWith('/') ? path : `/${path}`;
 
-  // If VITE_API_BASE_URL is set and not the placeholder, use it
-  if (envBase && envBase !== "https://your-backend-domain.com") {
-    const cleanBase = envBase
-      .trim()
-      .replace(/^[\/\)\s;`"']+/, "")
-      .replace(/[\/\)\s;`"']+$/, "");
-    
-    const finalBase = cleanBase.startsWith('http') ? cleanBase : `https://${cleanBase}`;
-
-    // Logic to prevent double /api or handle /api correctly
-    if (finalBase.endsWith('/api') && cleanPath.startsWith('/api')) {
-      return `${finalBase}${cleanPath.substring(4)}`;
-    }
-    return `${finalBase}${cleanPath}`;
-  }
-
-  // Fallback for production if env is missing
-  if (!isLocalhost) {
-    return `https://shaninewserver.onrender.com${cleanPath}`;
-  }
-
-  // Fallback to relative path
-  return cleanPath;
-};
 
 export const CustomerSyncDashboard = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);

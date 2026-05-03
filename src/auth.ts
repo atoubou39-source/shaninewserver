@@ -49,10 +49,11 @@ export function isLoggedIn(): boolean {
 
 // ── API Helper ─────────────────────────────────────────────────
 
-const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : 'https://shaninewserver.onrender.com');
+export const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || (typeof window !== 'undefined' && window.location.hostname.includes('localhost') ? 'http://localhost:3000' : 'https://shaninewserver.onrender.com');
 
-function apiUrl(path: string) {
-  return `${API_BASE.replace(/\/$/, '')}${path}`;
+export function getApiUrl(path: string) {
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  return `${API_BASE.replace(/\/$/, '')}${cleanPath}`;
 }
 
 function authHeaders() {
@@ -64,7 +65,7 @@ function authHeaders() {
 }
 
 async function apiPost(path: string, body: object) {
-  const res = await fetch(apiUrl(path), {
+  const res = await fetch(getApiUrl(path), {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify(body),
@@ -75,7 +76,7 @@ async function apiPost(path: string, body: object) {
 }
 
 async function apiGet(path: string) {
-  const res = await fetch(apiUrl(path), { headers: authHeaders() });
+  const res = await fetch(getApiUrl(path), { headers: authHeaders() });
   const data = await res.json();
   if (!res.ok && !data.success) throw new Error(data.error || 'Request failed');
   return data;
@@ -118,7 +119,7 @@ export async function changePassword(currentPassword: string, newPassword: strin
 }
 
 export async function deleteAccount(uid: string) {
-  const res = await fetch(apiUrl(`/api/auth/user/${uid}`), {
+  const res = await fetch(getApiUrl(`/api/auth/user/${uid}`), {
     method: 'DELETE',
     headers: authHeaders(),
   });

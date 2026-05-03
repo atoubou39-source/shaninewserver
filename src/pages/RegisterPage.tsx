@@ -1,42 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { saveSession } from '../auth';
+import { saveSession, getApiUrl, API_BASE } from '../auth';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserPlus, Mail, Phone, Lock, ChevronLeft, AlertCircle, CheckCircle2, Globe, User as UserIcon, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 import { translations, Language } from '../translations';
 
-const getApiUrl = (path: string) => {
-  const isLocalhost = typeof window !== 'undefined' && 
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-  const envBase = (import.meta as any).env?.VITE_API_BASE_URL;
-  
-  // Clean the path
-  const cleanPath = path.startsWith('/') ? path : `/${path}`;
 
-  // If VITE_API_BASE_URL is set and not the placeholder, use it
-  if (envBase && envBase !== "https://your-backend-domain.com") {
-    const cleanBase = envBase
-      .trim()
-      .replace(/^[/\)\s;`"']+/, "")
-      .replace(/[/\)\s;`"']+$/, "");
-    
-    const finalBase = cleanBase.startsWith('http') ? cleanBase : `https://${cleanBase}`;
-
-    // Logic to prevent double /api or handle /api correctly
-    if (finalBase.endsWith('/api') && cleanPath.startsWith('/api')) {
-      return `${finalBase}${cleanPath.substring(4)}`;
-    }
-    return `${finalBase}${cleanPath}`;
-  }
-
-  // Fallback for production if env is missing
-  if (!isLocalhost) {
-    return `https://shaninewserver.onrender.com${cleanPath}`;
-  }
-
-  // Fallback to relative path
-  return cleanPath;
-};
 
 export const RegisterPage = () => {
   const [lang, setLang] = useState<Language>(() => {
@@ -186,7 +155,7 @@ export const RegisterPage = () => {
         // New flow: user is created server-side, OTP verified
         // Now register them in our local auth system
         try {
-          const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || 'https://shaninewserver.onrender.com';
+
           const cleanPhone = sanitizePhone(formData.phone);
           const regRes = await fetch(`${API_BASE}/api/auth/register`, {
             method: 'POST',

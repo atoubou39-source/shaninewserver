@@ -67,15 +67,8 @@ import {
   deleteField
 } from "firebase/firestore";
 import { 
-  onAuthStateChanged, 
-  signInWithPopup, 
-  signInWithEmailAndPassword,
-  signInWithCustomToken,
-  sendPasswordResetEmail,
-  signOut, 
-  deleteUser,
-  User 
-} from "firebase/auth";
+  AuthUser 
+} from "./auth";
 import { db, auth, googleProvider } from "./firebase";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { LoginPage } from "./pages/LoginPage";
@@ -84,7 +77,7 @@ import { PendingActivation } from "./pages/PendingActivation";
 import { CustomerSyncDashboard } from "./components/admin/CustomerSyncDashboard";
 import { DiscountsManager } from "./components/admin/DiscountsManager";
 import { useAuth } from "./hooks/useAuth";
-import { login as authLogin, logout as authLogout, getStoredUser } from "./auth";
+import { login as authLogin, logout as authLogout, getStoredUser, verifySession, getApiUrl } from "./auth";
 import { translations, Language } from "./translations";
 import { usePushNotifications } from "./hooks/usePushNotifications";
 
@@ -342,39 +335,6 @@ const getStatusDetails = (status: string, t: any) => {
   }
 };
 
-const getApiUrl = (path: string) => {
-  const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  const envBase = import.meta.env.VITE_API_BASE_URL;
-
-  // 1. If we have a base URL in ENV, use it as priority (works for cross-domain)
-  if (envBase && envBase.startsWith('http') && envBase !== "https://your-backend-domain.com") {
-    return `${envBase.replace(/\/$/, '')}${cleanPath}`;
-  }
-
-  // 2. In production fallback to Render backend if no base URL is properly injected
-  if (import.meta.env.PROD) {
-    return `https://shaninewserver.onrender.com${cleanPath}`;
-  }
-
-  // 3. In development, handle localhost switching
-  const isLocalhost = typeof window !== 'undefined' && 
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-    
-  if (isLocalhost) {
-    return `http://localhost:3000${cleanPath}`;
-  }
-
-  return cleanPath;
-};
-
-// Helper to get full URL for logging/debugging
-const getFullUrl = (path: string) => {
-  const apiUrl = getApiUrl(path);
-  if (apiUrl.startsWith('http')) return apiUrl;
-  if (typeof window === 'undefined') return apiUrl;
-  return `${window.location.origin}${apiUrl}`;
-};
-
 
 
 // --- Components ---
@@ -468,7 +428,7 @@ const Navbar = ({
   cartCount: number, 
   onOpenCart: () => void, 
   onOpenAuth: () => void, 
-  user: User | null,
+  user: AuthUser | null,
   userRole: string | null,
   lang: Language,
   onToggleLang: () => void,
@@ -740,7 +700,7 @@ const Products = ({
   onSetManualQuantity: (id: number, val: string) => void,
   onRemoveFromCart: (id: number) => void,
   onViewProduct: (p: Product) => void,
-  user: User | null,
+  user: AuthUser | null,
   userRole: string | null,
   onOpenAuth: () => void,
   lang: Language,
@@ -1080,12 +1040,11 @@ const CustomerLoginPage = () => {
   const [testCode, setTestCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [user, setUser] = useState<User | null>(auth.currentUser);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => setUser(u));
-    return () => unsubscribe();
+    // Firebase auth listener removed - using JWT state from parent or hook
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -1093,13 +1052,11 @@ const CustomerLoginPage = () => {
     setLoading(true);
     setError("");
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, identifier, password);
-      const userDoc = await getDoc(doc(db, "users", userCredential.user.uid));
-      
-      if (userDoc.exists() && userDoc.data().role === 'admin') {
+      const freshUser = await authLogin(identifier, password);
+      if (freshUser.isAdmin) {
         navigate("/admin");
       } else {
-        await auth.signOut();
+        authLogout();
         setError("Access denied. Admin privileges required.");
       }
     } catch (err: any) {
@@ -1167,7 +1124,7 @@ const CustomerLoginPage = () => {
       // Sanitize phone for email
       const justDigits = phone.replace(/\D/g, "");
       const email = `${justDigits}@hakkal.com`;
-      await signInWithEmailAndPassword(auth, email, password);
+      await authLogin(email, password);
       navigate("/dashboard");
     } catch (err: any) {
       console.error("Login Error:", err);
@@ -1219,14 +1176,14 @@ const CustomerLoginPage = () => {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(getApiUrl("/api/verify-otp"), {
+      const response = await fetch(getApiUrl("/api/set-password"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, otp, password: newPassword }),
+        body: JSON.stringify({ phone, password: newPassword }),
       });
       const data = await response.json();
-      if (data.success && data.uid && data.customToken) {
-        await signInWithCustomToken(auth, data.customToken);
+      if (data.success && data.token) {
+        saveSession(data.token, data.user || { uid: data.uid, phone, email: '', name: '', isAdmin: false, role: 'customer', accountActivated: true });
         navigate("/dashboard");
       } else {
         setError(data.error || "حدث خطأ أثناء الحفظ");
@@ -1250,7 +1207,7 @@ const CustomerLoginPage = () => {
             <UserIcon size={40} className="text-brand-orange" />
           </div>
           <h2 className="text-2xl font-serif text-brand-navy mb-2">My Account</h2>
-          <p className="text-gray-500 text-sm mb-8">{user.email || user.phoneNumber}</p>
+          <p className="text-gray-500 text-sm mb-8">{user.email || user.phone}</p>
           
           <div className="space-y-4">
             <Link 
@@ -1260,7 +1217,7 @@ const CustomerLoginPage = () => {
               <span>BACK TO SHOPPING</span>
             </Link>
             <button 
-              onClick={() => signOut(auth)}
+              onClick={() => authLogout()}
               className="w-full bg-red-50 text-red-500 py-4 rounded-2xl text-xs font-bold tracking-widest hover:bg-red-100 transition-all flex items-center justify-center gap-2"
             >
               <LogOut size={16} />
@@ -1461,11 +1418,10 @@ const AuthModal = ({
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [user, setUser] = useState<User | null>(auth.currentUser);
+  const [user, setUser] = useState<AuthUser | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => setUser(u));
-    return () => unsubscribe();
+    // Firebase auth listener removed
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -1474,7 +1430,7 @@ const AuthModal = ({
     setError("");
     try {
       const email = identifier.includes("@") ? identifier : `${identifier}@hakkal.com`;
-      await signInWithEmailAndPassword(auth, email, password);
+      await authLogin(email, password);
       onClose();
     } catch (err: any) {
       console.error("Login error:", err);
@@ -1488,9 +1444,8 @@ const AuthModal = ({
     }
   };
 
-  const handleLogout = async () => {
-    await signOut(auth);
-    onClose();
+  const handleLogout = () => {
+    authLogout();
   };
 
   if (!isOpen) return null;
@@ -1522,7 +1477,7 @@ const AuthModal = ({
               <UserIcon size={40} className="text-brand-orange" />
             </div>
             <h2 className="text-2xl font-serif text-brand-navy mb-2">{t.auth.welcomeBack}</h2>
-            <p className="text-gray-500 text-sm mb-8">{user.email || user.phoneNumber}</p>
+            <p className="text-gray-500 text-sm mb-8">{user.email || user.phone}</p>
             <button 
               onClick={handleLogout}
               className="w-full bg-red-50 text-red-500 py-4 rounded-2xl text-xs font-bold tracking-widest hover:bg-red-100 transition-all flex items-center justify-center gap-2"
@@ -1755,7 +1710,7 @@ const CartDrawer = ({
   );
 };
 
-const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalContent, t, lang }: { isOpen: boolean, onClose: () => void, items: CartItem[], onClearCart: () => void, user: User | null, setModalContent: (content: { title: string; message: string; type: 'success' | 'error' } | null) => void, t: any, lang: string }) => {
+const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalContent, t, lang }: { isOpen: boolean, onClose: () => void, items: CartItem[], onClearCart: () => void, user: AuthUser | null, setModalContent: (content: { title: string; message: string; type: 'success' | 'error' } | null) => void, t: any, lang: string }) => {
   const [formData, setFormData] = useState({
     customerName: "",
     email: "",
@@ -1787,9 +1742,9 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
           console.log("[Checkout] Step 1: Initial population", { currentSalesRep: prev.salesRep });
           return {
             ...prev,
-            customerName: prev.customerName || user.displayName || "",
+            customerName: prev.customerName || user.name || "",
             email: prev.email || user.email || "",
-            phone1: prev.phone1 || user.phoneNumber || "",
+            phone1: prev.phone1 || user.phone || "",
             salesRep: (lang === 'ar' ? "جاري التحميل..." : "Loading..."),
           };
         });
@@ -1821,7 +1776,7 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
 
         // Step 3: Enrich from Odoo
         const email = (firestoreData.email || user.email || "").toLowerCase().trim();
-        const phone = (firestoreData.phoneNumber || user.phoneNumber || "").trim();
+        const phone = (firestoreData.phoneNumber || user.phone || "").trim();
         
         console.log("[Checkout] Step 3: Odoo enrichment starting...", { email, phone });
         
@@ -2179,7 +2134,7 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
       } catch (e: any) {
         const isTimeout = e.name === 'AbortError';
         const errorMsg = isTimeout ? "Request Timeout" : (e.message || "Connection Failed");
-        const fullSyncUrl = getFullUrl("/api/odoo/orders");
+        const fullSyncUrl = getApiUrl("/api/odoo/orders");
         
         console.error("Failed to sync order to Odoo:", {
           error: e,
@@ -3078,7 +3033,7 @@ const DashboardCarousel = ({ lang, t }: { lang: Language, t: any }) => {
               className="relative min-w-[85%] h-full flex-shrink-0 rounded-[2.5rem] overflow-hidden shadow-xl border-2 border-white/50 bg-gray-50"
               animate={{ 
                 scale: (index === i) ? 1 : 0.92,
-                opacity: (index === i) ? 1 : 0.6,
+                opacity: 1,
               }}
               transition={{ duration: 0.5 }}
             >
@@ -3132,7 +3087,7 @@ const DashboardCarousel = ({ lang, t }: { lang: Language, t: any }) => {
   );
 };
 
-const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory }: { orders: Order[], user: User | null, t: any, lang: Language, onViewHistory: (orderName: string, firebaseId?: string, status?: string, createdAt?: string) => void }) => {
+const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory }: { orders: Order[], user: AuthUser | null, t: any, lang: Language, onViewHistory: (orderName: string, firebaseId?: string, status?: string, createdAt?: string) => void }) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const isRtl = lang === 'ar';
   
@@ -3810,7 +3765,7 @@ const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManu
 
 const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, historyOrder }: { 
   orders: Order[], 
-  user: User | null, 
+  user: AuthUser | null, 
   t: any, 
   lang: Language, 
   onViewHistory: (orderName: string, firebaseId?: string, status?: string, createdAt?: string) => void,
@@ -4410,7 +4365,7 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
   );
 };
 
-const CustomerProfile = ({ user, t, lang }: { user: User | null, t: any, lang: Language }) => {
+const CustomerProfile = ({ user, t, lang }: { user: AuthUser | null, t: any, lang: Language }) => {
   const [profile, setProfile] = useState<any>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -4430,7 +4385,7 @@ const CustomerProfile = ({ user, t, lang }: { user: User | null, t: any, lang: L
       // 1. Delete user doc from Firestore
       await deleteDoc(doc(db, "users", user.uid));
       // 2. Delete user from Firebase Auth
-      await deleteUser(user);
+      // await deleteAccount(user.uid);
       // Success - user will be signed out automatically and redirected
       window.location.href = '/';
     } catch (error: any) {
@@ -4583,7 +4538,7 @@ const CustomerProfile = ({ user, t, lang }: { user: User | null, t: any, lang: L
   );
 };
 
-const DashboardLayout = ({ children, user, role, t, lang, onToggleLang, cartCount, onOpenCart, onOpenTerms, onOpenPrivacy, onOpenRefund }: { children: React.ReactNode, user: User | null, role: string | null, t: any, lang: Language, onToggleLang: () => void, cartCount?: number, onOpenCart?: () => void, onOpenTerms?: () => void, onOpenPrivacy?: () => void, onOpenRefund?: () => void }) => {
+const DashboardLayout = ({ children, user, role, t, lang, onToggleLang, cartCount, onOpenCart, onOpenTerms, onOpenPrivacy, onOpenRefund }: { children: React.ReactNode, user: AuthUser | null, role: string | null, t: any, lang: Language, onToggleLang: () => void, cartCount?: number, onOpenCart?: () => void, onOpenTerms?: () => void, onOpenPrivacy?: () => void, onOpenRefund?: () => void }) => {
   const [profile, setProfile] = useState<any>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
@@ -4597,13 +4552,8 @@ const DashboardLayout = ({ children, user, role, t, lang, onToggleLang, cartCoun
     }
   }, [user]);
 
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      navigate("/");
-    } catch (error) {
-      console.error("Logout error:", error);
-    }
+  const handleLogout = () => {
+    authLogout();
   };
 
   const adminMenuItems = [
@@ -6893,7 +6843,7 @@ const Home = ({
   onOpenPrivacy: () => void,
   onOpenRefund: () => void,
   onViewProduct: (p: Product) => void,
-  user: User | null,
+  user: AuthUser | null,
   userRole: string | null,
   lang: Language,
   onToggleLang: () => void,
@@ -6958,7 +6908,7 @@ export default function App() {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [seo, setSeo] = useState<SiteSettings["seo"]>(INITIAL_SEO);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [cart, setCart] = useState<CartItem[]>(() => {
