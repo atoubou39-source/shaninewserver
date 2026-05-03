@@ -3535,7 +3535,7 @@ const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory }: { o
   );
 };
 
-const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManualQuantity, onRemoveFromCart, t, lang }: { products: Product[], cart: CartItem[], onAddToCart: (p: Product) => void, onUpdateQuantity: (id: number, delta: number) => void, onSetManualQuantity: (id: number, val: string) => void, onRemoveFromCart: (id: number) => void, t: any, lang: Language }) => {
+const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManualQuantity, onRemoveFromCart, onCheckout, t, lang }: { products: Product[], cart: CartItem[], onAddToCart: (p: Product) => void, onUpdateQuantity: (id: number, delta: number) => void, onSetManualQuantity: (id: number, val: string) => void, onRemoveFromCart: (id: number) => void, onCheckout: () => void, t: any, lang: Language }) => {
   const isRtl = lang === 'ar';
   const [search, setSearch] = useState('');
   const [showOffer, setShowOffer] = useState(true);
@@ -3807,7 +3807,7 @@ const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManu
                 </p>
               </div>
               <button
-                onClick={() => navigate('/dashboard/shop', { state: { openCart: true } })} // Fallback if direct trigger needed, but we can call parent
+                onClick={onCheckout}
                 className="flex-1 max-w-sm bg-brand-navy text-white py-4 rounded-2xl font-bold text-sm tracking-widest hover:bg-brand-orange transition-all shadow-xl shadow-brand-navy/10 flex items-center justify-center gap-2"
               >
                 <ShoppingBag size={18} />
@@ -7500,6 +7500,7 @@ export default function App() {
                 onUpdateQuantity={updateQuantity}
                 onSetManualQuantity={setManualQuantity}
                 onRemoveFromCart={removeFromCart}
+                onCheckout={handleCheckout}
                 t={t} 
                 lang={lang} 
               />
