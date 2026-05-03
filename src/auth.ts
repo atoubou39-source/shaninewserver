@@ -85,8 +85,8 @@ async function apiGet(path: string) {
 // ── Auth Actions ───────────────────────────────────────────────
 
 export async function login(phone: string, password: string): Promise<AuthUser> {
-  const MAX_RETRIES = 2;
-  const RETRY_DELAY_MS = 2500;
+  const MAX_RETRIES = 1;
+  const RETRY_DELAY_MS = 1000;
   let lastError: any;
 
   for (let attempt = 1; attempt <= MAX_RETRIES + 1; attempt++) {

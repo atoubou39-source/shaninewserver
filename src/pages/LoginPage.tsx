@@ -18,6 +18,11 @@ export const LoginPage = () => {
     document.documentElement.lang = lang;
   }, [lang]);
 
+  // Proactively wake up the server when page loads (Render free tier cold start)
+  useEffect(() => {
+    fetch(getApiUrl('/api/health')).catch(() => {});
+  }, []);
+
   const toggleLang = () => {
     setLang(prev => prev === 'en' ? 'ar' : 'en');
   };
