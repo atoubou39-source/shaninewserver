@@ -385,23 +385,12 @@ app.get("/api/debug-headers", (req, res) => {
       }
 
       if (Array.isArray(customers) && customers.length > 0) {
-              // SCANNER: Log only fields that have actual data
-              const filledFields: any = {};
-              Object.entries(customers[0]).forEach(([key, value]) => {
-                if (value !== false && value !== null && value !== "" && (!Array.isArray(value) || value.length > 0)) {
-                  filledFields[key] = value;
-                }
-              });
-              console.log("[Odoo Verify] SCANNER - Filled Fields:", JSON.stringify(filledFields, null, 2));
-              
               // ADVANCED MERGE: Look through all matches to find a salesperson
               let salesperson = null;
               let bestRecord = customers[0];
               
               for (const cust of customers) {
-                // Check all known and potential salesperson fields
                 const possibleSalesperson = cust.user_id || cust.x_studio_salesperson || cust.salesperson_id || cust.x_salesperson;
-                
                 if (possibleSalesperson && Array.isArray(possibleSalesperson)) {
                   salesperson = { id: possibleSalesperson[0], name: possibleSalesperson[1] };
                   bestRecord = cust; 
@@ -410,12 +399,7 @@ app.get("/api/debug-headers", (req, res) => {
               }
               
               const c = bestRecord;
-              console.log(`[Odoo Verify] MERGED DATA FOUND:
-                - Name: ${c.name}
-                - Primary ID: ${c.id}
-                - Salesperson: ${salesperson ? salesperson.name : "NONE"}
-                - Records Found: ${customers.length}
-              `);
+              console.log(`[Odoo Verify] Customer Verified: ${c.name} (ID: ${c.id}) - Salesperson: ${salesperson ? salesperson.name : "None"}`);
 
         res.json({ 
           success: true, 
