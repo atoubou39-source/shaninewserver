@@ -810,32 +810,6 @@ const Products = ({
                       </div>
                     )}
                     
-                    {/* BLUE QUANTITY SELECTOR (OVERLAY) */}
-                    {cartItem && (
-                      <div className="absolute inset-0 bg-brand-navy/10 flex items-center justify-center p-4">
-                        <div className="bg-brand-navy rounded-2xl flex items-center p-2 gap-4 shadow-xl transform scale-100 transition-all border border-white/20">
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); onRemoveFromCart(p.id); }}
-                            className="p-2.5 bg-white/10 rounded-xl hover:bg-white/20 text-white transition-colors"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                          
-                          <input 
-                            type="number"
-                            value={cartItem.quantity}
-                            onChange={(e) => { e.stopPropagation(); onSetManualQuantity(p.id, e.target.value); }}
-                            onClick={(e) => e.stopPropagation()}
-                            className="bg-white/10 text-white font-bold text-lg w-12 text-center border-none focus:ring-0 rounded-lg"
-                          />
-
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); onUpdateQuantity(p.id, 1); }}
-                            className="p-2.5 bg-white/10 rounded-xl hover:bg-white/20 text-white transition-colors"
-                          >
-                            <Plus size={18} />
-                          </button>
-                        </div>
                       </div>
                     )}
 
@@ -885,10 +859,27 @@ const Products = ({
                           </div>
                           
                           {cartItem ? (
-                            <div className="w-full bg-brand-navy/5 border border-brand-navy/10 py-4 rounded-xl flex items-center justify-center gap-2">
-                              <div className="w-2 h-2 bg-brand-orange rounded-full animate-pulse" />
-                              <span className="text-[10px] font-bold text-brand-navy tracking-widest uppercase">{lang === 'ar' ? 'تمت الإضافة للسلة' : 'Added to Cart'}</span>
-                            </div>
+                             <div className="w-full bg-brand-navy rounded-xl py-3 flex items-center justify-between px-6 shadow-lg border border-white/10">
+                               <button 
+                                 onClick={(e) => { e.stopPropagation(); onUpdateQuantity(p.id, -1); }}
+                                 className="p-1 hover:bg-white/10 text-white transition-colors"
+                               >
+                                 <Minus size={18} />
+                               </button>
+                               <input 
+                                 type="number"
+                                 value={cartItem.quantity}
+                                 onChange={(e) => { e.stopPropagation(); onSetManualQuantity(p.id, e.target.value); }}
+                                 onClick={(e) => e.stopPropagation()}
+                                 className="bg-transparent text-white font-bold text-lg w-12 text-center border-none focus:ring-0 p-0"
+                               />
+                               <button 
+                                 onClick={(e) => { e.stopPropagation(); onUpdateQuantity(p.id, 1); }}
+                                 className="p-1 hover:bg-white/10 text-white transition-colors"
+                               >
+                                 <Plus size={18} />
+                               </button>
+                             </div>
                           ) : (
                             <button 
                               onClick={(e) => {
@@ -3721,34 +3712,7 @@ const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManu
                     />
                   </div>
 
-                  {/* BLUE QUANTITY SELECTOR (OVERLAY) */}
-                  {cartItem && (
-                    <div className="absolute inset-0 bg-brand-navy/10 flex items-center justify-center p-3">
-                      <div className="bg-brand-navy rounded-2xl flex items-center p-1.5 gap-3 shadow-xl transform scale-100 transition-all border border-white/20">
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); onRemoveFromCart(p.id); }}
-                          className="p-2 bg-white/10 rounded-xl hover:bg-white/20 text-white transition-colors"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                        <input 
-                          type="number"
-                          value={cartItem.quantity}
-                          onChange={(e) => { e.stopPropagation(); onSetManualQuantity(p.id, e.target.value); }}
-                          onClick={(e) => e.stopPropagation()}
-                          className="bg-white/10 text-white font-bold text-base w-12 text-center border-none focus:ring-0 rounded-lg"
-                        />
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); onUpdateQuantity(p.id, 1); }}
-                          className="p-2 bg-white/10 rounded-xl hover:bg-white/20 text-white transition-colors"
-                        >
-                          <Plus size={16} />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {!cartItem && (
+                  {!cartItem ? (
                     <button
                       onClick={() => onAddToCart(p)}
                       className="absolute inset-0 bg-brand-navy/0 group-hover:bg-brand-navy/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100"
@@ -3768,18 +3732,34 @@ const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManu
                     <span className="text-brand-orange font-bold text-sm">
                       {t.products.pricePrefix}{String(p.price).replace(/SAR|ر\.س|SR|ريال/gi, "").replace(/[^\d.]/g, "").trim()}
                     </span>
-                    {!cartItem && (
+                    {!cartItem ? (
                       <button
                         onClick={() => onAddToCart(p)}
                         className="w-7 h-7 bg-brand-navy text-white rounded-xl flex items-center justify-center hover:bg-brand-orange hover:scale-110 transition-all active:scale-95 shadow-sm"
                       >
                         <Plus size={14} />
                       </button>
-                    )}
-                    {cartItem && (
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 bg-brand-orange rounded-full animate-pulse" />
-                        <span className="text-[10px] font-bold text-brand-navy uppercase">{isRtl ? 'في السلة' : 'In Cart'}</span>
+                    ) : (
+                      <div className="bg-brand-navy rounded-lg flex items-center p-0.5 shadow-md border border-white/10 scale-110">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); onUpdateQuantity(p.id, -1); }}
+                          className="p-1 hover:bg-white/10 text-white transition-colors"
+                        >
+                          <Minus size={12} />
+                        </button>
+                        <input 
+                          type="number"
+                          value={cartItem.quantity}
+                          onChange={(e) => { e.stopPropagation(); onSetManualQuantity(p.id, e.target.value); }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="bg-transparent text-white font-bold text-[11px] w-7 text-center border-none focus:ring-0 p-0"
+                        />
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); onUpdateQuantity(p.id, 1); }}
+                          className="p-1 hover:bg-white/10 text-white transition-colors"
+                        >
+                          <Plus size={12} />
+                        </button>
                       </div>
                     )}
                   </div>
