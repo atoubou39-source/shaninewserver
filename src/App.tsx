@@ -810,9 +810,6 @@ const Products = ({
                       </div>
                     )}
                     
-                      </div>
-                    )}
-
                     {!cartItem && (
                       <div className="absolute inset-0 bg-brand-navy/0 group-hover:bg-brand-navy/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
                         <div className="bg-white text-brand-navy p-4 rounded-full shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-transform">
@@ -3712,7 +3709,7 @@ const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManu
                     />
                   </div>
 
-                  {!cartItem ? (
+                  {!cartItem && (
                     <button
                       onClick={() => onAddToCart(p)}
                       className="absolute inset-0 bg-brand-navy/0 group-hover:bg-brand-navy/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100"
