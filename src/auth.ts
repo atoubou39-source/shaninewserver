@@ -49,7 +49,7 @@ export function isLoggedIn(): boolean {
 
 // ── API Helper ─────────────────────────────────────────────────
 
-const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || 'https://shaninewserver.onrender.com';
+const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : 'https://shaninewserver.onrender.com');
 
 function apiUrl(path: string) {
   return `${API_BASE.replace(/\/$/, '')}${path}`;
