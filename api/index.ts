@@ -368,19 +368,43 @@ app.get("/api/debug-headers", (req, res) => {
 
       console.log("[Odoo Verify] Strategy 1: Exact Match Search...", JSON.stringify(domain));
       if (domain.length > 0) {
-        // Fetch ALL fields for debugging
+        // Fetch multiple records to find the one with a salesperson if duplicates exist
         customers = await (callOdoo as any)("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "res.partner", "search_read", [domain], { limit: 5, order: "write_date desc" });
       }
 
+      // 2. Fallback: Search by Name if no salesperson found yet
+      let hasSalesperson = Array.isArray(customers) && customers.some(c => c.user_id && Array.isArray(c.user_id));
+      if (!hasSalesperson && customers.length > 0) {
+        const nameToSearch = customers[0].name;
+        console.log(`[Odoo Verify] Strategy 2: Searching by Name (${nameToSearch}) to find duplicates with salesperson...`);
+        const nameDomain = [["name", "=", nameToSearch]];
+        const nameResults = await (callOdoo as any)("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "res.partner", "search_read", [nameDomain], { limit: 5, order: "write_date desc" });
+        if (Array.isArray(nameResults) && nameResults.length > 0) {
+          customers = [...customers, ...nameResults];
+        }
+      }
+
       if (Array.isArray(customers) && customers.length > 0) {
+              // SCANNER: Log only fields that have actual data
+              const filledFields: any = {};
+              Object.entries(customers[0]).forEach(([key, value]) => {
+                if (value !== false && value !== null && value !== "" && (!Array.isArray(value) || value.length > 0)) {
+                  filledFields[key] = value;
+                }
+              });
+              console.log("[Odoo Verify] SCANNER - Filled Fields:", JSON.stringify(filledFields, null, 2));
+              
               // ADVANCED MERGE: Look through all matches to find a salesperson
               let salesperson = null;
               let bestRecord = customers[0];
               
               for (const cust of customers) {
-                if (cust.user_id && Array.isArray(cust.user_id)) {
-                  salesperson = { id: cust.user_id[0], name: cust.user_id[1] };
-                  bestRecord = cust; // Prioritize the record that has the salesperson
+                // Check all known and potential salesperson fields
+                const possibleSalesperson = cust.user_id || cust.x_studio_salesperson || cust.salesperson_id || cust.x_salesperson;
+                
+                if (possibleSalesperson && Array.isArray(possibleSalesperson)) {
+                  salesperson = { id: possibleSalesperson[0], name: possibleSalesperson[1] };
+                  bestRecord = cust; 
                   break;
                 }
               }
