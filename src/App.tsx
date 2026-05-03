@@ -844,7 +844,7 @@ const Products = ({
                                 <span className="text-brand-orange font-serif font-bold text-lg">
                                   {t.products.pricePrefix}{p.discountPrice.replace(/[^\d.]/g, '')}
                                 </span>
-                                <span className="text-gray-400 font-serif text-sm line-through">
+                                <span className="text-gray-400 font-serif text-xs line-through">
                                   {t.products.pricePrefix}{p.price.replace(/[^\d.]/g, '')}
                                 </span>
                               </div>
@@ -856,39 +856,55 @@ const Products = ({
                           </div>
                           
                           {cartItem ? (
-                             <div className="w-full bg-brand-navy rounded-xl py-3 flex items-center justify-between px-6 shadow-lg border border-white/10">
-                               <button 
-                                 onClick={(e) => { e.stopPropagation(); onUpdateQuantity(p.id, -1); }}
-                                 className="p-1 hover:bg-white/10 text-white transition-colors"
-                               >
-                                 <Minus size={18} />
-                               </button>
-                               <input 
-                                 type="number"
-                                 value={cartItem.quantity}
-                                 onChange={(e) => { e.stopPropagation(); onSetManualQuantity(p.id, e.target.value); }}
-                                 onClick={(e) => e.stopPropagation()}
-                                 className="bg-transparent text-white font-bold text-lg w-12 text-center border-none focus:ring-0 p-0"
-                               />
-                               <button 
-                                 onClick={(e) => { e.stopPropagation(); onUpdateQuantity(p.id, 1); }}
-                                 className="p-1 hover:bg-white/10 text-white transition-colors"
-                               >
-                                 <Plus size={18} />
-                               </button>
+                             <div className="flex items-center justify-center">
+                               {activePill === p.id ? (
+                                 <div className="w-full bg-brand-navy rounded-xl py-3 flex items-center justify-between px-6 shadow-lg border border-white/10">
+                                   <button 
+                                     onClick={(e) => { e.stopPropagation(); onUpdateQuantity(p.id, -1); }}
+                                     className="p-1 hover:bg-white/10 text-white transition-colors"
+                                   >
+                                     <Minus size={18} />
+                                   </button>
+                                   <input 
+                                     type="number"
+                                     value={cartItem.quantity}
+                                     onChange={(e) => { e.stopPropagation(); onSetManualQuantity(p.id, e.target.value); }}
+                                     onClick={(e) => e.stopPropagation()}
+                                     onBlur={() => setActivePill(null)}
+                                     autoFocus
+                                     className="bg-transparent text-white font-bold text-lg w-12 text-center border-none focus:ring-0 p-0"
+                                   />
+                                   <button 
+                                     onClick={(e) => { e.stopPropagation(); onUpdateQuantity(p.id, 1); }}
+                                     className="p-1 hover:bg-white/10 text-white transition-colors"
+                                   >
+                                     <Plus size={18} />
+                                   </button>
+                                 </div>
+                               ) : (
+                                 <button 
+                                   onClick={(e) => { e.stopPropagation(); setActivePill(p.id); }}
+                                   className="relative w-12 h-12 bg-brand-navy text-white rounded-xl flex items-center justify-center hover:bg-brand-orange transition-all shadow-lg group/cart"
+                                 >
+                                   <ShoppingCart size={24} />
+                                   <div className="absolute -top-2 -right-2 bg-brand-orange text-white text-[10px] font-bold w-6 h-6 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                                     {cartItem.quantity}
+                                   </div>
+                                 </button>
+                               )}
                              </div>
-                          ) : (
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onOrder(p);
-                              }}
-                              className="w-full bg-[#0f172a] text-white py-4 rounded-xl text-[11px] tracking-[0.1em] font-bold flex items-center justify-center space-x-2 space-x-reverse hover:bg-brand-orange transition-all duration-300"
-                            >
-                              <ShoppingBag size={16} />
-                              <span className={lang === 'ar' ? "font-action-arabic" : ""}>{t.products.addToCart}</span>
-                            </button>
-                          )}
+                           ) : (
+                             <button 
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 onOrder(p);
+                               }}
+                               className="w-full bg-[#0f172a] text-white py-4 rounded-xl text-[11px] tracking-[0.1em] font-bold flex items-center justify-center space-x-2 space-x-reverse hover:bg-brand-orange transition-all duration-300"
+                             >
+                               <ShoppingBag size={16} />
+                               <span className={lang === 'ar' ? "font-action-arabic" : ""}>{t.products.addToCart}</span>
+                             </button>
+                           )}
                         </>
                       ) : (
                         <div className="space-y-4">
@@ -3737,26 +3753,42 @@ const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManu
                         <Plus size={14} />
                       </button>
                     ) : (
-                      <div className="bg-brand-navy rounded-lg flex items-center p-0.5 shadow-md border border-white/10 scale-110">
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); onUpdateQuantity(p.id, -1); }}
-                          className="p-1 hover:bg-white/10 text-white transition-colors"
-                        >
-                          <Minus size={12} />
-                        </button>
-                        <input 
-                          type="number"
-                          value={cartItem.quantity}
-                          onChange={(e) => { e.stopPropagation(); onSetManualQuantity(p.id, e.target.value); }}
-                          onClick={(e) => e.stopPropagation()}
-                          className="bg-transparent text-white font-bold text-[11px] w-7 text-center border-none focus:ring-0 p-0"
-                        />
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); onUpdateQuantity(p.id, 1); }}
-                          className="p-1 hover:bg-white/10 text-white transition-colors"
-                        >
-                          <Plus size={12} />
-                        </button>
+                      <div className="flex items-center gap-2">
+                        {activePill === p.id ? (
+                          <div className="bg-brand-navy rounded-lg flex items-center p-0.5 shadow-md border border-white/10 scale-110">
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); onUpdateQuantity(p.id, -1); }}
+                              className="p-1 hover:bg-white/10 text-white transition-colors"
+                            >
+                              <Minus size={12} />
+                            </button>
+                            <input 
+                              type="number"
+                              value={cartItem.quantity}
+                              onChange={(e) => { e.stopPropagation(); onSetManualQuantity(p.id, e.target.value); }}
+                              onClick={(e) => e.stopPropagation()}
+                              onBlur={() => setActivePill(null)}
+                              autoFocus
+                              className="bg-transparent text-white font-bold text-[11px] w-7 text-center border-none focus:ring-0 p-0"
+                            />
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); onUpdateQuantity(p.id, 1); }}
+                              className="p-1 hover:bg-white/10 text-white transition-colors"
+                            >
+                              <Plus size={12} />
+                            </button>
+                          </div>
+                        ) : (
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setActivePill(p.id); }}
+                            className="relative w-8 h-8 bg-brand-navy text-white rounded-lg flex items-center justify-center hover:bg-brand-orange transition-all shadow-md group/cart"
+                          >
+                            <ShoppingCart size={14} />
+                            <div className="absolute -top-1.5 -right-1.5 bg-brand-orange text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                              {cartItem.quantity}
+                            </div>
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
