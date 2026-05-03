@@ -424,8 +424,12 @@ app.get("/api/debug-headers", (req, res) => {
   });
 
   app.get("/api", (req, res) => {
-  res.json({ status: "online", message: "Hakkal API Server Running" });
-});
+    res.json({ status: "online", message: "Hakkal API Server Running" });
+  });
+
+  app.get("/api/version", (req, res) => {
+    res.json({ version: "v2.0-advanced-merge" });
+  });
 
 app.post("/api/ping", (req, res) => {
   res.json({ status: "ok", message: "POST connection successful" });
