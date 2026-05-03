@@ -51,6 +51,32 @@ import {
 } from "lucide-react";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation, Navigate } from "react-router-dom";
+import { 
+  collection, 
+  onSnapshot, 
+  addDoc, 
+  deleteDoc, 
+  updateDoc,
+  doc, 
+  setDoc, 
+  getDoc,
+  query,
+  orderBy,
+  where,
+  or,
+  deleteField
+} from "firebase/firestore";
+import { 
+  onAuthStateChanged, 
+  signInWithPopup, 
+  signInWithEmailAndPassword,
+  signInWithCustomToken,
+  sendPasswordResetEmail,
+  signOut, 
+  deleteUser,
+  User 
+} from "firebase/auth";
+import { db, auth, googleProvider } from "./firebase";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
@@ -58,7 +84,7 @@ import { PendingActivation } from "./pages/PendingActivation";
 import { CustomerSyncDashboard } from "./components/admin/CustomerSyncDashboard";
 import { DiscountsManager } from "./components/admin/DiscountsManager";
 import { useAuth } from "./hooks/useAuth";
-import { logout as authLogout, getStoredUser } from "./auth";
+import { login as authLogin, logout as authLogout, getStoredUser } from "./auth";
 import { translations, Language } from "./translations";
 import { usePushNotifications } from "./hooks/usePushNotifications";
 
@@ -926,11 +952,10 @@ const Products = ({
 // --- Dashboard Components ---
 
 const AdminLogin = () => {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [resetSent, setResetSent] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -938,15 +963,14 @@ const AdminLogin = () => {
     setLoading(true);
     setError("");
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const userDoc = await getDoc(doc(db, "users", userCredential.user.uid));
-      const isAdminEmail = userCredential.user.email === "atoubou39@gmail.com";
+      // Use our new local JWT auth
+      const user = await authLogin(identifier, password);
       
-      if (isAdminEmail || (userDoc.exists() && userDoc.data().role === 'admin')) {
+      if (user.isAdmin) {
         navigate("/admin");
       } else {
         setError("Access restricted to administrators.");
-        await auth.signOut();
+        authLogout();
       }
     } catch (err: any) {
       setError("Invalid admin credentials. Please try again.");
@@ -956,21 +980,8 @@ const AdminLogin = () => {
     }
   };
 
-  const handleForgotPassword = async () => {
-    if (!email) {
-      setError("Please enter your email to reset password.");
-      return;
-    }
-    setLoading(true);
-    try {
-      await sendPasswordResetEmail(auth, email);
-      setResetSent(true);
-      setError("");
-    } catch (err: any) {
-      setError("Failed to send reset email. Check if email is correct.");
-    } finally {
-      setLoading(false);
-    }
+  const handleForgotPassword = () => {
+    setError("Please contact system administrator to reset your password.");
   };
 
   return (
@@ -991,16 +1002,16 @@ const AdminLogin = () => {
         <form onSubmit={handleLogin} className="space-y-6">
           <div className="space-y-2">
             <label className="text-xs font-bold text-gray-400 uppercase flex items-center">
-              <Mail size={14} className="mr-2" />
-              Admin Email
+              <UserIcon size={14} className="mr-2" />
+              Phone or Email
             </label>
             <input 
-              type="email" 
+              type="text" 
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
               className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange transition-all"
-              placeholder="admin@example.com"
+              placeholder="9665XXXXXXXX"
             />
           </div>
 
@@ -1008,7 +1019,7 @@ const AdminLogin = () => {
             <div className="flex justify-between items-center">
               <label className="text-xs font-bold text-gray-400 uppercase flex items-center">
                 <Key size={14} className="mr-2" />
-                Secret Key
+                Password
               </label>
               <button 
                 type="button"
@@ -1035,16 +1046,6 @@ const AdminLogin = () => {
               className="text-red-500 text-xs font-medium bg-red-50 p-3 rounded-lg text-center"
             >
               {error}
-            </motion.p>
-          )}
-
-          {resetSent && (
-            <motion.p 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-emerald-500 text-xs font-medium bg-emerald-50 p-3 rounded-lg text-center"
-            >
-              Password reset link sent to your email!
             </motion.p>
           )}
 
@@ -7062,10 +7063,7 @@ export default function App() {
     try {
       const safeOdooOrderName = encodeURIComponent(orderName);
       const url = getApiUrl(`/api/odoo/order-history/${safeOdooOrderName}`);
-      console.log(`[Order History] Requesting URL: ${url}`);
-      
       const resp = await fetch(url);
-      console.log(`[Order History] HTTP Response Status: ${resp.status}`);
       
       if (resp.status === 404) {
         setHistoryError('not_found');
@@ -7073,7 +7071,6 @@ export default function App() {
       }
 
       const data = await resp.json();
-            console.log(`[Order History] API Data Received:`, data);
             
             if (data.debug) {
               console.log(`[Order History] API Debug Info:`, data.debug);
@@ -7153,37 +7150,35 @@ export default function App() {
     setIsCheckoutOpen(true);
   };
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setUser(user);
-      if (user) {
-        try {
-          const idTokenResult = await user.getIdTokenResult(true);
-          const claims = idTokenResult.claims;
-
-          if (user.email === 'atoubou39@gmail.com' || claims.admin === true) {
-            setUserRole('admin');
-          } else if (claims.odooCustomer === true) {
-            setUserRole('customer');
-          } else {
-            // Fallback to Firestore just in case
-            const userDoc = await getDoc(doc(db, "users", user.uid));
-            if (userDoc.exists()) {
-              setUserRole(userDoc.data().role || 'customer');
-            } else {
-              setUserRole('customer');
-            }
-          }
-        } catch (error) {
-          console.error("Error fetching user claims:", error);
-          setUserRole('customer');
-        }
+    useEffect(() => {
+    const checkAuth = async () => {
+      const storedUser = getStoredUser();
+      if (storedUser) {
+        setUser(storedUser as any);
+        setUserRole(storedUser.isAdmin ? 'admin' : 'customer');
       } else {
+        setUser(null);
         setUserRole(null);
       }
       setIsAuthReady(true);
-    });
-    return () => unsubscribe();
+
+      // Verify with server to refresh state
+      try {
+        const freshUser = await verifySession();
+        if (freshUser) {
+          setUser(freshUser as any);
+          setUserRole(freshUser.isAdmin ? 'admin' : 'customer');
+        } else {
+          setUser(null);
+          setUserRole(null);
+        }
+      } catch (err) {
+        console.error("Auth verification failed:", err);
+      }
+    };
+
+    checkAuth();
+    return () => {};
   }, []);
 
   useEffect(() => {

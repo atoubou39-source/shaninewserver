@@ -10,3 +10,4 @@ coverage/
 src.zip
 .vercel
 .env*.local
+data/

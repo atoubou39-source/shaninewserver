@@ -495,14 +495,36 @@ app.get("/api/odoo/debug-customer", async (req, res) => {
   }
 });
 
+// ── Product Cache ──────────────────────────────────────────
+let cachedProducts: any[] | null = null;
+let lastCacheUpdate = 0;
+const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
 // Odoo Product Fetch
 app.get("/api/odoo/products", async (req, res) => {
   try {
+    const now = Date.now();
+    if (cachedProducts && (now - lastCacheUpdate < CACHE_TTL)) {
+      console.log("[Cache] Serving products from in-memory cache");
+      return res.json({ success: true, data: cachedProducts });
+    }
+
     const uid = await authenticateOdoo();
     if (!uid) return res.status(401).json({ success: false });
-    const products = await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "product.template", "search_read", [[]], { fields: ["id", "name", "list_price", "description_sale", "image_1920"], limit: 30 });
+    
+    console.log("[Odoo] Fetching fresh products from ERP...");
+    const products = await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "product.template", "search_read", [[]], { 
+      fields: ["id", "name", "list_price", "description_sale", "image_1920"], 
+      limit: 30 
+    });
+    
+    cachedProducts = products as any[];
+    lastCacheUpdate = now;
+    
     res.json({ success: true, data: products });
-  } catch (error: any) { res.status(500).json({ success: false, error: error.message }); }
+  } catch (error: any) { 
+    res.status(500).json({ success: false, error: error.message }); 
+  }
 });
 
 // Get Order Status by Order Name
@@ -1329,7 +1351,8 @@ app.post("/api/send-otp", async (req, res) => {
     const partialPattern = `%${last7.substring(0, 3)}%${last7.substring(3)}%`;
 
     const odooCustomers = await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "res.partner", "search_read", 
-      [["||", "||", "||", "||", "||", "||", "||", "||", "||", "||", "||", "||", "||",
+      [[
+        "|", "|", "|", "|", "|", "|", "|", "|", "|", "|", "|", "|",
         ["mobile", "ilike", cleanPhone], 
         ["phone", "ilike", cleanPhone],
         ["mobile", "ilike", last9],
