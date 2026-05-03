@@ -1337,6 +1337,7 @@ app.post("/api/send-otp", async (req, res) => {
     if (existingOtp && existingOtp.expires > Date.now()) {
       console.log(`[OTP] Resending existing valid OTP for ${cleanPhone}`);
       const message = `كود التحقق الخاص بك لمتجر شركة حقال للتجارة هو: ${existingOtp.code}`;
+      console.log(`[OTP RESEND] Phone: ${cleanPhone} | CODE: ${existingOtp.code}`);
       const result = await sendMadarSMS(cleanPhone, message);
       if (result.success) return res.json({ success: true, message: "Code resent" });
       return res.status(500).json({ success: false, error: result.error, debug: result.debug });
@@ -1393,7 +1394,9 @@ app.post("/api/send-otp", async (req, res) => {
     });
 
     const message = `كود التحقق الخاص بك لمتجر شركة حقال للتجارة هو: ${code}`;
-    console.log(`[OTP] Sending to ${cleanPhone}: CODE: ${code}`);
+    console.log(`*************************************************`);
+    console.log(`[OTP SEND] TARGET: ${cleanPhone} | CODE: ${code}`);
+    console.log(`*************************************************`);
     const result = await sendMadarSMS(cleanPhone, message);
 
     if (result.success) {
