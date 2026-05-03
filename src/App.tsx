@@ -4679,11 +4679,11 @@ const DashboardLayout = ({ children, user, role, t, lang, onToggleLang, cartCoun
           </div>
           <div className={`mt-6 flex items-center ${isRtl ? 'space-x-reverse space-x-3' : 'space-x-3'}`}>
             <div className="w-10 h-10 rounded-full bg-brand-orange/20 flex items-center justify-center text-brand-orange font-bold text-lg border border-white/20">
-              {profile?.facilityName?.charAt(0) || user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}
+              {(profile?.facilityName || user?.name || user?.email || 'U').charAt(0)}
             </div>
             <div className="overflow-hidden">
-              <p className="text-[12px] font-bold text-white truncate">{profile?.facilityName || (lang === 'ar' ? 'منشأة غير محددة' : 'Unknown Facility')}</p>
-              <p className="text-[10px] text-white/60 truncate mt-0.5">{profile?.phoneNumber || user.email}</p>
+              <p className="text-[12px] font-bold text-white truncate">{profile?.facilityName || user?.name || (lang === 'ar' ? 'منشأة غير محددة' : 'Unknown Facility')}</p>
+              <p className="text-[10px] text-white/60 truncate mt-0.5">{profile?.phoneNumber || user?.phone || user?.email}</p>
             </div>
           </div>
         </div>
@@ -4767,21 +4767,21 @@ const DashboardLayout = ({ children, user, role, t, lang, onToggleLang, cartCoun
               {isRtl ? (
                 <>
                   <div className="w-10 h-10 rounded-xl bg-brand-cream flex items-center justify-center text-brand-orange font-bold text-sm">
-                    {profile?.facilityName?.charAt(0) || user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}
+                    {(profile?.facilityName || user?.name || user?.email || 'U').charAt(0)}
                   </div>
                   <div className="text-right">
-                    <p className="text-xs font-bold text-brand-navy leading-none">{profile?.facilityName || (isRtl ? 'منشأة غير محددة' : 'Unknown Facility')}</p>
-                    <p className="text-[10px] text-gray-400 mt-1">{user.displayName || user.email}</p>
+                    <p className="text-xs font-bold text-brand-navy leading-none">{profile?.facilityName || user?.name || (isRtl ? 'منشأة غير محددة' : 'Unknown Facility')}</p>
+                    <p className="text-[10px] text-gray-400 mt-1">{profile?.phoneNumber || user?.phone || user?.email}</p>
                   </div>
                 </>
               ) : (
                 <>
                   <div className="text-right">
-                    <p className="text-xs font-bold text-brand-navy leading-none">{profile?.facilityName || (isRtl ? 'منشأة غير محددة' : 'Unknown Facility')}</p>
-                    <p className="text-[10px] text-gray-400 mt-1">{user.displayName || user.email}</p>
+                    <p className="text-xs font-bold text-brand-navy leading-none">{profile?.facilityName || user?.name || (isRtl ? 'منشأة غير محددة' : 'Unknown Facility')}</p>
+                    <p className="text-[10px] text-gray-400 mt-1">{profile?.phoneNumber || user?.phone || user?.email}</p>
                   </div>
                   <div className="w-10 h-10 rounded-xl bg-brand-cream flex items-center justify-center text-brand-orange font-bold text-sm">
-                    {profile?.facilityName?.charAt(0) || user.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}
+                    {(profile?.facilityName || user?.name || user?.email || 'U').charAt(0)}
                   </div>
                 </>
               )}
