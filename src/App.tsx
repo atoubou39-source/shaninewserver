@@ -748,6 +748,8 @@ const Products = ({
   t: any
 }) => {
   const [showAll, setShowAll] = useState(true);
+  const [activePill, setActivePill] = useState<number | null>(null);
+  const isRtl = lang === 'ar';
   const visibleProducts = showAll ? products : products.slice(0, 6);
 
   return (
@@ -3543,6 +3545,7 @@ const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManu
   const isRtl = lang === 'ar';
   const [search, setSearch] = useState('');
   const [showOffer, setShowOffer] = useState(true);
+  const [activePill, setActivePill] = useState<number | null>(null);
   const navigate = useNavigate();
 
   const filtered = useMemo(() =>
