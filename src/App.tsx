@@ -344,25 +344,24 @@ const getStatusDetails = (status: string, t: any) => {
 
 const getApiUrl = (path: string) => {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  
-  // In production (served from the same origin), relative paths are best and work everywhere
+  const envBase = import.meta.env.VITE_API_BASE_URL;
+
+  // 1. If we have a base URL in ENV, use it as priority (works for cross-domain)
+  if (envBase && envBase.startsWith('http')) {
+    return `${envBase.replace(/\/$/, '')}${cleanPath}`;
+  }
+
+  // 2. In production fallback to relative path if no base URL
   if (import.meta.env.PROD) {
     return cleanPath;
   }
 
-  // In development, handle localhost switching
+  // 3. In development, handle localhost switching
   const isLocalhost = typeof window !== 'undefined' && 
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
     
   if (isLocalhost) {
-    // Try to match the backend port (3000 is our new default)
     return `http://localhost:3000${cleanPath}`;
-  }
-
-  // Fallback to whatever is in env if provided, else relative
-  const envBase = (import.meta as any).env?.VITE_API_BASE_URL;
-  if (envBase && envBase.startsWith('http')) {
-    return `${envBase.replace(/\/$/, '')}${cleanPath}`;
   }
 
   return cleanPath;
