@@ -66,7 +66,8 @@ export const LoginPage = () => {
       await authLogin(loginInput, password);
       clearTimeout(wakeTimer);
       const from = (location.state as any)?.from?.pathname || "/dashboard";
-      navigate(from, { replace: true });
+      // Forced reload to ensure all contexts (Auth, User, etc.) are cleared and fresh
+      window.location.href = from;
     } catch (err: any) {
       clearTimeout(wakeTimer);
       const msg = err.message || '';
