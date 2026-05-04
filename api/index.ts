@@ -854,17 +854,38 @@ const sanitizePhone = (phone: string): string => {
         console.warn("[Odoo Version Check] Failed, continuing anyway...");
       }
 
-      // 3. Adaptive PDF Report Methods
-      const reportNames = ["account.report_invoice_with_payments", "account.report_invoice"];
-      const methodNames = ["render_qweb_pdf", "_render_qweb_pdf", "render_report", "render"];
+      // 3. Auto-Discover Report Names for account.move
+      let discoveredReports: string[] = [
+        "account.report_invoice_with_payments",
+        "account.report_invoice"
+      ];
+
+      try {
+        const reports = await callOdoo(
+          "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
+          "ir.actions.report", "search_read",
+          [[["model", "=", "account.move"]]],
+          { fields: ["report_name"] }
+        );
+        if (Array.isArray(reports) && reports.length > 0) {
+          const dynamicNames = reports.map((r: any) => r.report_name).filter(Boolean);
+          discoveredReports = [...new Set([...dynamicNames, ...discoveredReports])];
+          console.log("[Invoice PDF] Discovered report names:", discoveredReports);
+        }
+      } catch (e: any) {
+        console.warn("[Invoice PDF] Auto-discovery failed, using defaults:", e.message);
+      }
 
       let pdfBuffer: Buffer | null = null;
       let lastError = "";
 
+      // Try methods: render_qweb_pdf is standard for 11+
+      const methodNames = ["render_qweb_pdf", "_render_qweb_pdf", "render_report"];
+
       for (const methodName of methodNames) {
-        for (const reportName of reportNames) {
+        for (const reportName of discoveredReports) {
           try {
-            console.log(`[Invoice PDF] Trying ${methodName} on ${reportName}...`);
+            console.log(`[Invoice PDF] Attempting ${methodName} on ${reportName}...`);
             const reportResult = await callOdoo(
               "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
               "ir.actions.report", methodName,
@@ -874,7 +895,7 @@ const sanitizePhone = (phone: string): string => {
             if (reportResult && reportResult[0]) {
               const pdfBase64 = reportResult[0];
               pdfBuffer = Buffer.from(pdfBase64, 'base64');
-              console.log(`[Invoice PDF] Success with method ${methodName}`);
+              console.log(`[Invoice PDF] SUCCESS with ${methodName} using ${reportName}`);
               break;
             }
           } catch (e: any) {
