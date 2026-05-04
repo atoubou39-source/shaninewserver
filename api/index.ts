@@ -771,33 +771,21 @@ const sanitizePhone = (phone: string): string => {
       const uid = await authenticateOdoo();
       if (!uid) return res.status(401).json({ success: false, message: "Odoo Auth Failed" });
 
-      // Search for the invoice
+      // Search 1: Exact Name Match
       let invoices = await callOdoo(
         "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
         "account.move", "search_read",
-        [[["name", "ilike", invoiceName]]],
-        { 
-          fields: [
-            "name", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", 
-            "currency_id", "partner_id", "invoice_line_ids", "l10n_sa_qr_code_str"
-          ], 
-          limit: 1 
-        }
+        [[["name", "=", invoiceName]]],
+        { fields: ["name", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "partner_id", "invoice_line_ids"], limit: 1 }
       );
 
+      // Search 2: Exact Origin Match (Fallback)
       if (!Array.isArray(invoices) || invoices.length === 0) {
-        // Fallback by origin
         invoices = await callOdoo(
           "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
           "account.move", "search_read",
-          [[["invoice_origin", "ilike", invoiceName], ["state", "=", "posted"]]],
-          { 
-            fields: [
-              "name", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", 
-              "currency_id", "partner_id", "invoice_line_ids", "l10n_sa_qr_code_str"
-            ], 
-            limit: 1 
-          }
+          [[["invoice_origin", "=", invoiceName], ["state", "=", "posted"]]],
+          { fields: ["name", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "partner_id", "invoice_line_ids"], limit: 1 }
         );
       }
 
