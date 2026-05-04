@@ -4346,6 +4346,7 @@ const DashboardLayout = ({ children, user, role, t, lang, onToggleLang, cartCoun
             <Link
               key={item.name}
               to={item.path}
+              onClick={() => setMobileMenuOpen(false)}
               className={`flex items-center p-3 rounded-lg transition-all ${isRtl ? 'space-x-reverse space-x-3' : 'space-x-3'} ${location.pathname === item.path
                   ? "bg-brand-orange text-white"
                   : "text-white/60 hover:bg-white/5 hover:text-white"
@@ -4359,14 +4360,14 @@ const DashboardLayout = ({ children, user, role, t, lang, onToggleLang, cartCoun
 
         <div className="p-4 border-t border-white/10">
           <button
-            onClick={() => navigate("/")}
+            onClick={() => { navigate("/"); setMobileMenuOpen(false); }}
             className={`flex items-center p-3 w-full text-white/60 hover:text-white transition-colors ${isRtl ? 'space-x-reverse space-x-3' : 'space-x-3'}`}
           >
             <Eye size={20} />
             <span className="text-sm font-medium">{role === 'admin' ? t.orders.dashboard.viewWebsite || 'View Website' : t.orders.dashboard.backToWebsite}</span>
           </button>
           <button
-            onClick={handleLogout}
+            onClick={() => { handleLogout(); setMobileMenuOpen(false); }}
             className={`flex items-center p-3 w-full text-red-400 hover:text-red-300 transition-colors ${isRtl ? 'space-x-reverse space-x-3' : 'space-x-3'}`}
           >
             <LogOut size={20} />
