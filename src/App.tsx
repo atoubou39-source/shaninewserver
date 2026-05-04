@@ -7784,8 +7784,8 @@ export default function App() {
                        </tbody>
                     </table>
 
-                    {/* Totals Section */}
-                    <div className="flex justify-end mt-10">
+                    {/* Totals Section - ALIGNED TO LEFT per Odoo Bilingual layout */}
+                    <div className="flex justify-start mt-10">
                       <div className="w-[450px]">
                         <table className="w-full border-t border-black">
                           <tbody>
