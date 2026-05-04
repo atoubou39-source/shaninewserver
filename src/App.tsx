@@ -3095,34 +3095,8 @@ const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory, onVie
   ), [orders, user]);
 
   const viewOdooDocument = async (order: Order, type: 'invoice' | 'quotation') => {
-    if (type === 'invoice') return onViewInvoice(order);
-    const documentName = order.odooOrderName;
-    if (!documentName) return;
-
-    const newWindow = window.open('', '_blank');
-    if (!newWindow) {
-      alert(t.orders.dashboard.allowPopups);
-      return;
-    }
-    
-    const loadingText = t.orders.dashboard.loadingQuotation;
-    newWindow.document.write(`<div style="font-family:sans-serif;padding:20px;text-align:center;">${loadingText}</div>`);
-    
-    try {
-      const endpoint = type === 'invoice' ? 'invoice-portal' : 'order-portal';
-      const resp = await fetch(getApiUrl(`/api/odoo/${endpoint}/${encodeURIComponent(documentName)}`));
-      const data = await resp.json();
-      
-      if (data.success && data.url) {
-        newWindow.location.href = data.url;
-      } else {
-        const errorText = t.orders.dashboard.quotationNotFound;
-        newWindow.document.write(`<div style="font-family:sans-serif;padding:20px;text-align:center;color:red;">${errorText}</div>`);
-      }
-    } catch (e) {
-      const errorText = t.orders.dashboard.quotationError;
-      newWindow.document.write(`<div style="font-family:sans-serif;padding:20px;text-align:center;color:red;">${errorText}</div>`);
-    }
+    setSelectedDocType(type);
+    onViewInvoice(order);
   };
 
   const syncStatuses = useCallback(async (manual = false) => {
