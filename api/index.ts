@@ -845,36 +845,46 @@ const sanitizePhone = (phone: string): string => {
       if (!foundInvoiceId) return res.status(404).json({ success: false, message: "Invoice not found" });
 
       // 2. Request the PDF report via 'object' service (More compatible than 'report' service)
-      const reportResult = await callOdoo(
-        "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
-        "ir.actions.report", "render_qweb_pdf",
-        [["account.report_invoice_with_payments", [foundInvoiceId]]]
-      );
+      // Correcting arguments structure: [report_name, [ids]]
+      const reportNames = [
+        "account.report_invoice_with_payments",
+        "account.report_invoice",
+        "account.account_invoices"
+      ];
 
-      if (reportResult && reportResult[0]) {
-        const pdfBase64 = reportResult[0];
-        const pdfBuffer = Buffer.from(pdfBase64, 'base64');
-        
+      let pdfBuffer: Buffer | null = null;
+      let lastError = "";
+
+      for (const reportName of reportNames) {
+        try {
+          const reportResult = await callOdoo(
+            "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
+            "ir.actions.report", "render_qweb_pdf",
+            [reportName, [foundInvoiceId]] // Correctly flattened arguments
+          );
+
+          if (reportResult && reportResult[0]) {
+            const pdfBase64 = reportResult[0];
+            pdfBuffer = Buffer.from(pdfBase64, 'base64');
+            console.log(`[Invoice PDF] Successfully generated using ${reportName}`);
+            break;
+          }
+        } catch (e: any) {
+          console.warn(`[Invoice PDF] Report ${reportName} failed:`, e.message);
+          lastError = e.message;
+        }
+      }
+
+      if (pdfBuffer) {
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `inline; filename="Invoice_${invoiceName}.pdf"`);
         res.send(pdfBuffer);
       } else {
-        // Try fallback report name if standard one fails
-        const reportResultAlt = await callOdoo(
-          "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
-          "ir.actions.report", "render_qweb_pdf",
-          [["account.report_invoice", [foundInvoiceId]]]
-        );
-
-        if (reportResultAlt && reportResultAlt[0]) {
-          const pdfBase64 = reportResultAlt[0];
-          const pdfBuffer = Buffer.from(pdfBase64, 'base64');
-          res.setHeader('Content-Type', 'application/pdf');
-          res.setHeader('Content-Disposition', `inline; filename="Invoice_${invoiceName}.pdf"`);
-          res.send(pdfBuffer);
-        } else {
-          res.status(500).json({ success: false, message: "Failed to generate PDF from Odoo (Report service unavailable)" });
-        }
+        res.status(500).json({ 
+          success: false, 
+          message: `Failed to generate PDF from Odoo. Last error: ${lastError}`,
+          tip: "Verify that 'ir.actions.report' has 'render_qweb_pdf' method and report names are correct."
+        });
       }
     } catch (error: any) {
       console.error("[Invoice PDF] Error:", error.message);
