@@ -7785,25 +7785,47 @@ export default function App() {
                     </table>
 
                     {/* Totals Section */}
-                    <div className="odoo-totals-section">
-                       <div className="odoo-total-row">
-                          <div className="odoo-total-value font-bold">{(invoiceDetails?.amount_untaxed || selectedInvoiceOrder.total / 1.15).toFixed(2)} SR</div>
-                          <div className="odoo-total-label">Invoice Taxable Amount / <br/> المبلغ الخاضع للضريبة غير شامل ضريبة القيمة المضافة</div>
-                       </div>
-                       <div className="odoo-total-row">
-                          <div className="odoo-total-value font-bold">{(invoiceDetails?.amount_tax || (selectedInvoiceOrder.total - (selectedInvoiceOrder.total / 1.15))).toFixed(2)} SR</div>
-                          <div className="odoo-total-label">VAT Taxes</div>
-                       </div>
-                       <div className="odoo-total-row">
-                          <div className="odoo-total-value font-bold text-lg">{(invoiceDetails?.amount_total || selectedInvoiceOrder.total).toFixed(2)} SR</div>
-                          <div className="odoo-total-label text-base font-bold">Invoice Total (inclusive of VAT) / قيمة إجمالي الفاتورة شامل ضريبة القيمة المضافة</div>
-                       </div>
-                    </div>
-
-                    {/* Payment Reference */}
-                    <div className="mt-4 flex justify-end gap-10 text-xs">
-                       <div className="font-bold">{invoiceDetails?.name || selectedInvoiceOrder.invoiceName}</div>
-                       <div className="font-bold">Payment Reference: / رقم إشارة الدفعة:</div>
+                    <div className="flex justify-end mt-10">
+                      <div className="w-[450px]">
+                        <table className="w-full border-t border-black">
+                          <tbody>
+                            <tr className="border-b border-gray-200">
+                               <td className="py-2 text-left font-bold text-[13px]">
+                                 {(invoiceDetails?.amount_untaxed || selectedInvoiceOrder.total / 1.15).toFixed(2)} SR
+                               </td>
+                               <td className="py-2 text-right text-[11px] leading-tight">
+                                 Invoice Taxable Amount / <br/> 
+                                 المبلغ الخاضع للضريبة غير شامل ضريبة القيمة المضافة
+                               </td>
+                            </tr>
+                            <tr className="border-b border-gray-200">
+                               <td className="py-2 text-left font-bold text-[13px]">
+                                 {(invoiceDetails?.amount_tax || (selectedInvoiceOrder.total - (selectedInvoiceOrder.total / 1.15))).toFixed(2)} SR
+                               </td>
+                               <td className="py-2 text-right text-[11px] leading-tight">
+                                 VAT Taxes
+                               </td>
+                            </tr>
+                            <tr className="border-b-2 border-black">
+                               <td className="py-3 text-left font-bold text-[16px]">
+                                 {(invoiceDetails?.amount_total || selectedInvoiceOrder.total).toFixed(2)} SR
+                               </td>
+                               <td className="py-3 text-right font-bold text-[13px] leading-tight">
+                                 Invoice Total (inclusive of VAT) / <br/>
+                                 قيمة إجمالي الفاتورة شامل ضريبة القيمة المضافة
+                               </td>
+                            </tr>
+                            <tr>
+                               <td className="py-4 text-left font-bold text-[13px]">
+                                 {invoiceDetails?.name || selectedInvoiceOrder.invoiceName}
+                               </td>
+                               <td className="py-4 text-right text-[11px] font-bold">
+                                 Payment Reference: / رقم إشارة الدفعة:
+                               </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
 
                     {/* Footer */}
