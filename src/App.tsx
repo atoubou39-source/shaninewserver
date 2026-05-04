@@ -3085,7 +3085,7 @@ const DashboardCarousel = ({ lang, t }: { lang: Language, t: any }) => {
   );
 };
 
-const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory, onViewInvoice }: { orders: Order[], user: AuthUser | null, t: any, lang: Language, onViewHistory: (orderName: string, firebaseId?: string, status?: string, createdAt?: string) => void, onViewInvoice: (order: Order) => void }) => {
+const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory, onViewInvoice, setSelectedDocType }: { orders: Order[], user: AuthUser | null, t: any, lang: Language, onViewHistory: (orderName: string, firebaseId?: string, status?: string, createdAt?: string) => void, onViewInvoice: (order: Order) => void, setSelectedDocType: (type: 'invoice' | 'quotation') => void }) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const isRtl = lang === 'ar';
 
@@ -3682,7 +3682,8 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
   onViewHistory: (orderName: string, firebaseId?: string, status?: string, createdAt?: string) => void,
   loadingHistory: boolean,
   historyOrder: Order | null,
-  onViewInvoice: (order: Order) => void
+  onViewInvoice: (order: Order) => void,
+  setSelectedDocType: (type: 'invoice' | 'quotation') => void
 }) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSyncingIndividual, setIsSyncingIndividual] = useState<string | null>(null);
@@ -7077,6 +7078,7 @@ export default function App() {
                 lang={lang}
                 onViewHistory={fetchOrderHistory}
                 onViewInvoice={handleViewInvoice}
+                setSelectedDocType={setSelectedDocType}
               />
             </DashboardLayout>
           </ProtectedRoute>
@@ -7110,6 +7112,7 @@ export default function App() {
                 loadingHistory={loadingHistory}
                 historyOrder={historyOrder}
                 onViewInvoice={handleViewInvoice}
+                setSelectedDocType={setSelectedDocType}
               />
             </DashboardLayout>
           </ProtectedRoute>
