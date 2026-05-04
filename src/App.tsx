@@ -4789,25 +4789,7 @@ const OrderManager = ({
                     <td className="px-6 py-4">
                       {order.odooOrderName ? (
                         <button
-                          onClick={async () => {
-                            const newWindow = window.open('', '_blank');
-                            if (!newWindow) {
-                              alert(t.orders.dashboard.allowPopups);
-                              return;
-                            }
-                            newWindow.document.write(`<div style="font-family:sans-serif;padding:20px;text-align:center;">${t.orders.dashboard.loadingQuotation}</div>`);
-                            try {
-                              const resp = await fetch(getApiUrl(`/api/odoo/order-portal/${encodeURIComponent(order.odooOrderName!)}`));
-                              const data = await resp.json();
-                              if (data.success && data.url) {
-                                newWindow.location.href = data.url;
-                              } else {
-                                newWindow.document.write(`<div style="font-family:sans-serif;padding:20px;text-align:center;color:red;">${t.orders.dashboard.quotationNotFound}</div>`);
-                              }
-                            } catch (e) {
-                              newWindow.document.write(`<div style="font-family:sans-serif;padding:20px;text-align:center;color:red;">${t.orders.dashboard.quotationError}</div>`);
-                            }
-                          }}
+                          onClick={() => viewOdooDocument(order, 'quotation')}
                           title={t.orders.dashboard.viewQuotation}
                           className="text-[10px] font-bold text-brand-orange bg-brand-orange/10 px-2 py-1 rounded hover:bg-brand-orange hover:text-white transition-colors cursor-pointer"
                         >
