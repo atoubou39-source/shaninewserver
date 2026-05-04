@@ -7568,26 +7568,35 @@ export default function App() {
                   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
                   @media print {
                     @page { margin: 0; size: A4; }
-                    body { margin: 0; background: white !important; }
-                    body > * { display: none !important; }
-                    #printable-modal, #printable-modal * { display: block !important; }
+                    body { 
+                      visibility: hidden; 
+                      margin: 0; 
+                      padding: 0;
+                      background: white !important; 
+                      -webkit-print-color-adjust: exact; 
+                    }
                     #printable-modal { 
-                      display: flex !important; 
+                      visibility: visible !important; 
                       position: fixed !important; 
-                      top: 0 !important; 
                       left: 0 !important; 
+                      top: 0 !important; 
                       width: 100% !important; 
                       height: 100% !important; 
-                      z-index: 99999 !important; 
+                      display: block !important;
+                      z-index: 99999 !important;
                       background: white !important;
                     }
+                    #printable-modal * { 
+                      visibility: visible !important; 
+                    }
                     #printable-invoice { 
+                      visibility: visible !important;
                       padding: 0 !important; 
                       width: 100% !important; 
-                      height: 100% !important; 
                       overflow: visible !important;
+                      display: block !important;
                     }
-                    .no-print { display: none !important; }
+                    .no-print { display: none !important; visibility: hidden !important; }
                   }
                   .odoo-bilingual {
                     font-family: 'Inter', -apple-system, sans-serif;
