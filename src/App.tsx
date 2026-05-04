@@ -7526,152 +7526,238 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Invoice Modal - Odoo Standard Layout Replica */}
+      {/* Invoice Modal - Odoo Bilingual PDF Replica */}
       <AnimatePresence>
         {selectedInvoiceOrder && (
-          <div className="fixed inset-0 z-[400] flex items-center justify-center p-4">
+          <div id="printable-modal" className="fixed inset-0 z-[400] flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setSelectedInvoiceOrder(null)}
-              className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm"
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.98, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.98, y: 10 }}
-              className="relative w-full max-w-5xl bg-white rounded-lg shadow-2xl overflow-hidden flex flex-col max-h-[95vh] border border-gray-200"
+              className="relative w-full max-w-6xl bg-white rounded shadow-2xl overflow-hidden flex flex-col max-h-[98vh] border border-gray-300"
             >
               {/* Odoo Style Toolbar */}
-              <div className="px-6 py-3 border-b border-gray-100 flex justify-between items-center bg-gray-50 no-print">
+              <div className="px-4 py-2 border-b border-gray-200 flex justify-between items-center bg-gray-50 no-print">
                 <div className="flex items-center gap-3">
                   <button 
                     onClick={() => window.print()}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-brand-navy text-white rounded text-xs font-semibold hover:bg-brand-orange transition-all shadow-sm"
+                    className="flex items-center gap-2 px-3 py-1 bg-[#714B67] text-white rounded text-[11px] font-bold hover:bg-[#5a3c52] transition-all"
                   >
                     <Printer size={14} />
-                    <span>{isRtl ? 'طباعة' : 'Print'}</span>
+                    <span>PRINT</span>
                   </button>
-                  <div className="h-4 w-[1px] bg-gray-300 mx-1" />
-                  <span className="text-[11px] font-bold text-gray-500">
+                  <span className="text-[11px] font-bold text-gray-500 uppercase">
                     {invoiceDetails?.name || selectedInvoiceOrder.invoiceName || 'Draft'}
                   </span>
                 </div>
-                <button onClick={() => setSelectedInvoiceOrder(null)} className="p-1.5 hover:bg-gray-200 rounded-md transition-all text-gray-500">
-                  <X size={18} />
+                <button onClick={() => setSelectedInvoiceOrder(null)} className="p-1 hover:bg-gray-200 rounded transition-all text-gray-400">
+                  <X size={20} />
                 </button>
               </div>
 
-              {/* Invoice Content - THE ODOO LAYOUT */}
-              <div className="flex-1 overflow-y-auto bg-white" id="printable-invoice">
+              {/* Invoice Content - BILINGUAL ODOO LAYOUT */}
+              <div className="flex-1 overflow-y-auto bg-white p-0" id="printable-invoice">
                 <style>{`
-                  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+                  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
                   @media print {
-                    @page { margin: 0; }
-                    body { margin: 0; }
-                    #printable-invoice { padding: 0 !important; width: 100% !important; }
+                    @page { margin: 0; size: A4; }
+                    body { margin: 0; background: white !important; }
+                    body > * { display: none !important; }
+                    #printable-modal, #printable-modal * { display: block !important; }
+                    #printable-modal { 
+                      display: flex !important; 
+                      position: fixed !important; 
+                      top: 0 !important; 
+                      left: 0 !important; 
+                      width: 100% !important; 
+                      height: 100% !important; 
+                      z-index: 99999 !important; 
+                      background: white !important;
+                    }
+                    #printable-invoice { 
+                      padding: 0 !important; 
+                      width: 100% !important; 
+                      height: 100% !important; 
+                      overflow: visible !important;
+                    }
                     .no-print { display: none !important; }
                   }
-                  .odoo-report {
-                    font-family: 'Inter', sans-serif;
-                    color: #212529;
-                    line-height: 1.5;
-                    padding: 40px 60px;
-                    max-width: 900px;
-                    margin: 0 auto;
+                  .odoo-bilingual {
+                    font-family: 'Inter', -apple-system, sans-serif;
+                    color: #000;
+                    line-height: 1.2;
+                    padding: 40px 50px;
+                    background: white;
                   }
-                  .odoo-blue-bar {
-                    height: 8px;
-                    background-color: #714B67; /* Odoo Standard Accent */
-                    margin: -40px -60px 40px -60px;
+                  .odoo-header-left { font-size: 14px; text-align: left; }
+                  .odoo-header-right { font-size: 14px; text-align: right; }
+                  .odoo-title-row { 
+                    display: flex; 
+                    justify-content: space-between; 
+                    align-items: center; 
+                    margin-top: 40px;
+                    margin-bottom: 20px;
                   }
-                  .odoo-table thead th {
-                    border-bottom: 2px solid #dee2e6;
-                    color: #714B67;
-                    font-weight: 700;
+                  .odoo-title-row h1 { font-size: 24px; font-weight: 400; margin: 0; }
+                  .odoo-title-row h2 { font-size: 24px; font-weight: 400; margin: 0; }
+                  .odoo-title-row .doc-number { font-size: 24px; font-weight: 400; }
+                  
+                  .odoo-meta-grid {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 10px;
+                    margin-bottom: 30px;
                     font-size: 13px;
-                    padding: 12px 8px;
+                    text-align: right;
                   }
-                  .odoo-table tbody td {
-                    border-bottom: 1px solid #dee2e6;
-                    padding: 10px 8px;
-                    font-size: 13px;
+                  .odoo-meta-item { display: flex; justify-content: flex-end; gap: 40px; }
+                  .odoo-meta-label { color: #000; width: 120px; text-align: left; font-weight: 500; }
+                  .odoo-meta-value { color: #000; text-align: right; font-weight: 400; width: 100px; }
+                  .odoo-meta-label-ar { width: 120px; text-align: right; font-weight: 700; }
+
+                  .odoo-table-bilingual {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-bottom: 30px;
+                  }
+                  .odoo-table-bilingual thead th {
+                    border-top: 1px solid #000;
+                    border-bottom: 1px solid #000;
+                    padding: 10px 4px;
+                    font-size: 11px;
+                    vertical-align: top;
+                  }
+                  .odoo-table-bilingual tbody td {
+                    padding: 10px 4px;
+                    font-size: 11px;
+                    vertical-align: top;
+                  }
+                  .odoo-totals-section {
+                    margin-top: 20px;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: flex-end;
+                    font-size: 12px;
+                    border-top: 1px solid #000;
+                    padding-top: 10px;
+                  }
+                  .odoo-total-row {
+                    display: flex;
+                    justify-content: flex-end;
+                    width: 100%;
+                    gap: 20px;
+                    margin-bottom: 15px;
+                  }
+                  .odoo-total-label { text-align: center; color: #000; font-weight: 500; line-height: 1.1; }
+                  .odoo-total-value { text-align: right; font-weight: 400; width: 100px; }
+                  
+                  .odoo-footer-line {
+                    position: absolute;
+                    bottom: 40px;
+                    left: 50px;
+                    right: 50px;
+                    border-top: 1px solid #000;
+                    padding-top: 10px;
+                    display: flex;
+                    justify-content: space-between;
+                    font-size: 10px;
                   }
                 `}</style>
                 
                 {loadingInvoice && !invoiceDetails ? (
-                  <div className="flex flex-col items-center justify-center py-40 space-y-4">
-                    <RefreshCw size={48} className="text-brand-orange animate-spin opacity-20" />
-                    <p className="text-xs font-bold text-gray-300 tracking-widest uppercase">{isRtl ? 'جاري جلب البيانات من أودو...' : 'Fetching Odoo Data...'}</p>
+                  <div className="flex flex-col items-center justify-center py-60">
+                    <RefreshCw size={40} className="text-[#714B67] animate-spin mb-4" />
+                    <p className="text-[10px] font-bold tracking-widest text-gray-300">SYNCHRONIZING WITH ODOO...</p>
                   </div>
                 ) : (
-                  <div className="odoo-report">
-                    {/* Odoo Standard Top Bar */}
-                    <div className="odoo-blue-bar" />
-
-                    {/* Header: Logo & Company */}
-                    <div className={`flex justify-between items-start mb-10 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                      <div className="w-1/2">
+                  <div className="odoo-bilingual min-h-[1100px] relative">
+                    {/* Top Row: Logo/Company (Left) & Customer (Right) */}
+                    <div className="flex justify-between items-start">
+                      <div className="odoo-header-left">
                         <img
                           src="https://i.ibb.co/xKkzXtmz/Untitled-design-1.png"
-                          alt="Logo"
-                          className="h-16 w-auto object-contain mb-4"
+                          alt="Company Logo"
+                          className="h-14 w-auto object-contain mb-4"
                         />
+                        <div className="text-[11px] space-y-0.5">
+                          <p>Hakkal Trading Company</p>
+                          <p>Jeddah, Saudi Arabia</p>
+                          <p>VAT: 300000000000003</p>
+                        </div>
                       </div>
-                      <div className={`text-[12px] leading-relaxed text-gray-600 ${isRtl ? 'text-left' : 'text-right'}`}>
-                        <p className="font-bold text-gray-900 text-sm">Hakkal Trading Company</p>
-                        <p>Jeddah, Saudi Arabia</p>
-                        <p>VAT: 300000000000003</p>
-                        <p>Email: info@hakkal-est.com</p>
-                        <p>Website: www.hakkal-est.com</p>
+                      <div className="odoo-header-right">
+                        <div className="text-sm font-bold mt-16">
+                           <p>{invoiceDetails?.partner_id?.[1] || selectedInvoiceOrder.customerName}</p>
+                           <p className="text-[11px] font-normal mt-1">, ,</p>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Document Meta Section */}
-                    <div className={`flex justify-between items-end mb-12 border-b-2 border-gray-100 pb-8 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                       <div>
-                          <h2 className="text-2xl font-extrabold text-gray-800 mb-2">
-                            {isRtl ? 'فاتورة ضريبية' : 'Tax Invoice'}
-                          </h2>
-                          <p className="text-lg font-bold text-[#714B67]">
-                             {invoiceDetails?.name || selectedInvoiceOrder.invoiceName || '-'}
-                          </p>
-                       </div>
-                       <div className={`text-xs space-y-1 ${isRtl ? 'text-right' : 'text-left'}`}>
-                          <div className="flex gap-4">
-                             <span className="font-bold text-gray-400 uppercase">{isRtl ? 'التاريخ' : 'Date'}:</span>
-                             <span className="font-bold">{invoiceDetails?.invoice_date || new Date(selectedInvoiceOrder.createdAt).toLocaleDateString()}</span>
+                    {/* Title Row: Tax Invoice | INV | فاتورة ضريبية */}
+                    <div className="odoo-title-row">
+                       <h1>Tax Invoice</h1>
+                       <div className="doc-number">{invoiceDetails?.name || selectedInvoiceOrder.invoiceName || '-'}</div>
+                       <h2 className="font-bold">فاتورة ضريبية</h2>
+                    </div>
+
+                    {/* Metadata Grid */}
+                    <div className="flex flex-col items-end w-full mb-10">
+                       <div className="space-y-1">
+                          <div className="odoo-meta-item">
+                             <div className="odoo-meta-label">Invoice Date:</div>
+                             <div className="odoo-meta-value">{invoiceDetails?.invoice_date || new Date(selectedInvoiceOrder.createdAt).toLocaleDateString('en-GB')}</div>
+                             <div className="odoo-meta-label-ar">تاريخ الفاتورة :</div>
                           </div>
-                          <div className="flex gap-4">
-                             <span className="font-bold text-gray-400 uppercase">{isRtl ? 'المرجع' : 'Reference'}:</span>
-                             <span className="font-bold">{selectedInvoiceOrder.odooOrderName || '-'}</span>
+                          <div className="odoo-meta-item">
+                             <div className="odoo-meta-label">Due Date:</div>
+                             <div className="odoo-meta-value">{invoiceDetails?.invoice_date || new Date(selectedInvoiceOrder.createdAt).toLocaleDateString('en-GB')}</div>
+                             <div className="odoo-meta-label-ar">تاريخ الاستحقاق :</div>
+                          </div>
+                          <div className="odoo-meta-item">
+                             <div className="odoo-meta-label">Delivery Date:</div>
+                             <div className="odoo-meta-value">{invoiceDetails?.invoice_date || new Date(selectedInvoiceOrder.createdAt).toLocaleDateString('en-GB')}</div>
+                             <div className="odoo-meta-label-ar">تاريخ التوصيل :</div>
+                          </div>
+                          <div className="odoo-meta-item">
+                             <div className="odoo-meta-label">Source:</div>
+                             <div className="odoo-meta-value font-mono">{selectedInvoiceOrder.odooOrderName || '-'}</div>
+                             <div className="odoo-meta-label-ar">المصدر :</div>
                           </div>
                        </div>
                     </div>
 
-                    {/* Partner Section */}
-                    <div className={`mb-10 ${isRtl ? 'text-right' : 'text-left'}`}>
-                       <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">
-                         {isRtl ? 'إلى:' : 'Invoiced To:'}
-                       </h4>
-                       <div className="text-sm">
-                          <p className="text-base font-bold text-gray-900">{invoiceDetails?.partner_id?.[1] || selectedInvoiceOrder.customerName}</p>
-                          <p className="text-gray-600">{selectedInvoiceOrder.address}</p>
-                          <p className="text-gray-600">{selectedInvoiceOrder.city}, {selectedInvoiceOrder.district}</p>
-                          <p className="mt-2 font-bold">{selectedInvoiceOrder.phone1}</p>
-                       </div>
-                    </div>
-
-                    {/* Table Section */}
-                    <table className="w-full odoo-table mb-8" dir={isRtl ? 'rtl' : 'ltr'}>
+                    {/* Bilingual Table */}
+                    <table className="odoo-table-bilingual">
                        <thead>
                           <tr>
-                             <th className={isRtl ? 'text-right' : 'text-left'}>{isRtl ? 'الوصف' : 'Description'}</th>
-                             <th className="text-right">{isRtl ? 'الكمية' : 'Quantity'}</th>
-                             <th className="text-right">{isRtl ? 'سعر الوحدة' : 'Unit Price'}</th>
-                             <th className="text-right">{isRtl ? 'الضرائب' : 'Taxes'}</th>
-                             <th className="text-right">{isRtl ? 'المبلغ' : 'Amount'}</th>
+                             <th className="text-right" style={{width: '10%'}}>
+                                المجموع شامل ضريبة القيمة المضافة<br/>Subtotal (inclusive of VAT)
+                             </th>
+                             <th className="text-right" style={{width: '8%'}}>
+                                قيمة الضريبة<br/>VAT Amount
+                             </th>
+                             <th className="text-right" style={{width: '12%'}}>
+                                المجموع الفرعي بدون الضريبة<br/>Subtotal (exclusive of VAT)
+                             </th>
+                             <th className="text-right" style={{width: '8%'}}>
+                                نسبة الضريبة<br/>Taxes
+                             </th>
+                             <th className="text-right" style={{width: '10%'}}>
+                                سعر الوحدة<br/>Unit Price
+                             </th>
+                             <th className="text-right" style={{width: '6%'}}>
+                                الكمية<br/>Quantity
+                             </th>
+                             <th className="text-right" style={{width: '46%'}}>
+                                الوصف<br/>Description
+                             </th>
                           </tr>
                        </thead>
                        <tbody>
@@ -7679,60 +7765,51 @@ export default function App() {
                              const name = item.product_id ? item.product_id[1] : item.name;
                              const qty = item.quantity;
                              const price = item.price_unit || item.price;
-                             const subtotal = item.price_subtotal || (qty * price);
+                             const subtotal_excl = item.price_subtotal || (qty * price);
+                             const vat_amount = subtotal_excl * 0.15;
+                             const subtotal_incl = subtotal_excl + vat_amount;
+                             
                              return (
                                <tr key={i}>
-                                  <td className="font-medium">{name.replace(/\[.*?\]/, '').trim()}</td>
-                                  <td className="text-right">{qty}</td>
-                                  <td className="text-right">{price.toLocaleString()}</td>
-                                  <td className="text-right text-[10px] font-bold">15% VAT</td>
-                                  <td className="text-right font-bold">{subtotal.toLocaleString()}</td>
+                                  <td className="text-right font-bold">{subtotal_incl.toFixed(2)} SR</td>
+                                  <td className="text-right">{vat_amount.toFixed(2)} SR</td>
+                                  <td className="text-right">{subtotal_excl.toFixed(2)} SR</td>
+                                  <td className="text-right">Sales Tax 15%</td>
+                                  <td className="text-right">{price.toFixed(2)} SR</td>
+                                  <td className="text-right">{qty.toFixed(2)}</td>
+                                  <td className="text-right">{name.replace(/\[.*?\]/, '').trim()}</td>
                                </tr>
                              );
                           })}
                        </tbody>
                     </table>
 
-                    {/* Summary & QR Section */}
-                    <div className={`flex justify-between items-start ${isRtl ? 'flex-row-reverse' : ''}`}>
-                       {/* QR Code */}
-                       <div className="w-24 h-24 border border-gray-100 p-1 rounded bg-white">
-                          <div className="grid grid-cols-6 gap-0.5 w-full h-full opacity-60">
-                             {Array.from({length: 36}).map((_, k) => (
-                               <div key={k} className={`w-full h-full ${Math.random() > 0.4 ? 'bg-gray-800' : 'bg-transparent'}`} />
-                             ))}
-                          </div>
-                          <p className="text-[6px] text-center mt-1 text-gray-400">ZATCA COMPLIANT</p>
+                    {/* Totals Section */}
+                    <div className="odoo-totals-section">
+                       <div className="odoo-total-row">
+                          <div className="odoo-total-value font-bold">{(invoiceDetails?.amount_untaxed || selectedInvoiceOrder.total / 1.15).toFixed(2)} SR</div>
+                          <div className="odoo-total-label">Invoice Taxable Amount / <br/> المبلغ الخاضع للضريبة غير شامل ضريبة القيمة المضافة</div>
                        </div>
-
-                       {/* Totals */}
-                       <div className="w-64">
-                          <div className={`space-y-2 text-sm ${isRtl ? 'text-right' : 'text-left'}`}>
-                             <div className="flex justify-between border-b border-gray-100 pb-2">
-                                <span className="text-gray-500 font-bold">{isRtl ? 'المجموع غير شامل الضريبة' : 'Untaxed Amount'}</span>
-                                <span className="font-bold">{(invoiceDetails?.amount_untaxed || selectedInvoiceOrder.total / 1.15).toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
-                             </div>
-                             <div className="flex justify-between border-b border-gray-100 pb-2">
-                                <span className="text-gray-500 font-bold">{isRtl ? 'الضرائب 15%' : 'Taxes 15%'}</span>
-                                <span className="font-bold">{(invoiceDetails?.amount_tax || (selectedInvoiceOrder.total - (selectedInvoiceOrder.total / 1.15))).toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
-                             </div>
-                             <div className="flex justify-between pt-2">
-                                <span className="text-lg font-black text-[#714B67]">{isRtl ? 'الإجمالي' : 'Total'}</span>
-                                <div className="text-right">
-                                   <span className="text-xl font-black text-[#714B67]">{t.products.pricePrefix}{(invoiceDetails?.amount_total || selectedInvoiceOrder.total).toLocaleString()}</span>
-                                </div>
-                             </div>
-                          </div>
+                       <div className="odoo-total-row">
+                          <div className="odoo-total-value font-bold">{(invoiceDetails?.amount_tax || (selectedInvoiceOrder.total - (selectedInvoiceOrder.total / 1.15))).toFixed(2)} SR</div>
+                          <div className="odoo-total-label">VAT Taxes</div>
+                       </div>
+                       <div className="odoo-total-row">
+                          <div className="odoo-total-value font-bold text-lg">{(invoiceDetails?.amount_total || selectedInvoiceOrder.total).toFixed(2)} SR</div>
+                          <div className="odoo-total-label text-base font-bold">Invoice Total (inclusive of VAT) / قيمة إجمالي الفاتورة شامل ضريبة القيمة المضافة</div>
                        </div>
                     </div>
 
-                    {/* Footer Notes */}
-                    <div className="mt-20 pt-8 border-t border-gray-100">
-                       <p className="text-[10px] text-gray-400 italic leading-relaxed">
-                         {isRtl 
-                           ? 'تم إصدار هذا المستند إلكترونياً من نظام شركة حقال للتجارة المتكامل مع أودو. تخضع جميع المبيعات للشروط والأحكام المعلنة.'
-                           : 'This document was electronically generated from Hakkal Trading Company ERP system integrated with Odoo. All sales are subject to our terms and conditions.'}
-                       </p>
+                    {/* Payment Reference */}
+                    <div className="mt-4 flex justify-end gap-10 text-xs">
+                       <div className="font-bold">{invoiceDetails?.name || selectedInvoiceOrder.invoiceName}</div>
+                       <div className="font-bold">Payment Reference: / رقم إشارة الدفعة:</div>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="odoo-footer-line">
+                       <div>+966 500 000 000 info@hakkal-est.com http://www.hakkal-est.com</div>
+                       <div>Page 1 / 1</div>
                     </div>
                   </div>
                 )}
