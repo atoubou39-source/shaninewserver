@@ -3387,6 +3387,16 @@ const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManu
   const [showOffer, setShowOffer] = useState(true);
   const [activePill, setActivePill] = useState<number | null>(null);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (activePill !== null) {
+      const timer = setTimeout(() => {
+        setActivePill(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [activePill, cart]);
 
   const filtered = useMemo(() =>
     products.filter(p =>
@@ -3570,7 +3580,7 @@ const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManu
 
                   {!cartItem && (
                     <button
-                      onClick={() => onAddToCart(p)}
+                      onClick={(e) => { e.stopPropagation(); onAddToCart(p); setActivePill(p.id); }}
                       className="absolute inset-0 bg-brand-navy/0 group-hover:bg-brand-navy/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100"
                     >
                       <div className="bg-white text-brand-navy rounded-full p-2.5 shadow-xl transform scale-75 group-hover:scale-100 transition-transform">
@@ -3590,7 +3600,7 @@ const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManu
                     </span>
                     {!cartItem ? (
                       <button
-                        onClick={() => onAddToCart(p)}
+                        onClick={(e) => { e.stopPropagation(); onAddToCart(p); setActivePill(p.id); }}
                         className="w-7 h-7 bg-brand-navy text-white rounded-xl flex items-center justify-center hover:bg-brand-orange hover:scale-110 transition-all active:scale-95 shadow-sm"
                       >
                         <Plus size={14} />
