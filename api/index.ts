@@ -854,53 +854,55 @@ const sanitizePhone = (phone: string): string => {
         console.warn("[Odoo Version Check] Failed, continuing anyway...");
       }
 
-      // 3. Auto-Discover Report IDs and Names
+      // 3. Odoo 18 Session-Based PDF Fetching (The most reliable way)
       let pdfBuffer: Buffer | null = null;
       let lastError = "";
 
       try {
-        const reports = await callOdoo(
-          "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
-          "ir.actions.report", "search_read",
-          [[["model", "=", "account.move"]]],
-          { fields: ["id", "report_name"] }
-        );
+        console.log(`[Invoice PDF] Authenticating session for Odoo 18...`);
+        const axios = require('axios');
+        
+        // 1. Authenticate and get session cookie
+        const authResponse = await axios.post(`${odooConfig.url}/web/session/authenticate`, {
+          jsonrpc: "2.0",
+          params: {
+            db: odooConfig.db,
+            login: odooConfig.username,
+            password: odooConfig.password
+          }
+        });
 
-        if (Array.isArray(reports) && reports.length > 0) {
-          console.log(`[Invoice PDF] Found ${reports.length} reports for account.move`);
-          
-          for (const report of reports) {
-            const reportId = report.id;
-            const reportName = report.report_name;
-            
-            // Try Odoo 15-18 methods on instance level
-            const methods = ["render_qweb_pdf", "_render_qweb_pdf", "render"];
-            
-            for (const methodName of methods) {
-              try {
-                console.log(`[Invoice PDF] Trying ${methodName} on ${reportName} (ID: ${reportId})...`);
-                const reportResult = await callOdoo(
-                  "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
-                  "ir.actions.report", methodName,
-                  [[reportId], [foundInvoiceId]] // Instance-level call signature
-                );
+        const sessionCookie = authResponse.headers['set-cookie'];
+        if (!sessionCookie) throw new Error("Failed to get session cookie from Odoo");
 
-                if (reportResult && reportResult[0]) {
-                  const pdfBase64 = reportResult[0];
-                  pdfBuffer = Buffer.from(pdfBase64, 'base64');
-                  console.log(`[Invoice PDF] SUCCESS with ${methodName} on report ${reportName}`);
-                  break;
-                }
-              } catch (e: any) {
-                lastError = e.message;
-              }
+        // 2. Try common report names with direct HTTP download
+        const reportNames = [
+          "account.report_invoice_with_payments",
+          "account.report_invoice",
+          "l10n_sa.report_invoice_advisory" // Saudi specific if any
+        ];
+
+        for (const reportName of reportNames) {
+          try {
+            console.log(`[Invoice PDF] Fetching PDF via web controller: ${reportName}`);
+            const pdfUrl = `${odooConfig.url}/report/pdf/${reportName}/${foundInvoiceId}`;
+            const pdfResponse = await axios.get(pdfUrl, {
+              headers: { 'Cookie': sessionCookie.join('; ') },
+              responseType: 'arraybuffer'
+            });
+
+            if (pdfResponse.status === 200 && pdfResponse.data.length > 1000) {
+              pdfBuffer = Buffer.from(pdfResponse.data);
+              console.log(`[Invoice PDF] SUCCESS via session-link: ${reportName}`);
+              break;
             }
-            if (pdfBuffer) break;
+          } catch (e: any) {
+            lastError = e.message;
           }
         }
       } catch (e: any) {
         lastError = e.message;
-        console.error("[Invoice PDF] Instance-level discovery failed:", e.message);
+        console.error("[Invoice PDF] Session-based fetch failed:", e.message);
       }
 
       if (pdfBuffer) {
@@ -910,8 +912,8 @@ const sanitizePhone = (phone: string): string => {
       } else {
         res.status(500).json({ 
           success: false, 
-          message: `Odoo 18 PDF Generation Failed. Last Error: ${lastError}`,
-          version: versionInfo
+          message: `Odoo 18 Session Fetch Failed. Last Error: ${lastError}`,
+          tip: "Ensure the Odoo URL is correct and the user has 'Portal' or 'Internal' access to reports."
         });
       }
     } catch (error: any) {
