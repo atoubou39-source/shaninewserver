@@ -812,80 +812,61 @@ const sanitizePhone = (phone: string): string => {
     }
   });
 
-  // Fetch Official Odoo PDF Report - Correctly Placed
-  app.get("/api/odoo/invoice-pdf/:invoiceName", async (req, res) => {
+  // Fetch Official Odoo PDF Report (Invoices & Quotations)
+  app.get("/api/odoo/invoice-pdf/:docName", async (req, res) => {
     try {
-      const invoiceName = decodeURIComponent(req.params.invoiceName).trim();
+      const docName = decodeURIComponent(req.params.docName).trim();
       const uid = await authenticateOdoo();
       if (!uid) return res.status(401).json({ success: false, message: "Odoo Auth Failed" });
 
-      // 1. Find the invoice ID
-      const invoices = await callOdoo(
+      const isQuotation = docName.startsWith('S') || docName.includes('SO');
+      const model = isQuotation ? "sale.order" : "account.move";
+      const reportNames = isQuotation 
+        ? ["sale.report_saleorder", "sale.report_saleorder_pro_forma"] 
+        : ["account.report_invoice_with_payments", "account.report_invoice"];
+
+      // 1. Find the document ID
+      const docs = await callOdoo(
         "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
-        "account.move", "search",
-        [[["name", "=", invoiceName]]],
+        model, "search",
+        [[["name", "=", docName]]],
         { limit: 1 }
       );
 
-      let foundInvoiceId = Array.isArray(invoices) && invoices.length > 0 ? invoices[0] : null;
+      let foundDocId = Array.isArray(docs) && docs.length > 0 ? docs[0] : null;
 
-      if (!foundInvoiceId) {
-        // Try origin fallback
+      // Fallback for invoices: search by origin (Sale Order name)
+      if (!foundDocId && !isQuotation) {
         const fallback = await callOdoo(
           "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
           "account.move", "search",
-          [[["invoice_origin", "=", invoiceName], ["state", "=", "posted"]]],
+          [[["invoice_origin", "=", docName], ["state", "=", "posted"]]],
           { limit: 1 }
         );
         if (Array.isArray(fallback) && fallback.length > 0) {
-           foundInvoiceId = fallback[0];
+           foundDocId = fallback[0];
         }
       }
 
-      if (!foundInvoiceId) return res.status(404).json({ success: false, message: "Invoice not found" });
+      if (!foundDocId) return res.status(404).json({ success: false, message: "Document not found" });
 
-      // 2. Discover Odoo version (Non-blocking)
-      let versionInfo = "Unknown";
-      try {
-        const v = await callOdoo("common", "version");
-        versionInfo = JSON.stringify(v);
-        console.log("[Odoo Version Check]:", versionInfo);
-      } catch (e) {
-        console.warn("[Odoo Version Check] Failed, continuing anyway...");
-      }
-
-      // 3. Odoo 18 Session-Based PDF Fetching (The most reliable way)
+      // 2. Odoo 18 Session-Based PDF Fetching
       let pdfBuffer: Buffer | null = null;
       let lastError = "";
 
       try {
-        console.log(`[Invoice PDF] Authenticating session for Odoo 18...`);
         const axios = require('axios');
-        
-        // 1. Authenticate and get session cookie
         const authResponse = await axios.post(`${odooConfig.url}/web/session/authenticate`, {
           jsonrpc: "2.0",
-          params: {
-            db: odooConfig.db,
-            login: odooConfig.username,
-            password: odooConfig.password
-          }
+          params: { db: odooConfig.db, login: odooConfig.username, password: odooConfig.password }
         });
 
         const sessionCookie = authResponse.headers['set-cookie'];
         if (!sessionCookie) throw new Error("Failed to get session cookie from Odoo");
 
-        // 2. Try common report names with direct HTTP download
-        const reportNames = [
-          "account.report_invoice_with_payments",
-          "account.report_invoice",
-          "l10n_sa.report_invoice_advisory" // Saudi specific if any
-        ];
-
         for (const reportName of reportNames) {
           try {
-            console.log(`[Invoice PDF] Fetching PDF via web controller: ${reportName}`);
-            const pdfUrl = `${odooConfig.url}/report/pdf/${reportName}/${foundInvoiceId}`;
+            const pdfUrl = `${odooConfig.url}/report/pdf/${reportName}/${foundDocId}`;
             const pdfResponse = await axios.get(pdfUrl, {
               headers: { 'Cookie': sessionCookie.join('; ') },
               responseType: 'arraybuffer'
@@ -893,31 +874,22 @@ const sanitizePhone = (phone: string): string => {
 
             if (pdfResponse.status === 200 && pdfResponse.data.length > 1000) {
               pdfBuffer = Buffer.from(pdfResponse.data);
-              console.log(`[Invoice PDF] SUCCESS via session-link: ${reportName}`);
               break;
             }
-          } catch (e: any) {
-            lastError = e.message;
-          }
+          } catch (e: any) { lastError = e.message; }
         }
       } catch (e: any) {
         lastError = e.message;
-        console.error("[Invoice PDF] Session-based fetch failed:", e.message);
       }
 
       if (pdfBuffer) {
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `inline; filename="Invoice_${invoiceName}.pdf"`);
+        res.setHeader('Content-Disposition', `inline; filename="${docName}.pdf"`);
         res.send(pdfBuffer);
       } else {
-        res.status(500).json({ 
-          success: false, 
-          message: `Odoo 18 Session Fetch Failed. Last Error: ${lastError}`,
-          tip: "Ensure the Odoo URL is correct and the user has 'Portal' or 'Internal' access to reports."
-        });
+        res.status(500).json({ success: false, message: `Odoo PDF Fetch Failed. ${lastError}` });
       }
     } catch (error: any) {
-      console.error("[Invoice PDF] Error:", error.message);
       res.status(500).json({ success: false, message: error.message });
     }
   });

@@ -3721,34 +3721,8 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
   const isRtl = lang === 'ar';
 
   const viewOdooDocument = async (order: Order, type: 'invoice' | 'quotation') => {
-    if (type === 'invoice') return onViewInvoice(order);
-    const documentName = order.odooOrderName;
-    if (!documentName) return;
-
-    const newWindow = window.open('', '_blank');
-    if (!newWindow) {
-      alert(t.orders.dashboard.allowPopups);
-      return;
-    }
-    
-    const loadingText = type === 'invoice' ? (t.orders.dashboard.loadingInvoice || 'Loading Invoice...') : t.orders.dashboard.loadingQuotation;
-    newWindow.document.write(`<div style="font-family:sans-serif;padding:20px;text-align:center;">${loadingText}</div>`);
-    
-    try {
-      const endpoint = type === 'invoice' ? 'invoice-portal' : 'order-portal';
-      const resp = await fetch(getApiUrl(`/api/odoo/${endpoint}/${encodeURIComponent(documentName)}`));
-      const data = await resp.json();
-      
-      if (data.success && data.url) {
-        newWindow.location.href = data.url;
-      } else {
-        const errorText = t.orders.dashboard.quotationNotFound;
-        newWindow.document.write(`<div style="font-family:sans-serif;padding:20px;text-align:center;color:red;">${errorText}</div>`);
-      }
-    } catch (e) {
-      const errorText = t.orders.dashboard.quotationError;
-      newWindow.document.write(`<div style="font-family:sans-serif;padding:20px;text-align:center;color:red;">${errorText}</div>`);
-    }
+    setSelectedDocType(type);
+    onViewInvoice(order);
   };
 
   const syncIndividualOrder = useCallback(async (order: Order) => {
@@ -6718,6 +6692,7 @@ export default function App() {
   const [historyOrder, setHistoryOrder] = useState<Order | null>(null);
   const [historyData, setHistoryData] = useState<any[]>([]);
   const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState<Order | null>(null);
+  const [selectedDocType, setSelectedDocType] = useState<'invoice' | 'quotation'>('invoice');
   const [invoiceDetails, setInvoiceDetails] = useState<any>(null);
   const [loadingInvoice, setLoadingInvoice] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -7683,9 +7658,9 @@ export default function App() {
                 <div className="flex-1 bg-gray-100 flex flex-col min-h-[85vh]">
                   {/* Embedded PDF Viewer */}
                   <iframe
-                    src={getApiUrl(`/api/odoo/invoice-pdf/${encodeURIComponent(selectedInvoiceOrder.invoiceName || selectedInvoiceOrder.odooOrderName || '')}`)}
+                    src={getApiUrl(`/api/odoo/invoice-pdf/${encodeURIComponent(selectedDocType === 'invoice' ? (selectedInvoiceOrder.invoiceName || selectedInvoiceOrder.odooOrderName || '') : (selectedInvoiceOrder.odooOrderName || ''))}`)}
                     className="w-full flex-1 border-none shadow-inner"
-                    title="Odoo Invoice PDF"
+                    title="Odoo Document PDF"
                   />
                   
                   {/* Fallback & Loading Info */}
