@@ -844,10 +844,11 @@ const sanitizePhone = (phone: string): string => {
 
       if (!foundInvoiceId) return res.status(404).json({ success: false, message: "Invoice not found" });
 
-      // 2. Request the PDF report
+      // 2. Request the PDF report via 'object' service (More compatible than 'report' service)
       const reportResult = await callOdoo(
-        "report", "render_qweb_pdf", odooConfig.db, uid, getOdooCredential(),
-        "account.report_invoice_with_payments", [foundInvoiceId]
+        "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
+        "ir.actions.report", "render_qweb_pdf",
+        [["account.report_invoice_with_payments", [foundInvoiceId]]]
       );
 
       if (reportResult && reportResult[0]) {
@@ -858,7 +859,22 @@ const sanitizePhone = (phone: string): string => {
         res.setHeader('Content-Disposition', `inline; filename="Invoice_${invoiceName}.pdf"`);
         res.send(pdfBuffer);
       } else {
-        res.status(500).json({ success: false, message: "Failed to generate PDF from Odoo" });
+        // Try fallback report name if standard one fails
+        const reportResultAlt = await callOdoo(
+          "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
+          "ir.actions.report", "render_qweb_pdf",
+          [["account.report_invoice", [foundInvoiceId]]]
+        );
+
+        if (reportResultAlt && reportResultAlt[0]) {
+          const pdfBase64 = reportResultAlt[0];
+          const pdfBuffer = Buffer.from(pdfBase64, 'base64');
+          res.setHeader('Content-Type', 'application/pdf');
+          res.setHeader('Content-Disposition', `inline; filename="Invoice_${invoiceName}.pdf"`);
+          res.send(pdfBuffer);
+        } else {
+          res.status(500).json({ success: false, message: "Failed to generate PDF from Odoo (Report service unavailable)" });
+        }
       }
     } catch (error: any) {
       console.error("[Invoice PDF] Error:", error.message);
