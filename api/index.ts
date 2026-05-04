@@ -837,8 +837,32 @@ const sanitizePhone = (phone: string): string => {
           [[["invoice_origin", "=", invoiceName], ["state", "=", "posted"]]],
           { limit: 1 }
         );
-      console.error("[Invoice Details] Error:", error.message);
-      res.status(500).json({ success: false, error: error.message });
+        if (Array.isArray(fallback) && fallback.length > 0) {
+           foundInvoiceId = fallback[0];
+        }
+      }
+
+      if (!foundInvoiceId) return res.status(404).json({ success: false, message: "Invoice not found" });
+
+      // 2. Request the PDF report
+      const reportResult = await callOdoo(
+        "report", "render_qweb_pdf", odooConfig.db, uid, getOdooCredential(),
+        "account.report_invoice_with_payments", [foundInvoiceId]
+      );
+
+      if (reportResult && reportResult[0]) {
+        const pdfBase64 = reportResult[0];
+        const pdfBuffer = Buffer.from(pdfBase64, 'base64');
+        
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="Invoice_${invoiceName}.pdf"`);
+        res.send(pdfBuffer);
+      } else {
+        res.status(500).json({ success: false, message: "Failed to generate PDF from Odoo" });
+      }
+    } catch (error: any) {
+      console.error("[Invoice PDF] Error:", error.message);
+      res.status(500).json({ success: false, message: error.message });
     }
   });
 
