@@ -844,9 +844,15 @@ const sanitizePhone = (phone: string): string => {
 
       if (!foundInvoiceId) return res.status(404).json({ success: false, message: "Invoice not found" });
 
-      // 2. Discover Odoo version for better debugging
-      const versionInfo = await callOdoo("common", "version", [], [], [], "", "");
-      console.log("[Odoo Version Check]:", JSON.stringify(versionInfo));
+      // 2. Discover Odoo version (Non-blocking)
+      let versionInfo = "Unknown";
+      try {
+        const v = await callOdoo("common", "version");
+        versionInfo = JSON.stringify(v);
+        console.log("[Odoo Version Check]:", versionInfo);
+      } catch (e) {
+        console.warn("[Odoo Version Check] Failed, continuing anyway...");
+      }
 
       // 3. Adaptive PDF Report Methods
       const reportNames = ["account.report_invoice_with_payments", "account.report_invoice"];
