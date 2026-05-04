@@ -854,55 +854,53 @@ const sanitizePhone = (phone: string): string => {
         console.warn("[Odoo Version Check] Failed, continuing anyway...");
       }
 
-      // 3. Auto-Discover Report Names for account.move
-      let discoveredReports: string[] = [
-        "account.report_invoice_with_payments",
-        "account.report_invoice"
-      ];
+      // 3. Auto-Discover Report IDs and Names
+      let pdfBuffer: Buffer | null = null;
+      let lastError = "";
 
       try {
         const reports = await callOdoo(
           "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
           "ir.actions.report", "search_read",
           [[["model", "=", "account.move"]]],
-          { fields: ["report_name"] }
+          { fields: ["id", "report_name"] }
         );
+
         if (Array.isArray(reports) && reports.length > 0) {
-          const dynamicNames = reports.map((r: any) => r.report_name).filter(Boolean);
-          discoveredReports = [...new Set([...dynamicNames, ...discoveredReports])];
-          console.log("[Invoice PDF] Discovered report names:", discoveredReports);
-        }
-      } catch (e: any) {
-        console.warn("[Invoice PDF] Auto-discovery failed, using defaults:", e.message);
-      }
+          console.log(`[Invoice PDF] Found ${reports.length} reports for account.move`);
+          
+          for (const report of reports) {
+            const reportId = report.id;
+            const reportName = report.report_name;
+            
+            // Try Odoo 15-18 methods on instance level
+            const methods = ["render_qweb_pdf", "_render_qweb_pdf", "render"];
+            
+            for (const methodName of methods) {
+              try {
+                console.log(`[Invoice PDF] Trying ${methodName} on ${reportName} (ID: ${reportId})...`);
+                const reportResult = await callOdoo(
+                  "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
+                  "ir.actions.report", methodName,
+                  [[reportId], [foundInvoiceId]] // Instance-level call signature
+                );
 
-      let pdfBuffer: Buffer | null = null;
-      let lastError = "";
-
-      // Try methods: render_qweb_pdf is standard for 11+
-      const methodNames = ["render_qweb_pdf", "_render_qweb_pdf", "render_report"];
-
-      for (const methodName of methodNames) {
-        for (const reportName of discoveredReports) {
-          try {
-            console.log(`[Invoice PDF] Attempting ${methodName} on ${reportName}...`);
-            const reportResult = await callOdoo(
-              "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
-              "ir.actions.report", methodName,
-              [reportName, [foundInvoiceId]]
-            );
-
-            if (reportResult && reportResult[0]) {
-              const pdfBase64 = reportResult[0];
-              pdfBuffer = Buffer.from(pdfBase64, 'base64');
-              console.log(`[Invoice PDF] SUCCESS with ${methodName} using ${reportName}`);
-              break;
+                if (reportResult && reportResult[0]) {
+                  const pdfBase64 = reportResult[0];
+                  pdfBuffer = Buffer.from(pdfBase64, 'base64');
+                  console.log(`[Invoice PDF] SUCCESS with ${methodName} on report ${reportName}`);
+                  break;
+                }
+              } catch (e: any) {
+                lastError = e.message;
+              }
             }
-          } catch (e: any) {
-            lastError = e.message;
+            if (pdfBuffer) break;
           }
         }
-        if (pdfBuffer) break;
+      } catch (e: any) {
+        lastError = e.message;
+        console.error("[Invoice PDF] Instance-level discovery failed:", e.message);
       }
 
       if (pdfBuffer) {
@@ -912,8 +910,8 @@ const sanitizePhone = (phone: string): string => {
       } else {
         res.status(500).json({ 
           success: false, 
-          message: `Failed to generate PDF. Odoo Version: ${JSON.stringify(versionInfo)}. Last Error: ${lastError}`,
-          tried_methods: methodNames
+          message: `Odoo 18 PDF Generation Failed. Last Error: ${lastError}`,
+          version: versionInfo
         });
       }
     } catch (error: any) {
