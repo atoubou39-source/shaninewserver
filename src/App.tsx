@@ -3674,7 +3674,7 @@ const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManu
   );
 };
 
-const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, historyOrder, onViewInvoice }: {
+const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, historyOrder, onViewInvoice, setSelectedDocType }: {
   orders: Order[],
   user: AuthUser | null,
   t: any,
