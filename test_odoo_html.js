@@ -32,14 +32,17 @@ async function test() {
     const uid = await callOdoo("common", "authenticate", odooConfig.db, odooConfig.username, odooConfig.apiKey, {});
     console.log("UID:", uid);
 
-    // Search for an invoice
-    const invoices = await callOdoo("object", "execute_kw", odooConfig.db, uid, odooConfig.apiKey, 
-      "account.move", "search_read", 
-      [[["state", "=", "posted"], ["move_type", "=", "out_invoice"]]], 
-      { fields: ["name", "access_url", "access_token"], limit: 1 }
+    // Try to call render_qweb_html
+    const html = await callOdoo("object", "execute_kw", odooConfig.db, uid, odooConfig.apiKey,
+      "ir.actions.report", "render_qweb_html",
+      ["account.report_invoice", [43]]
     );
+    
+    if (html) {
+      console.log("HTML Data Length:", html[0].length);
+      // console.log("HTML Start:", html[0].substring(0, 500));
+    }
 
-    console.log("Invoice Data:", JSON.stringify(invoices, null, 2));
   } catch (e) {
     console.error(e);
   }

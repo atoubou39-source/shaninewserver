@@ -34,12 +34,25 @@ async function test() {
 
     // Search for an invoice
     const invoices = await callOdoo("object", "execute_kw", odooConfig.db, uid, odooConfig.apiKey, 
-      "account.move", "search_read", 
+      "account.move", "search", 
       [[["state", "=", "posted"], ["move_type", "=", "out_invoice"]]], 
-      { fields: ["name", "access_url", "access_token"], limit: 1 }
+      { limit: 1 }
     );
 
-    console.log("Invoice Data:", JSON.stringify(invoices, null, 2));
+    if (invoices.length > 0) {
+      const invoiceId = invoices[0];
+      console.log("Invoice ID:", invoiceId);
+
+      // Try _render_qweb_pdf on ir.actions.report
+      const report = await callOdoo("object", "execute_kw", odooConfig.db, uid, odooConfig.apiKey,
+        "ir.actions.report", "_render_qweb_pdf",
+        ["account.report_invoice", [invoiceId]]
+      );
+      
+      if (report) {
+        console.log("PDF Data Length:", report[0].length);
+      }
+    }
   } catch (e) {
     console.error(e);
   }

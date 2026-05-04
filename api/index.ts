@@ -725,14 +725,13 @@ const sanitizePhone = (phone: string): string => {
     }
   });
 
-  // Get Order Portal URL
   app.get("/api/odoo/order-portal/:orderName", async (req, res) => {
     try {
-      const orderName = decodeURIComponent(req.params.orderName);
+      const orderName = decodeURIComponent(req.params.orderName).trim();
       const uid = await authenticateOdoo();
       if (!uid) return res.status(401).json({ success: false, message: "Odoo Auth Failed" });
 
-      const searchDomain: any[] = [["name", "=", orderName.trim()]];
+      const searchDomain: any[] = [["name", "ilike", orderName]];
       const orders = await callOdoo(
         "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
         "sale.order", "search_read",
@@ -741,20 +740,136 @@ const sanitizePhone = (phone: string): string => {
       );
 
       if (!Array.isArray(orders) || orders.length === 0) {
-        return res.status(404).json({ success: false, message: "Order not found" });
+        console.warn(`[Order Portal] Order not found: ${orderName}`);
+        return res.status(404).json({ success: false, message: "Order not found in Odoo" });
       }
 
       const order = orders[0];
+      if (!order.access_url) {
+        console.warn(`[Order Portal] Order found but access_url is empty: ${orderName}`);
+        return res.status(404).json({ success: false, message: "Portal link not generated yet for this order" });
+      }
+
       const baseUrl = odooConfig.url.trim().replace(/\/$/, "");
       const accessPath = order.access_url.startsWith("/") ? order.access_url : `/${order.access_url}`;
       let url = `${baseUrl}${accessPath}`;
 
       if (order.access_token) {
-        url += `?access_token=${order.access_token}`;
+        url += (url.includes("?") ? "&" : "?") + `access_token=${order.access_token}`;
       }
 
       res.json({ success: true, url });
     } catch (error: any) {
+      console.error("[Order Portal] Error:", error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.get("/api/odoo/invoice-details/:invoiceName", async (req, res) => {
+    try {
+      const invoiceName = decodeURIComponent(req.params.invoiceName).trim();
+      const uid = await authenticateOdoo();
+      if (!uid) return res.status(401).json({ success: false, message: "Odoo Auth Failed" });
+
+      // Search for the invoice
+      let invoices = await callOdoo(
+        "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
+        "account.move", "search_read",
+        [[["name", "ilike", invoiceName]]],
+        { 
+          fields: [
+            "name", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", 
+            "currency_id", "partner_id", "invoice_line_ids", "l10n_sa_qr_code_str"
+          ], 
+          limit: 1 
+        }
+      );
+
+      if (!Array.isArray(invoices) || invoices.length === 0) {
+        // Fallback by origin
+        invoices = await callOdoo(
+          "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
+          "account.move", "search_read",
+          [[["invoice_origin", "ilike", invoiceName], ["state", "=", "posted"]]],
+          { 
+            fields: [
+              "name", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", 
+              "currency_id", "partner_id", "invoice_line_ids", "l10n_sa_qr_code_str"
+            ], 
+            limit: 1 
+          }
+        );
+      }
+
+      if (!Array.isArray(invoices) || invoices.length === 0) {
+        return res.status(404).json({ success: false, message: "Invoice not found" });
+      }
+
+      const invoice = invoices[0];
+
+      // Fetch invoice lines
+      if (invoice.invoice_line_ids && invoice.invoice_line_ids.length > 0) {
+        const lines = await callOdoo(
+          "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
+          "account.move.line", "read",
+          [invoice.invoice_line_ids, ["product_id", "name", "quantity", "price_unit", "tax_ids", "price_subtotal"]]
+        );
+        invoice.lines = (lines as any[]).filter((l: any) => l.product_id); // Filter out section lines
+      }
+
+      res.json({ success: true, invoice });
+    } catch (error: any) {
+      console.error("[Invoice Details] Error:", error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.get("/api/odoo/invoice-portal/:invoiceName", async (req, res) => {
+    try {
+      const invoiceName = decodeURIComponent(req.params.invoiceName).trim();
+      const uid = await authenticateOdoo();
+      if (!uid) return res.status(401).json({ success: false, message: "Odoo Auth Failed" });
+
+      let invoices = await callOdoo(
+        "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
+        "account.move", "search_read",
+        [[["name", "ilike", invoiceName]]],
+        { fields: ["access_url", "access_token"], limit: 1 }
+      );
+
+      // Fallback: search by invoice_origin (Sale Order name) if not found by direct name
+      if (!Array.isArray(invoices) || invoices.length === 0) {
+        console.log(`[Invoice Portal] Not found by name, trying fallback by origin: ${invoiceName}`);
+        invoices = await callOdoo(
+          "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
+          "account.move", "search_read",
+          [[["invoice_origin", "ilike", invoiceName], ["state", "=", "posted"]]],
+          { fields: ["access_url", "access_token"], limit: 1 }
+        );
+      }
+
+      if (!Array.isArray(invoices) || invoices.length === 0) {
+        console.warn(`[Invoice Portal] Invoice not found with name/origin: ${invoiceName}`);
+        return res.status(404).json({ success: false, message: "Invoice not found in Odoo" });
+      }
+
+      const invoice = invoices[0];
+      if (!invoice.access_url) {
+        console.warn(`[Invoice Portal] Invoice found but access_url is empty: ${invoiceName}`);
+        return res.status(404).json({ success: false, message: "Portal link not generated yet for this invoice" });
+      }
+
+      const baseUrl = odooConfig.url.trim().replace(/\/$/, "");
+      const accessPath = invoice.access_url.startsWith("/") ? invoice.access_url : `/${invoice.access_url}`;
+      let url = `${baseUrl}${accessPath}`;
+
+      if (invoice.access_token) {
+        url += (url.includes("?") ? "&" : "?") + `access_token=${invoice.access_token}`;
+      }
+
+      res.json({ success: true, url });
+    } catch (error: any) {
+      console.error("[Invoice Portal] Error:", error.message);
       res.status(500).json({ success: false, error: error.message });
     }
   });

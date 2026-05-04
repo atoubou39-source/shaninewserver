@@ -32,14 +32,14 @@ async function test() {
     const uid = await callOdoo("common", "authenticate", odooConfig.db, odooConfig.username, odooConfig.apiKey, {});
     console.log("UID:", uid);
 
-    // Search for an invoice
-    const invoices = await callOdoo("object", "execute_kw", odooConfig.db, uid, odooConfig.apiKey, 
-      "account.move", "search_read", 
-      [[["state", "=", "posted"], ["move_type", "=", "out_invoice"]]], 
-      { fields: ["name", "access_url", "access_token"], limit: 1 }
+    // Search for the report action
+    const reports = await callOdoo("object", "execute_kw", odooConfig.db, uid, odooConfig.apiKey,
+      "ir.actions.report", "search_read",
+      [[["report_name", "=", "account.report_invoice"]]],
+      { fields: ["id", "report_name", "report_type"] }
     );
+    console.log("Reports:", JSON.stringify(reports));
 
-    console.log("Invoice Data:", JSON.stringify(invoices, null, 2));
   } catch (e) {
     console.error(e);
   }
