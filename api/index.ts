@@ -805,63 +805,38 @@ const sanitizePhone = (phone: string): string => {
         invoice.lines = (lines as any[]).filter((l: any) => l.product_id); // Filter out section lines
       }
 
-    // Fetch Official Odoo PDF Report
-    app.get("/api/odoo/invoice-pdf/:invoiceName", async (req, res) => {
-      try {
-        const invoiceName = decodeURIComponent(req.params.invoiceName).trim();
-        const uid = await authenticateOdoo();
-        if (!uid) return res.status(401).json({ success: false, message: "Odoo Auth Failed" });
+      res.json({ success: true, invoice });
+    } catch (error: any) {
+      console.error("[Invoice Details] Error:", error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
 
-        // 1. Find the invoice ID
-        const invoices = await callOdoo(
+  // Fetch Official Odoo PDF Report - Correctly Placed
+  app.get("/api/odoo/invoice-pdf/:invoiceName", async (req, res) => {
+    try {
+      const invoiceName = decodeURIComponent(req.params.invoiceName).trim();
+      const uid = await authenticateOdoo();
+      if (!uid) return res.status(401).json({ success: false, message: "Odoo Auth Failed" });
+
+      // 1. Find the invoice ID
+      const invoices = await callOdoo(
+        "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
+        "account.move", "search",
+        [[["name", "=", invoiceName]]],
+        { limit: 1 }
+      );
+
+      let foundInvoiceId = Array.isArray(invoices) && invoices.length > 0 ? invoices[0] : null;
+
+      if (!foundInvoiceId) {
+        // Try origin fallback
+        const fallback = await callOdoo(
           "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
           "account.move", "search",
-          [[["name", "=", invoiceName]]],
+          [[["invoice_origin", "=", invoiceName], ["state", "=", "posted"]]],
           { limit: 1 }
         );
-
-        if (!Array.isArray(invoices) || invoices.length === 0) {
-          // Try origin fallback
-          const fallback = await callOdoo(
-            "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
-            "account.move", "search",
-            [[["invoice_origin", "=", invoiceName], ["state", "=", "posted"]]],
-            { limit: 1 }
-          );
-          if (Array.isArray(fallback) && fallback.length > 0) {
-             invoices.push(...fallback);
-          }
-        }
-
-        if (invoices.length === 0) return res.status(404).json({ success: false, message: "Invoice not found" });
-
-        const invoiceId = invoices[0];
-
-        // 2. Request the PDF report
-        // Note: 'account.report_invoice_with_payments' is the standard Odoo report
-        const reportResult = await callOdoo(
-          "report", "render_qweb_pdf", odooConfig.db, uid, getOdooCredential(),
-          "account.report_invoice_with_payments", [invoiceId]
-        );
-
-        if (reportResult && reportResult[0]) {
-          const pdfBase64 = reportResult[0];
-          const pdfBuffer = Buffer.from(pdfBase64, 'base64');
-          
-          res.setHeader('Content-Type', 'application/pdf');
-          res.setHeader('Content-Disposition', `inline; filename="Invoice_${invoiceName}.pdf"`);
-          res.send(pdfBuffer);
-        } else {
-          res.status(500).json({ success: false, message: "Failed to generate PDF from Odoo" });
-        }
-      } catch (error: any) {
-        console.error("[Invoice PDF] Error:", error.message);
-        res.status(500).json({ success: false, message: error.message });
-      }
-    });
-
-    res.json({ success: true, invoice });
-    } catch (error: any) {
       console.error("[Invoice Details] Error:", error.message);
       res.status(500).json({ success: false, error: error.message });
     }
