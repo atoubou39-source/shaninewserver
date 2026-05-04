@@ -47,7 +47,8 @@ import {
   ArrowUpCircle,
   Percent,
   ShoppingCart,
-  AlertTriangle
+  AlertTriangle,
+  Printer
 } from "lucide-react";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation, Navigate } from "react-router-dom";
