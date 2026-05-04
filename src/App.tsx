@@ -3901,7 +3901,7 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
                   <td className={`px-8 py-6 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
                     {order.odooOrderName ? (
                       <button
-                        onClick={() => viewOdooDocument(order, 'quotation')}
+                        onClick={() => { setSelectedDocType('quotation'); onViewInvoice(order); }}
                         title={t.orders.dashboard.viewQuotation}
                         className="text-[10px] font-mono font-bold text-brand-orange bg-brand-orange/10 px-3 py-1.5 rounded-lg border border-brand-orange/20 hover:bg-brand-orange hover:text-white transition-colors cursor-pointer"
                       >
@@ -3918,7 +3918,7 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
                     <div className={`flex items-center gap-2 flex-wrap ${lang === 'ar' ? 'flex-row-reverse justify-end' : ''}`}>
                       {order.status === 'completed' && order.invoiceName ? (
                         <button
-                          onClick={() => viewOdooDocument(order, 'invoice')}
+                          onClick={() => { setSelectedDocType('invoice'); onViewInvoice(order); }}
                           title={t.orders.dashboard.downloadPdf}
                           className="text-[10px] font-mono font-bold text-brand-navy bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-600 hover:text-white transition-colors cursor-pointer"
                         >
@@ -4020,7 +4020,7 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
                 <div className={`flex items-center gap-2 flex-wrap ${lang === 'ar' ? 'flex-row-reverse' : 'flex-row'}`}>
                   {order.odooOrderName ? (
                     <button
-                      onClick={() => viewOdooDocument(order, 'quotation')}
+                      onClick={() => { setSelectedDocType('quotation'); onViewInvoice(order); }}
                       className="text-[10px] font-mono font-bold text-brand-orange bg-brand-orange/10 px-3 py-1.5 rounded-lg border border-brand-orange/20 active:bg-brand-orange active:text-white transition-colors"
                     >
                       {order.odooOrderName}
@@ -4034,7 +4034,7 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
 
                   {order.invoiceName && (
                     <button
-                      onClick={() => viewOdooDocument(order, 'invoice')}
+                      onClick={() => { setSelectedDocType('invoice'); onViewInvoice(order); }}
                       className="text-[10px] font-mono font-bold text-brand-navy bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 active:bg-blue-600 active:text-white transition-colors"
                     >
                       {order.invoiceName}
