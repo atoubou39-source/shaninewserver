@@ -844,35 +844,38 @@ const sanitizePhone = (phone: string): string => {
 
       if (!foundInvoiceId) return res.status(404).json({ success: false, message: "Invoice not found" });
 
-      // 2. Request the PDF report via 'object' service (More compatible than 'report' service)
-      // Correcting arguments structure: [report_name, [ids]]
-      const reportNames = [
-        "account.report_invoice_with_payments",
-        "account.report_invoice",
-        "account.account_invoices"
-      ];
+      // 2. Discover Odoo version for better debugging
+      const versionInfo = await callOdoo("common", "version", [], [], [], "", "");
+      console.log("[Odoo Version Check]:", JSON.stringify(versionInfo));
+
+      // 3. Adaptive PDF Report Methods
+      const reportNames = ["account.report_invoice_with_payments", "account.report_invoice"];
+      const methodNames = ["render_qweb_pdf", "_render_qweb_pdf", "render_report", "render"];
 
       let pdfBuffer: Buffer | null = null;
       let lastError = "";
 
-      for (const reportName of reportNames) {
-        try {
-          const reportResult = await callOdoo(
-            "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
-            "ir.actions.report", "render_qweb_pdf",
-            [reportName, [foundInvoiceId]] // Correctly flattened arguments
-          );
+      for (const methodName of methodNames) {
+        for (const reportName of reportNames) {
+          try {
+            console.log(`[Invoice PDF] Trying ${methodName} on ${reportName}...`);
+            const reportResult = await callOdoo(
+              "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
+              "ir.actions.report", methodName,
+              [reportName, [foundInvoiceId]]
+            );
 
-          if (reportResult && reportResult[0]) {
-            const pdfBase64 = reportResult[0];
-            pdfBuffer = Buffer.from(pdfBase64, 'base64');
-            console.log(`[Invoice PDF] Successfully generated using ${reportName}`);
-            break;
+            if (reportResult && reportResult[0]) {
+              const pdfBase64 = reportResult[0];
+              pdfBuffer = Buffer.from(pdfBase64, 'base64');
+              console.log(`[Invoice PDF] Success with method ${methodName}`);
+              break;
+            }
+          } catch (e: any) {
+            lastError = e.message;
           }
-        } catch (e: any) {
-          console.warn(`[Invoice PDF] Report ${reportName} failed:`, e.message);
-          lastError = e.message;
         }
+        if (pdfBuffer) break;
       }
 
       if (pdfBuffer) {
@@ -882,8 +885,8 @@ const sanitizePhone = (phone: string): string => {
       } else {
         res.status(500).json({ 
           success: false, 
-          message: `Failed to generate PDF from Odoo. Last error: ${lastError}`,
-          tip: "Verify that 'ir.actions.report' has 'render_qweb_pdf' method and report names are correct."
+          message: `Failed to generate PDF. Odoo Version: ${JSON.stringify(versionInfo)}. Last Error: ${lastError}`,
+          tried_methods: methodNames
         });
       }
     } catch (error: any) {
