@@ -7680,170 +7680,21 @@ export default function App() {
                   }
                 `}</style>
                 
-                {loadingInvoice && !invoiceDetails ? (
-                  <div className="flex flex-col items-center justify-center py-60">
-                    <RefreshCw size={40} className="text-[#714B67] animate-spin mb-4" />
-                    <p className="text-[10px] font-bold tracking-widest text-gray-300">SYNCHRONIZING WITH ODOO...</p>
+                <div className="flex-1 bg-gray-100 flex flex-col min-h-[85vh]">
+                  {/* Embedded PDF Viewer */}
+                  <iframe
+                    src={getApiUrl(`/api/odoo/invoice-pdf/${encodeURIComponent(selectedInvoiceOrder.invoiceName || selectedInvoiceOrder.odooOrderName || '')}`)}
+                    className="w-full flex-1 border-none shadow-inner"
+                    title="Odoo Invoice PDF"
+                  />
+                  
+                  {/* Fallback & Loading Info */}
+                  <div className="p-3 bg-white border-t border-gray-200 text-center no-print">
+                     <p className="text-[10px] text-gray-400 font-bold tracking-widest">
+                       OFFICIAL ODOO DOCUMENT • SECURE PDF PREVIEW
+                     </p>
                   </div>
-                ) : (
-                  <div className="odoo-bilingual min-h-[1100px] relative">
-                    {/* Top Row: Logo/Company (Left) & Customer (Right) */}
-                    <div className="flex justify-between items-start">
-                      <div className="odoo-header-left">
-                        <img
-                          src="https://i.ibb.co/xKkzXtmz/Untitled-design-1.png"
-                          alt="Company Logo"
-                          className="h-14 w-auto object-contain mb-4"
-                        />
-                        <div className="text-[11px] space-y-0.5">
-                          <p>Hakkal Trading Company</p>
-                          <p>Jeddah, Saudi Arabia</p>
-                          <p>VAT: 300000000000003</p>
-                        </div>
-                      </div>
-                      <div className="odoo-header-right">
-                        <div className="text-sm font-bold mt-16">
-                           <p>{invoiceDetails?.partner_id?.[1] || selectedInvoiceOrder.customerName}</p>
-                           <p className="text-[11px] font-normal mt-1">, ,</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Title Row: Tax Invoice | INV | فاتورة ضريبية */}
-                    <div className="odoo-title-row">
-                       <h1>Tax Invoice</h1>
-                       <div className="doc-number">{invoiceDetails?.name || selectedInvoiceOrder.invoiceName || '-'}</div>
-                       <h2 className="font-bold">فاتورة ضريبية</h2>
-                    </div>
-
-                    {/* Metadata Grid */}
-                    <div className="flex flex-col items-end w-full mb-10">
-                       <div className="space-y-1">
-                          <div className="odoo-meta-item">
-                             <div className="odoo-meta-label">Invoice Date:</div>
-                             <div className="odoo-meta-value">{invoiceDetails?.invoice_date || new Date(selectedInvoiceOrder.createdAt).toLocaleDateString('en-GB')}</div>
-                             <div className="odoo-meta-label-ar">تاريخ الفاتورة :</div>
-                          </div>
-                          <div className="odoo-meta-item">
-                             <div className="odoo-meta-label">Due Date:</div>
-                             <div className="odoo-meta-value">{invoiceDetails?.invoice_date || new Date(selectedInvoiceOrder.createdAt).toLocaleDateString('en-GB')}</div>
-                             <div className="odoo-meta-label-ar">تاريخ الاستحقاق :</div>
-                          </div>
-                          <div className="odoo-meta-item">
-                             <div className="odoo-meta-label">Delivery Date:</div>
-                             <div className="odoo-meta-value">{invoiceDetails?.invoice_date || new Date(selectedInvoiceOrder.createdAt).toLocaleDateString('en-GB')}</div>
-                             <div className="odoo-meta-label-ar">تاريخ التوصيل :</div>
-                          </div>
-                          <div className="odoo-meta-item">
-                             <div className="odoo-meta-label">Source:</div>
-                             <div className="odoo-meta-value font-mono">{selectedInvoiceOrder.odooOrderName || '-'}</div>
-                             <div className="odoo-meta-label-ar">المصدر :</div>
-                          </div>
-                       </div>
-                    </div>
-
-                    {/* Bilingual Table */}
-                    <table className="odoo-table-bilingual">
-                       <thead>
-                          <tr>
-                             <th className="text-right" style={{width: '10%'}}>
-                                المجموع شامل ضريبة القيمة المضافة<br/>Subtotal (inclusive of VAT)
-                             </th>
-                             <th className="text-right" style={{width: '8%'}}>
-                                قيمة الضريبة<br/>VAT Amount
-                             </th>
-                             <th className="text-right" style={{width: '12%'}}>
-                                المجموع الفرعي بدون الضريبة<br/>Subtotal (exclusive of VAT)
-                             </th>
-                             <th className="text-right" style={{width: '8%'}}>
-                                نسبة الضريبة<br/>Taxes
-                             </th>
-                             <th className="text-right" style={{width: '10%'}}>
-                                سعر الوحدة<br/>Unit Price
-                             </th>
-                             <th className="text-right" style={{width: '6%'}}>
-                                الكمية<br/>Quantity
-                             </th>
-                             <th className="text-right" style={{width: '46%'}}>
-                                الوصف<br/>Description
-                             </th>
-                          </tr>
-                       </thead>
-                       <tbody>
-                          {(invoiceDetails?.lines || selectedInvoiceOrder.items).map((item: any, i: number) => {
-                             const name = item.product_id ? item.product_id[1] : item.name;
-                             const qty = item.quantity;
-                             const price = item.price_unit || item.price;
-                             const subtotal_excl = item.price_subtotal || (qty * price);
-                             const vat_amount = subtotal_excl * 0.15;
-                             const subtotal_incl = subtotal_excl + vat_amount;
-                             
-                             return (
-                               <tr key={i}>
-                                  <td className="text-right font-bold">{subtotal_incl.toFixed(2)} SR</td>
-                                  <td className="text-right">{vat_amount.toFixed(2)} SR</td>
-                                  <td className="text-right">{subtotal_excl.toFixed(2)} SR</td>
-                                  <td className="text-right">Sales Tax 15%</td>
-                                  <td className="text-right">{price.toFixed(2)} SR</td>
-                                  <td className="text-right">{qty.toFixed(2)}</td>
-                                  <td className="text-right">{name.replace(/\[.*?\]/, '').trim()}</td>
-                               </tr>
-                             );
-                          })}
-                       </tbody>
-                    </table>
-
-                    {/* Totals Section - ALIGNED TO LEFT per Odoo Bilingual layout */}
-                    <div className="flex justify-start mt-10">
-                      <div className="w-[450px]">
-                        <table className="w-full border-t border-black">
-                          <tbody>
-                            <tr className="border-b border-gray-200">
-                               <td className="py-2 text-left font-bold text-[13px]">
-                                 {(invoiceDetails?.amount_untaxed || selectedInvoiceOrder.total / 1.15).toFixed(2)} SR
-                               </td>
-                               <td className="py-2 text-right text-[11px] leading-tight">
-                                 Invoice Taxable Amount / <br/> 
-                                 المبلغ الخاضع للضريبة غير شامل ضريبة القيمة المضافة
-                               </td>
-                            </tr>
-                            <tr className="border-b border-gray-200">
-                               <td className="py-2 text-left font-bold text-[13px]">
-                                 {(invoiceDetails?.amount_tax || (selectedInvoiceOrder.total - (selectedInvoiceOrder.total / 1.15))).toFixed(2)} SR
-                               </td>
-                               <td className="py-2 text-right text-[11px] leading-tight">
-                                 VAT Taxes
-                               </td>
-                            </tr>
-                            <tr className="border-b-2 border-black">
-                               <td className="py-3 text-left font-bold text-[16px]">
-                                 {(invoiceDetails?.amount_total || selectedInvoiceOrder.total).toFixed(2)} SR
-                               </td>
-                               <td className="py-3 text-right font-bold text-[13px] leading-tight">
-                                 Invoice Total (inclusive of VAT) / <br/>
-                                 قيمة إجمالي الفاتورة شامل ضريبة القيمة المضافة
-                               </td>
-                            </tr>
-                            <tr>
-                               <td className="py-4 text-left font-bold text-[13px]">
-                                 {invoiceDetails?.name || selectedInvoiceOrder.invoiceName}
-                               </td>
-                               <td className="py-4 text-right text-[11px] font-bold">
-                                 Payment Reference: / رقم إشارة الدفعة:
-                               </td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-
-                    {/* Footer */}
-                    <div className="odoo-footer-line">
-                       <div>+966 500 000 000 info@hakkal-est.com http://www.hakkal-est.com</div>
-                       <div>Page 1 / 1</div>
-                    </div>
-                  </div>
-                )}
+                </div>
               </div>
             </motion.div>
           </div>
