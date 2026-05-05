@@ -789,20 +789,48 @@ const sanitizePhone = (phone: string): string => {
         );
       }
 
+      // Search 3: Sale Order Match (Fallback for Quotations)
       if (!Array.isArray(invoices) || invoices.length === 0) {
-        return res.status(404).json({ success: false, message: "Invoice not found" });
+        const saleOrders = await callOdoo(
+          "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
+          "sale.order", "search_read",
+          [[["name", "=", invoiceName]]],
+          { fields: ["name", "date_order", "amount_untaxed", "amount_tax", "amount_total", "partner_id", "order_line"], limit: 1 }
+        );
+        if (Array.isArray(saleOrders) && saleOrders.length > 0) {
+          const so = saleOrders[0];
+          invoices = [{
+            name: so.name,
+            invoice_date: so.date_order,
+            amount_untaxed: so.amount_untaxed,
+            amount_tax: so.amount_tax,
+            amount_total: so.amount_total,
+            partner_id: so.partner_id,
+            invoice_line_ids: so.order_line,
+            is_sale_order: true
+          }];
+        }
+      }
+
+      if (!Array.isArray(invoices) || invoices.length === 0) {
+        return res.status(404).json({ success: false, message: "Document not found" });
       }
 
       const invoice = invoices[0];
 
-      // Fetch invoice lines
+      // Fetch invoice/order lines
       if (invoice.invoice_line_ids && invoice.invoice_line_ids.length > 0) {
+        const lineModel = invoice.is_sale_order ? "sale.order.line" : "account.move.line";
         const lines = await callOdoo(
           "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
-          "account.move.line", "read",
-          [invoice.invoice_line_ids, ["product_id", "name", "quantity", "price_unit", "tax_ids", "price_subtotal"]]
+          lineModel, "read",
+          [invoice.invoice_line_ids, ["product_id", "name", "product_uom_qty", "quantity", "price_unit", "tax_id", "tax_ids", "price_subtotal"]]
         );
-        invoice.lines = (lines as any[]).filter((l: any) => l.product_id); // Filter out section lines
+        invoice.lines = (lines as any[]).map(l => ({
+          ...l,
+          quantity: l.quantity || l.product_uom_qty || 0,
+          tax_ids: l.tax_ids || l.tax_id || []
+        })).filter((l: any) => l.product_id); // Filter out section lines
       }
 
       res.json({ success: true, invoice });

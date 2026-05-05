@@ -3074,8 +3074,8 @@ const DashboardCarousel = ({ lang, t }: { lang: Language, t: any }) => {
               setIndex(bannerCount + i);
             }}
             className={`h-2 rounded-full transition-all duration-500 ${activeDot === i
-                ? "bg-brand-orange w-8 shadow-md shadow-brand-orange/20"
-                : "bg-gray-300 w-2 hover:bg-gray-400"
+              ? "bg-brand-orange w-8 shadow-md shadow-brand-orange/20"
+              : "bg-gray-300 w-2 hover:bg-gray-400"
               }`}
             aria-label={`Go to slide ${i + 1}`}
           />
@@ -3085,7 +3085,7 @@ const DashboardCarousel = ({ lang, t }: { lang: Language, t: any }) => {
   );
 };
 
-const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory, onViewInvoice, setSelectedDocType }: { orders: Order[], user: AuthUser | null, t: any, lang: Language, onViewHistory: (orderName: string, firebaseId?: string, status?: string, createdAt?: string) => void, onViewInvoice: (order: Order) => void, setSelectedDocType: (type: 'invoice' | 'quotation') => void }) => {
+const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory, onViewInvoice, setSelectedDocType }: { orders: Order[], user: AuthUser | null, t: any, lang: Language, onViewHistory: (orderName: string, firebaseId?: string, status?: string, createdAt?: string) => void, onViewInvoice: (order: Order, type: 'invoice' | 'quotation') => void, setSelectedDocType: (type: 'invoice' | 'quotation') => void }) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const isRtl = lang === 'ar';
 
@@ -3095,21 +3095,16 @@ const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory, onVie
   ), [orders, user]);
 
   const viewOdooDocument = async (order: Order, type: 'invoice' | 'quotation') => {
-    setSelectedDocType(type);
-    onViewInvoice(order);
+    onViewInvoice(order, type);
   };
 
   const syncStatuses = useCallback(async (manual = false) => {
     if (customerOrders.length === 0) {
-      if (manual) alert(t.orders.dashboard.noOrdersToSync);
       return;
     }
     if (isSyncing && !manual) return;
 
     setIsSyncing(true);
-    if (manual) {
-      alert(lang === 'ar' ? 'بدأ عملية المزامنة... يرجى الانتظار' : 'Syncing started... please wait');
-    }
 
     try {
       const batchSize = 3;
@@ -3149,9 +3144,6 @@ const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory, onVie
         }
       }
 
-      if (manual) {
-        alert(t.orders.dashboard.statusesUpdated);
-      }
     } finally {
       setIsSyncing(false);
     }
@@ -3160,8 +3152,8 @@ const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory, onVie
   useEffect(() => {
     const THROTTLE_KEY = `last_sync_dashboard_${user?.uid}`;
     const lastSync = localStorage.getItem(THROTTLE_KEY);
-    const thirtyMin = 30 * 60 * 1000;
-    if (!lastSync || Date.now() - parseInt(lastSync) > thirtyMin) {
+    const oneMin = 1 * 60 * 1000;
+    if (!lastSync || Date.now() - parseInt(lastSync) > oneMin) {
       syncStatuses();
       localStorage.setItem(THROTTLE_KEY, Date.now().toString());
     }
@@ -3172,28 +3164,14 @@ const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory, onVie
   return (
     <div className="space-y-8">
 
-      <div className="flex justify-between items-center">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className={lang === 'ar' ? 'text-right' : 'text-left'}
-        >
-          <h1 className="text-3xl font-serif text-brand-navy font-bold">{t.orders.dashboard.title}</h1>
-          <p className="text-gray-500 mt-2">{t.orders.dashboard.subtitle}</p>
-        </motion.div>
-
-        <button
-          onClick={() => syncStatuses(true)}
-          disabled={isSyncing}
-          className={`flex items-center space-x-2 space-x-reverse px-6 py-3 rounded-2xl text-sm font-bold transition-all shadow-lg ${isSyncing
-              ? 'bg-gray-100 text-gray-400'
-              : 'bg-brand-orange text-white hover:bg-brand-orange-hover shadow-brand-orange/20 hover:scale-105 active:scale-95'
-            }`}
-        >
-          <RefreshCw size={18} className={isSyncing ? 'animate-spin' : ''} />
-          <span>{isSyncing ? t.orders.dashboard.updating : t.orders.dashboard.syncStatus}</span>
-        </button>
-      </div>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={lang === 'ar' ? 'text-right' : 'text-left'}
+      >
+        <h1 className="text-3xl font-serif text-brand-navy font-bold">{t.orders.dashboard.title}</h1>
+        <p className="text-gray-500 mt-2">{t.orders.dashboard.subtitle}</p>
+      </motion.div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
         {[
@@ -3273,7 +3251,7 @@ const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory, onVie
                   </td>
                   <td className={`py-5 ${isRtl ? 'text-right' : 'text-left'}`}>
                     {order.odooOrderName ? (
-                      <button 
+                      <button
                         onClick={() => viewOdooDocument(order, 'quotation')}
                         title={t.orders.dashboard.viewQuotation}
                         className="text-[10px] font-mono font-bold text-brand-orange bg-brand-orange/5 px-3 py-1.5 rounded-lg border border-brand-orange/20 hover:bg-brand-orange hover:text-white transition-colors cursor-pointer"
@@ -3286,7 +3264,7 @@ const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory, onVie
                   </td>
                   <td className={`py-5 ${isRtl ? 'text-right' : 'text-left'}`}>
                     {order.status === 'completed' && order.invoiceName ? (
-                      <button 
+                      <button
                         onClick={() => viewOdooDocument(order, 'invoice')}
                         title={t.orders.dashboard.downloadInvoicePdf}
                         className="text-[10px] font-mono font-bold text-brand-navy bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-600 hover:text-white transition-colors cursor-pointer"
@@ -3692,7 +3670,7 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
   onViewHistory: (orderName: string, firebaseId?: string, status?: string, createdAt?: string) => void,
   loadingHistory: boolean,
   historyOrder: Order | null,
-  onViewInvoice: (order: Order) => void,
+  onViewInvoice: (order: Order, type: 'invoice' | 'quotation') => void,
   setSelectedDocType: (type: 'invoice' | 'quotation') => void
 }) => {
   const [isSyncing, setIsSyncing] = useState(false);
@@ -3706,8 +3684,7 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
   const isRtl = lang === 'ar';
 
   const viewOdooDocument = async (order: Order, type: 'invoice' | 'quotation') => {
-    setSelectedDocType(type);
-    onViewInvoice(order);
+    onViewInvoice(order, type);
   };
 
   const syncIndividualOrder = useCallback(async (order: Order) => {
@@ -3860,8 +3837,8 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
           onClick={() => syncStatuses(true)}
           disabled={isSyncing}
           className={`flex items-center space-x-2 space-x-reverse px-6 py-3 rounded-2xl text-sm font-bold transition-all shadow-lg ${isSyncing
-              ? 'bg-gray-100 text-gray-400'
-              : 'bg-brand-orange text-white hover:bg-brand-orange-hover shadow-brand-orange/20 hover:scale-105 active:scale-95'
+            ? 'bg-gray-100 text-gray-400'
+            : 'bg-brand-orange text-white hover:bg-brand-orange-hover shadow-brand-orange/20 hover:scale-105 active:scale-95'
             }`}
         >
           <RefreshCw size={18} className={isSyncing ? 'animate-spin' : ''} />
@@ -3911,7 +3888,7 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
                   <td className={`px-8 py-6 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
                     {order.odooOrderName ? (
                       <button
-                        onClick={() => { setSelectedDocType('quotation'); onViewInvoice(order); }}
+                        onClick={() => { onViewInvoice(order, 'quotation'); }}
                         title={t.orders.dashboard.viewQuotation}
                         className="text-[10px] font-mono font-bold text-brand-orange bg-brand-orange/10 px-3 py-1.5 rounded-lg border border-brand-orange/20 hover:bg-brand-orange hover:text-white transition-colors cursor-pointer"
                       >
@@ -3928,7 +3905,7 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
                     <div className={`flex items-center gap-2 flex-wrap ${lang === 'ar' ? 'flex-row-reverse justify-end' : ''}`}>
                       {order.status === 'completed' && order.invoiceName ? (
                         <button
-                          onClick={() => { setSelectedDocType('invoice'); onViewInvoice(order); }}
+                          onClick={() => { onViewInvoice(order, 'invoice'); }}
                           title={t.orders.dashboard.downloadPdf}
                           className="text-[10px] font-mono font-bold text-brand-navy bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-600 hover:text-white transition-colors cursor-pointer"
                         >
@@ -3961,8 +3938,8 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
                           disabled={isSyncingIndividual === order.firebaseId}
                           title={t.orders.dashboard.updateStatus}
                           className={`p-2.5 rounded-xl transition-all ${isSyncingIndividual === order.firebaseId
-                              ? 'bg-gray-50 text-gray-300'
-                              : 'text-brand-orange hover:bg-brand-orange/10 active:scale-95'
+                            ? 'bg-gray-50 text-gray-300'
+                            : 'text-brand-orange hover:bg-brand-orange/10 active:scale-95'
                             }`}
                         >
                           <RefreshCw size={18} className={isSyncingIndividual === order.firebaseId ? 'animate-spin' : ''} />
@@ -4030,7 +4007,7 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
                 <div className={`flex items-center gap-2 flex-wrap ${lang === 'ar' ? 'flex-row-reverse' : 'flex-row'}`}>
                   {order.odooOrderName ? (
                     <button
-                      onClick={() => { setSelectedDocType('quotation'); onViewInvoice(order); }}
+                      onClick={() => { onViewInvoice(order, 'quotation'); }}
                       className="text-[10px] font-mono font-bold text-brand-orange bg-brand-orange/10 px-3 py-1.5 rounded-lg border border-brand-orange/20 active:bg-brand-orange active:text-white transition-colors"
                     >
                       {order.odooOrderName}
@@ -4044,7 +4021,7 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
 
                   {order.invoiceName && (
                     <button
-                      onClick={() => { setSelectedDocType('invoice'); onViewInvoice(order); }}
+                      onClick={() => { onViewInvoice(order, 'invoice'); }}
                       className="text-[10px] font-mono font-bold text-brand-navy bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 active:bg-blue-600 active:text-white transition-colors"
                     >
                       {order.invoiceName}
@@ -4358,8 +4335,8 @@ const DashboardLayout = ({ children, user, role, t, lang, onToggleLang, cartCoun
               to={item.path}
               onClick={() => setMobileMenuOpen(false)}
               className={`flex items-center p-3 rounded-lg transition-all ${isRtl ? 'space-x-reverse space-x-3' : 'space-x-3'} ${location.pathname === item.path
-                  ? "bg-brand-orange text-white"
-                  : "text-white/60 hover:bg-white/5 hover:text-white"
+                ? "bg-brand-orange text-white"
+                : "text-white/60 hover:bg-white/5 hover:text-white"
                 }`}
             >
               {item.icon}
@@ -4873,7 +4850,7 @@ const OrderManager = ({
                     <td className={`px-6 py-4 ${isRtl ? 'text-left' : 'text-right'}`}>
                       <span
                         className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase border inline-flex items-center ${o.state === 'sale' ? 'bg-green-100 text-green-700 border-green-200' :
-                            'bg-gray-100 text-gray-700 border-gray-200'
+                          'bg-gray-100 text-gray-700 border-gray-200'
                           }`}
                       >
                         <span>{o.state}</span>
@@ -4969,8 +4946,8 @@ const OrderManager = ({
                             onClick={() => syncIndividualOrder(selectedOrder)}
                             disabled={isSyncingIndividual}
                             className={`flex items-center space-x-1 space-x-reverse text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all ${isSyncingIndividual
-                                ? 'bg-gray-100 text-gray-400'
-                                : 'bg-brand-orange/10 text-brand-orange hover:bg-brand-orange hover:text-white'
+                              ? 'bg-gray-100 text-gray-400'
+                              : 'bg-brand-orange/10 text-brand-orange hover:bg-brand-orange hover:text-white'
                               }`}
                           >
                             <RefreshCw size={12} className={isSyncingIndividual ? 'animate-spin' : ''} />
@@ -4997,8 +4974,8 @@ const OrderManager = ({
                         key={status}
                         onClick={() => updateOrderStatus(selectedOrder.firebaseId, status, selectedOrder)}
                         className={`p-3 rounded-xl text-[10px] font-bold border transition-all ${selectedOrder.status === status
-                            ? 'bg-brand-navy text-white border-brand-navy'
-                            : 'bg-white text-gray-400 border-gray-100 hover:border-brand-orange/30'
+                          ? 'bg-brand-navy text-white border-brand-navy'
+                          : 'bg-white text-gray-400 border-gray-100 hover:border-brand-orange/30'
                           }`}
                       >
                         {getStatusLabel(status)}
@@ -6042,7 +6019,7 @@ const OdooManager = ({ products, setModalContent, t }: { products: Product[], se
                     <td className="px-8 py-4 text-sm font-bold text-brand-navy">⃁ {o.amount_total?.toLocaleString()}</td>
                     <td className="px-8 py-4 text-right">
                       <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase border ${o.state === 'sale' ? 'bg-green-100 text-green-700 border-green-200' :
-                          'bg-gray-100 text-gray-700 border-gray-200'
+                        'bg-gray-100 text-gray-700 border-gray-200'
                         }`}>
                         {o.state}
                       </span>
@@ -6724,15 +6701,17 @@ export default function App() {
     }
   };
 
-  const handleViewInvoice = async (order: Order) => {
-    if (!order.invoiceName) return;
-    
+  const handleViewInvoice = async (order: Order, type: 'invoice' | 'quotation' = 'invoice') => {
+    const docName = type === 'invoice' ? (order.invoiceName || order.odooOrderName || '') : (order.odooOrderName || '');
+    if (!docName) return;
+
+    setSelectedDocType(type);
     setSelectedInvoiceOrder(order);
     setInvoiceDetails(null);
     setLoadingInvoice(true);
-    
+
     try {
-      const resp = await fetch(getApiUrl(`/api/odoo/invoice-details/${encodeURIComponent(order.invoiceName)}`));
+      const resp = await fetch(getApiUrl(`/api/odoo/invoice-details/${encodeURIComponent(docName)}`));
       const data = await resp.json();
       if (data.success && data.invoice) {
         setInvoiceDetails(data.invoice);
@@ -7283,10 +7262,10 @@ export default function App() {
                               )}
                               {/* Dot */}
                               <div className={`relative z-10 w-7 h-7 rounded-full flex items-center justify-center border-2 transition-all ${done
-                                  ? 'bg-brand-orange border-brand-orange text-white'
-                                  : active
-                                    ? 'bg-white border-brand-orange text-brand-orange ring-4 ring-brand-orange/20'
-                                    : 'bg-white border-gray-200 text-gray-300'
+                                ? 'bg-brand-orange border-brand-orange text-white'
+                                : active
+                                  ? 'bg-white border-brand-orange text-brand-orange ring-4 ring-brand-orange/20'
+                                  : 'bg-white border-gray-200 text-gray-300'
                                 }`}>
                                 {done ? (
                                   <Check size={12} />
@@ -7297,8 +7276,8 @@ export default function App() {
                               </div>
                               {/* Label */}
                               <span className={`mt-2 text-[10px] leading-tight text-center font-semibold px-1 ${done ? 'text-brand-orange' :
-                                  active ? 'text-brand-navy' :
-                                    'text-gray-400'
+                                active ? 'text-brand-navy' :
+                                  'text-gray-400'
                                 }`} style={{ maxWidth: 64 }}>{step}</span>
                             </div>
                           );
@@ -7389,8 +7368,8 @@ export default function App() {
                             <div key={stage.key} className={`relative flex items-start gap-4 py-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
                               {/* Circle */}
                               <div className={`flex-shrink-0 z-10 w-11 h-11 rounded-full flex items-center justify-center shadow-md ${isDone ? `${stage.color} ring-4 ring-offset-2 ring-emerald-100` :
-                                  isActive ? `${stage.color} ring-4 ring-offset-2 ring-orange-100 animate-pulse` :
-                                    'bg-gray-100 border-2 border-gray-200'
+                                isActive ? `${stage.color} ring-4 ring-offset-2 ring-orange-100 animate-pulse` :
+                                  'bg-gray-100 border-2 border-gray-200'
                                 }`}>
                                 {isDone ? <Check size={18} className="text-white" /> :
                                   isActive ? stage.icon :
@@ -7431,8 +7410,8 @@ export default function App() {
                               )}
                               {isActive && (
                                 <span className={`flex-shrink-0 self-center text-[10px] font-bold px-2 py-1 rounded-full border animate-pulse ${isCancelledStage
-                                    ? 'text-red-600 bg-red-50 border-red-100'
-                                    : 'text-brand-orange bg-orange-50 border-orange-100'
+                                  ? 'text-red-600 bg-red-50 border-red-100'
+                                  : 'text-brand-orange bg-orange-50 border-orange-100'
                                   }`}>
                                   {isCancelledStage
                                     ? t.orders.dashboard.cancelledBadge
@@ -7491,7 +7470,7 @@ export default function App() {
               {/* Odoo Style Toolbar */}
               <div className="px-4 py-2 border-b border-gray-200 flex justify-between items-center bg-gray-50 no-print">
                 <div className="flex items-center gap-3">
-                  <button 
+                  <button
                     onClick={() => window.print()}
                     className="flex items-center gap-2 px-3 py-1 bg-[#714B67] text-white rounded text-[11px] font-bold hover:bg-[#5a3c52] transition-all"
                   >
@@ -7624,7 +7603,7 @@ export default function App() {
                     font-size: 10px;
                   }
                 `}</style>
-                
+
                 <div className="flex-1 bg-gray-100 flex flex-col min-h-[85vh]">
                   {/* Embedded PDF Viewer */}
                   <iframe
@@ -7632,12 +7611,12 @@ export default function App() {
                     className="w-full flex-1 border-none shadow-inner"
                     title="Odoo Document PDF"
                   />
-                  
+
                   {/* Fallback & Loading Info */}
                   <div className="p-3 bg-white border-t border-gray-200 text-center no-print">
-                     <p className="text-[10px] text-gray-400 font-bold tracking-widest">
-                       OFFICIAL ODOO DOCUMENT • SECURE PDF PREVIEW
-                     </p>
+                    <p className="text-[10px] text-gray-400 font-bold tracking-widest">
+                      OFFICIAL ODOO DOCUMENT • SECURE PDF PREVIEW
+                    </p>
                   </div>
                 </div>
               </div>
