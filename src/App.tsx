@@ -3833,17 +3833,7 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
           <p className="text-gray-500 mt-2">{t.orders.dashboard.ordersSubtitle}</p>
         </motion.div>
 
-        <button
-          onClick={() => syncStatuses(true)}
-          disabled={isSyncing}
-          className={`flex items-center space-x-2 space-x-reverse px-6 py-3 rounded-2xl text-sm font-bold transition-all shadow-lg ${isSyncing
-            ? 'bg-gray-100 text-gray-400'
-            : 'bg-brand-orange text-white hover:bg-brand-orange-hover shadow-brand-orange/20 hover:scale-105 active:scale-95'
-            }`}
-        >
-          <RefreshCw size={18} className={isSyncing ? 'animate-spin' : ''} />
-          <span>{isSyncing ? t.orders.dashboard.updating : t.orders.dashboard.syncStatus}</span>
-        </button>
+        {/* Manual Sync Button Hidden - Runs in background */}
       </div>
 
       <motion.div
@@ -3864,7 +3854,6 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
                 <th className={`px-8 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.odooId}</th>
                 <th className={`px-8 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.invoiceId}</th>
                 <th className={`px-8 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{t.orders.dashboard.status}</th>
-                <th className={`px-8 py-5 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${lang === 'ar' ? 'text-left' : 'text-right'}`}>{t.orders.dashboard.actions}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -3929,23 +3918,6 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
                         </button>
                       );
                     })()}
-                  </td>
-                  <td className={`px-8 py-6 ${lang === 'ar' ? 'text-left' : 'text-right'}`}>
-                    <div className={`flex items-center ${lang === 'ar' ? 'justify-start' : 'justify-end'}`}>
-                      {order.odooOrderName && (
-                        <button
-                          onClick={() => syncIndividualOrder(order)}
-                          disabled={isSyncingIndividual === order.firebaseId}
-                          title={t.orders.dashboard.updateStatus}
-                          className={`p-2.5 rounded-xl transition-all ${isSyncingIndividual === order.firebaseId
-                            ? 'bg-gray-50 text-gray-300'
-                            : 'text-brand-orange hover:bg-brand-orange/10 active:scale-95'
-                            }`}
-                        >
-                          <RefreshCw size={18} className={isSyncingIndividual === order.firebaseId ? 'animate-spin' : ''} />
-                        </button>
-                      )}
-                    </div>
                   </td>
                 </tr>
               ))}
@@ -4028,16 +4000,7 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
                     </button>
                   )}
 
-                  {order.odooOrderName && (
-                    <button
-                      onClick={() => syncIndividualOrder(order)}
-                      disabled={isSyncingIndividual === order.firebaseId}
-                      className={`p-2 rounded-lg border border-gray-100 ${isSyncingIndividual === order.firebaseId ? 'bg-gray-50 text-gray-300' : 'text-brand-orange bg-white'
-                        }`}
-                    >
-                      <RefreshCw size={14} className={isSyncingIndividual === order.firebaseId ? 'animate-spin' : ''} />
-                    </button>
-                  )}
+                  {/* Mobile Sync Hidden */}
                 </div>
               </div>
             );
@@ -4682,22 +4645,8 @@ const OrderManager = ({
           <p className="text-gray-500">{t.orders.dashboard.adminDescription}</p>
         </div>
         <div className={`flex ${isRtl ? 'flex-row-reverse space-x-reverse space-x-3' : 'space-x-3'}`}>
-          <button
-            onClick={syncAllStoreOrders}
-            disabled={isSyncingAll}
-            className="bg-brand-navy text-white px-6 py-3 rounded-xl text-xs font-bold flex items-center space-x-2 transition-all hover:bg-brand-navy-hover disabled:opacity-50"
-          >
-            <RefreshCw size={14} className={isSyncingAll ? "animate-spin" : ""} />
-            <span>{t.orders.dashboard.syncAllStatuses}</span>
-          </button>
-          <button
-            onClick={fetchOdooOrders}
-            className="bg-brand-orange text-white px-6 py-3 rounded-xl text-xs font-bold flex items-center space-x-2 transition-all hover:bg-brand-orange-hover"
-          >
-            <RefreshCw size={14} className={loadingOdoo ? "animate-spin" : ""} />
-            <span>{t.orders.dashboard.syncWithOdoo}</span>
-          </button>
-        </div>
+        {/* Admin Sync Buttons Hidden */}
+      </div>
       </div>
 
       <div className={`flex space-x-4 mb-8 border-b border-gray-100 ${isRtl ? 'flex-row-reverse space-x-reverse' : ''}`}>
@@ -4792,16 +4741,7 @@ const OrderManager = ({
                     </td>
                     <td className={`px-6 py-4 ${isRtl ? 'text-left' : 'text-right'}`}>
                       <div className={`flex items-center space-x-2 ${isRtl ? 'justify-start space-x-reverse' : 'justify-end'}`}>
-                        {order.odooOrderName && (
-                          <button
-                            onClick={() => syncIndividualOrder(order)}
-                            disabled={isSyncingIndividual}
-                            title={t.orders.dashboard.updateStatus}
-                            className="p-2 text-brand-orange hover:bg-brand-orange hover:text-white rounded-lg transition-all disabled:opacity-50"
-                          >
-                            <RefreshCw size={18} className={isSyncingIndividual ? "animate-spin" : ""} />
-                          </button>
-                        )}
+                        {/* Admin Individual Sync Hidden */}
                         <button
                           onClick={() => setSelectedOrder(order)}
                           className="p-2 text-brand-navy hover:bg-brand-navy hover:text-white rounded-lg transition-all"
