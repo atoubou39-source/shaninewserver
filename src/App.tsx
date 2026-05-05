@@ -7557,8 +7557,6 @@ export default function App() {
                   {/* Fallback & Loading Info Hidden */}
                 </div>
               </div>
-            </div>
-          </div>
             </motion.div>
           </div>
         )}
