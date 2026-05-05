@@ -7418,7 +7418,9 @@ export default function App() {
                     <span>PRINT</span>
                   </button>
                   <span className="text-[11px] font-bold text-gray-500 uppercase">
-                    {invoiceDetails?.name || selectedInvoiceOrder.invoiceName || 'Draft'}
+                    {selectedDocType === 'invoice' 
+                      ? (invoiceDetails?.name || selectedInvoiceOrder.invoiceName || 'Draft Invoice') 
+                      : (selectedInvoiceOrder.odooOrderName || 'Draft Quotation')}
                   </span>
                 </div>
                 <button onClick={() => setSelectedInvoiceOrder(null)} className="p-1 hover:bg-gray-200 rounded transition-all text-gray-400">
@@ -7552,14 +7554,11 @@ export default function App() {
                     title="Odoo Document PDF"
                   />
 
-                  {/* Fallback & Loading Info */}
-                  <div className="p-3 bg-white border-t border-gray-200 text-center no-print">
-                    <p className="text-[10px] text-gray-400 font-bold tracking-widest">
-                      OFFICIAL ODOO DOCUMENT • SECURE PDF PREVIEW
-                    </p>
-                  </div>
+                  {/* Fallback & Loading Info Hidden */}
                 </div>
               </div>
+            </div>
+          </div>
             </motion.div>
           </div>
         )}
