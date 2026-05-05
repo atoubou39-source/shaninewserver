@@ -175,7 +175,7 @@ export function DiscountsManager() {
           لا توجد منتجات
         </h3>
         <p className="text-brand-navy/60">
-          يرجى مزامنة المنتجات من أودو أولاً
+          يرجى مزامنة المنتجات من النظام أولاً
         </p>
       </div>
     );
@@ -195,7 +195,7 @@ export function DiscountsManager() {
         </div>
         <p className="text-brand-navy/60">
           عيّن أسعار مخفضة للمنتجات. ستظهر الأسعار المخفضة للعملاء في الموقع وفي
-          نظام أودو
+          نظام شركة حقال للتجارة
         </p>
       </div>
 
@@ -408,7 +408,7 @@ export function DiscountsManager() {
             <p className="font-semibold mb-2">كيفية عمل التخفيضات:</p>
             <ul className="space-y-1 text-xs">
               <li>• العميل سيرى السعر المخفض في الموقع</li>
-              <li>• الطلب سيُرسل إلى أودو بسعر التخفيض كسعر الوحدة</li>
+              <li>• الطلب سيُرسل إلى النظام بسعر التخفيض كسعر الوحدة</li>
               <li>• يمكنك تحديث أو حذف التخفيضات في أي وقت</li>
             </ul>
           </div>

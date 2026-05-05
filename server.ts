@@ -183,7 +183,7 @@ async function startServer() {
         if (!odooCustomer) {
           console.warn(`[Blocked] Registration attempt for non-Odoo number: ${phone}`);
           return res.status(403).json({ 
-            error: "عذراً، هذا الرقم غير مسجل في نظام اودو. التسجيل متاح فقط لعملاء المتجر الحاليين. يرجى التواصل مع الإدارة للتسجيل." 
+            error: "عذراً، هذا الرقم غير مسجل في النظام. التسجيل متاح فقط لعملاء المتجر الحاليين. يرجى التواصل مع الإدارة للتسجيل." 
           });
         }
         console.log(`[Success] Customer found in Odoo: ${odooCustomer.name}`);
@@ -192,7 +192,7 @@ async function startServer() {
       }
     } catch (error) {
       console.error("Error checking Odoo registration:", error);
-      return res.status(500).json({ error: "حدث خطأ أثناء التحقق من الرقم في نظام اودو" });
+      return res.status(500).json({ error: "حدث خطأ أثناء التحقق من الرقم في النظام" });
     }
 
     const username = process.env.MADAR_SMS_USERNAME;

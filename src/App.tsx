@@ -7551,7 +7551,7 @@ export default function App() {
                   <iframe
                     src={getApiUrl(`/api/odoo/invoice-pdf/${encodeURIComponent(selectedDocType === 'invoice' ? (selectedInvoiceOrder.invoiceName || selectedInvoiceOrder.odooOrderName || '') : (selectedInvoiceOrder.odooOrderName || ''))}`)}
                     className="w-full flex-1 border-none shadow-inner"
-                    title="Odoo Document PDF"
+                    title="Document Preview"
                   />
 
                   {/* Fallback & Loading Info Hidden */}

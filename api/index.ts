@@ -1601,7 +1601,7 @@ const sanitizePhone = (phone: string): string => {
       if (!Array.isArray(odooCustomers) || odooCustomers.length === 0) {
         return res.status(404).json({
           success: false,
-          error: "هذا الرقم غير مسجل في نظام اودو كعميل"
+          error: "هذا الرقم غير مسجل من ضمن عملاء شركة حقال للتجارة"
         });
       }
 

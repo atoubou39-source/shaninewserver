@@ -140,7 +140,7 @@ export const CustomerSyncDashboard = () => {
             </div>
             <h1 className="text-3xl font-serif text-brand-navy font-bold">إدارة العملاء</h1>
           </div>
-          <p className="text-gray-400 text-sm font-medium pr-1">مزامنة وإدارة حسابات عملاء أودو في Firebase</p>
+          <p className="text-gray-400 text-sm font-medium pr-1">مزامنة وإدارة حسابات عملاء النظام في Firebase</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-4">
