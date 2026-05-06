@@ -336,6 +336,22 @@ const getStatusDetails = (status: string, t: any) => {
   }
 };
 
+const formatRiyadhDate = (date: any, lang: string = 'ar', includeTime: boolean = false) => {
+  if (!date) return 'N/A';
+  try {
+    const d = new Date(date);
+    return d.toLocaleString(lang === 'ar' ? 'ar-SA-u-ca-gregory' : 'en-US', {
+      timeZone: 'Asia/Riyadh',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: includeTime ? '2-digit' : undefined,
+      minute: includeTime ? '2-digit' : undefined,
+    });
+  } catch (e) {
+    return 'N/A';
+  }
+};
 
 
 // --- Components ---
@@ -755,9 +771,9 @@ const Products = ({
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
-                    className="bg-white p-3 md:p-5 rounded-2xl md:rounded-3xl shadow-sm hover:shadow-xl transition-all group border border-white hover:border-brand-orange/20 cursor-pointer flex flex-col h-full relative"
+                    className="bg-white p-3 md:p-5 rounded-2xl md:rounded-3xl shadow-sm hover:shadow-xl transition-all group border border-white hover:border-brand-orange/20 cursor-pointer flex flex-col h-full relative mx-auto max-w-sm w-full"
                   >
-                    <div className="aspect-square mb-3 md:mb-6 overflow-hidden rounded-xl md:rounded-2xl bg-[#f3f3f3] relative">
+                    <div className="aspect-square mb-3 md:mb-6 overflow-hidden rounded-xl md:rounded-2xl bg-[#f3f3f3] relative w-full">
                       <img
                         src={p.image}
                         alt={p.name}
@@ -1709,7 +1725,7 @@ const CartDrawer = ({
   );
 };
 
-const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalContent, t, lang }: { isOpen: boolean, onClose: () => void, items: CartItem[], onClearCart: () => void, user: AuthUser | null, setModalContent: (content: { title: string; message: string; type: 'success' | 'error' } | null) => void, t: any, lang: string }) => {
+const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalContent, t, lang, onOpenTerms }: { isOpen: boolean, onClose: () => void, items: CartItem[], onClearCart: () => void, user: AuthUser | null, setModalContent: (content: { title: string; message: string; type: 'success' | 'error' } | null) => void, t: any, lang: string, onOpenTerms: () => void }) => {
   const [formData, setFormData] = useState({
     customerName: "",
     email: "",
@@ -1737,16 +1753,13 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
         console.log("[Checkout] fetchProfile START", { uid: user.uid, email: user.email });
 
         // Step 1: Initial population from Auth
-        setFormData(prev => {
-          console.log("[Checkout] Step 1: Initial population", { currentSalesRep: prev.salesRep });
-          return {
-            ...prev,
-            customerName: prev.customerName || user.name || "",
-            email: prev.email || user.email || "",
-            phone1: prev.phone1 || user.phone || "",
-            salesRep: (lang === 'ar' ? "جاري التحميل..." : "Loading..."),
-          };
-        });
+        setFormData(prev => ({
+          ...prev,
+          customerName: prev.customerName || user.name || "",
+          email: prev.email || user.email || "",
+          phone1: prev.phone1 || user.phone || "",
+          salesRep: prev.salesRep || "",
+        }));
 
         // Step 2: Enrich from Firestore
         let firestoreData: any = {};
@@ -1773,95 +1786,45 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
           console.error("[Checkout] Firestore error:", e);
         }
 
-        // Step 3: Enrich from Odoo
+        // Step 3: Silent Odoo Enrichment (Sales Rep Only)
         const email = (firestoreData.email || user.email || "").toLowerCase().trim();
         const phone = (firestoreData.phoneNumber || user.phone || "").trim();
 
-        console.log("[Checkout] Step 3: Odoo enrichment starting...", { email, phone });
-
         if (email || phone) {
-          console.log("[Checkout] Initiating Odoo enrichment...", { email, phone });
-          setFormData(prev => ({ ...prev, salesRep: t.orders.dashboard.loading }));
           try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => {
-              console.warn("[Checkout] Odoo fetch timed out after 15s");
-              controller.abort();
-            }, 15000);
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
 
-            const apiUrl = getApiUrl("/api/auth/verify-odoo-customer");
-            console.log("[Checkout] Calling API:", apiUrl);
-
-            const odooRes = await fetch(apiUrl, {
+            const odooRes = await fetch(getApiUrl("/api/auth/verify-odoo-customer"), {
               method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-              },
-              mode: "cors",
-              cache: "no-cache",
+              headers: { "Content-Type": "application/json" },
               signal: controller.signal,
               body: JSON.stringify({ phone, email })
             });
-
             clearTimeout(timeoutId);
-            console.log("[Checkout] API Response status:", odooRes.status);
 
-            const odooResult = await odooRes.json();
-            console.log("[Checkout] API Result success:", odooResult.success);
-
-            if (odooResult.success && odooResult.customer) {
-              const c = odooResult.customer;
-              console.log("[Checkout] Customer found:", c.name, "Salesperson:", c.salesperson_name);
-
-              // Map salesperson name to Arabic if needed
-              let salesRepDisplay = val(c.salesperson_name);
-              if (!salesRepDisplay || salesRepDisplay === "Not Assigned") {
-                salesRepDisplay = lang === 'ar' ? "غير معين" : "Not Assigned";
-              }
+            const result = await odooRes.json();
+            if (result.success && result.customer) {
+              const c = result.customer;
+              const salesRepName = c.salesperson_name && c.salesperson_name !== "Not Assigned" 
+                ? c.salesperson_name 
+                : (lang === 'ar' ? "غير معين" : "Not Assigned");
 
               setFormData(prev => ({
                 ...prev,
-                customerName: val(c.name) || prev.customerName,
-                email: val(c.email) || prev.email,
-                phone1: val(c.phone) || prev.phone1,
-                phone2: val(c.mobile) || prev.phone2,
-                address: val(c.street) || prev.address,
-                city: val(c.city) || prev.city,
-                district: val(c.district) || prev.district,
-                salesRep: salesRepDisplay,
-                salespersonId: c.salesperson_id || null,
+                salesRep: salesRepName,
+                salespersonId: c.salesperson_id || null
               }));
 
               if (c.sale_warn === 'block') {
                 setIsBlocked(true);
-                setBlockedMsg(val(c.sale_warn_msg) || "");
-                console.log("[Checkout] BLOCKED:", c.sale_warn_msg);
-              } else {
-                setIsBlocked(false);
-                setBlockedMsg("");
+                setBlockedMsg(c.sale_warn_msg || "");
               }
-            } else {
-              console.log("[Checkout] No customer data returned from Odoo or search failed");
-              setFormData(prev => ({
-                ...prev,
-                salesRep: lang === 'ar' ? "غير معين" : "Not Assigned"
-              }));
             }
-          } catch (e: any) {
-            console.error("[Checkout] Odoo fetch error:", e);
-            const errorDetail = e.name === 'AbortError' ? (lang === 'ar' ? "انتهت المهلة" : "Timeout") : (e.message || "Unknown");
-            setFormData(prev => ({
-              ...prev,
-              salesRep: lang === 'ar' ? `غير متوفر (${errorDetail})` : `Not Available (${errorDetail})`
-            }));
+          } catch (e) {
+            console.error("[Checkout] Silent Odoo enrichment failed:", e);
+            // Fallback is already "Not Assigned" from state initialization or Step 1
           }
-        } else {
-          console.log("[Checkout] No email or phone to search Odoo with");
-          setFormData(prev => ({
-            ...prev,
-            salesRep: lang === 'ar' ? "غير معين" : "Not Assigned"
-          }));
         }
       };
       fetchProfile();
@@ -1871,9 +1834,13 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
   if (items.length === 0 && !isSuccess) return null;
 
   const total = items.reduce((sum, item) => {
-    const priceStr = item.discountPrice || item.price;
-    const price = parseFloat(priceStr.replace(/[^\d.]/g, ''));
-    return sum + (price * item.quantity);
+    try {
+      const priceStr = String(item.discountPrice || item.price || "0");
+      const price = parseFloat(priceStr.replace(/[^\d.]/g, '')) || 0;
+      return sum + (price * (item.quantity || 1));
+    } catch (e) {
+      return sum;
+    }
   }, 0);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -2310,6 +2277,7 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
                 </div>
               ) : (
                 <form onSubmit={handleSubmit}>
+                  <div className="text-[8px] text-gray-300 mb-2">Form Version: 2.1</div>
                   {/* Order Summary */}
                   <div className="mb-8">
                     <div className="flex items-center gap-3 mb-4">
@@ -2321,7 +2289,7 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
                         {items.map(item => (
                           <div key={item.id} className="flex justify-between items-center">
                             <span className="text-brand-navy font-medium">{item.name}</span>
-                            <span className="text-gray-500 text-sm">× {item.quantity} {t.products.pricePrefix}{item.price.replace(/[^\d.]/g, '')}</span>
+                            <span className="text-gray-500 text-sm">× {item.quantity} {t.products.pricePrefix}{String(item.discountPrice || item.price || "0").replace(/[^\d.]/g, '')}</span>
                           </div>
                         ))}
                       </div>
@@ -2339,34 +2307,36 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
                       <div className="h-[1px] flex-1 bg-gray-100" />
                     </div>
                     <div className="space-y-4">
-                      <div>
-                        <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.facilityName}</label>
-                        <input
-                          readOnly
-                          type="text"
-                          placeholder={t.checkout.facilityPlaceholder}
-                          value={formData.customerName}
-                          className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-gray-600 cursor-not-allowed"
-                        />
+                      {/* Name & Email */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.facilityName}</label>
+                          <input
+                            readOnly
+                            type="text"
+                            value={formData.customerName || ""}
+                            className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-gray-600 cursor-not-allowed"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.emailLabel}</label>
+                          <input
+                            readOnly
+                            type="email"
+                            value={formData.email || ""}
+                            className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-gray-600 cursor-not-allowed"
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.emailLabel}</label>
-                        <input
-                          readOnly
-                          type="email"
-                          placeholder={t.checkout.emailPlaceholder}
-                          value={formData.email}
-                          className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-gray-600 cursor-not-allowed"
-                        />
-                      </div>
+
+                      {/* Phones */}
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.phoneLabel}</label>
                           <input
                             readOnly
                             type="text"
-                            placeholder={t.checkout.phonePlaceholder}
-                            value={formData.phone1}
+                            value={formData.phone1 || ""}
                             className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-gray-600 cursor-not-allowed"
                           />
                         </div>
@@ -2375,30 +2345,31 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
                           <input
                             readOnly
                             type="text"
-                            placeholder={t.checkout.phonePlaceholder}
-                            value={formData.phone2}
+                            value={formData.phone2 || ""}
                             className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-gray-600 cursor-not-allowed"
                           />
                         </div>
                       </div>
+
+                      {/* Address */}
                       <div>
                         <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.addressLabel}</label>
                         <input
                           readOnly
                           type="text"
-                          placeholder={t.checkout.addressPlaceholder}
-                          value={formData.address}
+                          value={formData.address || ""}
                           className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-gray-600 cursor-not-allowed"
                         />
                       </div>
+
+                      {/* City & District */}
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.cityLabel}</label>
                           <input
                             readOnly
                             type="text"
-                            placeholder={t.checkout.cityPlaceholder}
-                            value={formData.city}
+                            value={formData.city || ""}
                             className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-gray-600 cursor-not-allowed"
                           />
                         </div>
@@ -2407,18 +2378,18 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
                           <input
                             readOnly
                             type="text"
-                            placeholder={t.checkout.districtPlaceholder}
-                            value={formData.district}
+                            value={formData.district || ""}
                             className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-gray-600 cursor-not-allowed"
                           />
                         </div>
                       </div>
+
+                      {/* Sales Rep */}
                       <div>
                         <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.salesRepLabel}</label>
                         <input
                           readOnly
                           type="text"
-                          placeholder={t.checkout.salesRepPlaceholder}
                           value={formData.salesRep || (lang === 'ar' ? "غير معين" : "Not Assigned")}
                           className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-brand-navy font-bold cursor-not-allowed"
                         />
@@ -2438,8 +2409,8 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
                     </div>
                   </div>
 
-                  {/* Terms */}
-                  <div className="mb-8 flex items-start gap-3 p-4 bg-gray-50 rounded-xl">
+                  {/* Terms Checkbox */}
+                  <div className="mb-8 flex items-start gap-3 p-4 bg-gray-50 rounded-xl border border-gray-100">
                     <input
                       required
                       type="checkbox"
@@ -2448,7 +2419,10 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
                       className="mt-1 w-4 h-4 rounded border-gray-300 text-brand-orange focus:ring-brand-orange"
                     />
                     <p className="text-[10px] text-gray-500 leading-relaxed">
-                      {t.checkout.termsAgree} <span className="text-brand-orange underline">{t.checkout.termsLink}</span>, <span className="text-brand-orange underline">{t.checkout.privacyLink}</span>, <span className="text-brand-orange underline">{t.checkout.refundLink}</span> {t.checkout.ofBrand}
+                      {lang === 'ar' 
+                        ? <>لقد قرأت وأوافق على <span className="text-brand-orange underline cursor-pointer hover:text-brand-navy transition-colors font-bold" onClick={onOpenTerms}>{t.checkout.termsLink}</span> الخاصة بشركة حقال للتجارة.</>
+                        : <>I have read and agree to the <span className="text-brand-orange underline cursor-pointer hover:text-brand-navy transition-colors font-bold" onClick={onOpenTerms}>{t.checkout.termsLink}</span> of Hakkal Trading Company.</>
+                      }
                     </p>
                   </div>
 
@@ -2673,64 +2647,17 @@ const TermsModal = ({ isOpen, onClose, t }: { isOpen: boolean, onClose: () => vo
                 </p>
 
                 <div className="space-y-8">
-                  <section>
-                    <h3 className="text-brand-navy font-bold text-lg mb-3 flex items-center">
-                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs me-3">1</span>
-                      {t.modals.general}
-                    </h3>
-                    <p className="ps-11">{t.modals.generalText}</p>
-                  </section>
-
-                  <section>
-                    <h3 className="text-brand-navy font-bold text-lg mb-3 flex items-center">
-                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs me-3">2</span>
-                      {t.modals.orders}
-                    </h3>
-                    <p className="ps-11">{t.modals.ordersText}</p>
-                  </section>
-
-                  <section>
-                    <h3 className="text-brand-navy font-bold text-lg mb-3 flex items-center">
-                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs me-3">3</span>
-                      {t.modals.pricing}
-                    </h3>
-                    <p className="ps-11">{t.modals.pricingText}</p>
-                  </section>
-
-                  <section>
-                    <h3 className="text-brand-navy font-bold text-lg mb-3 flex items-center">
-                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs me-3">4</span>
-                      {t.modals.payment}
-                    </h3>
-                    <p className="ps-11">{t.modals.paymentText}</p>
-                  </section>
-
-                  <section>
-                    <h3 className="text-brand-navy font-bold text-lg mb-3 flex items-center">
-                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs me-3">5</span>
-                      {t.modals.deliveryShipping}
-                    </h3>
-                    <p className="ps-11">{t.modals.deliveryShippingText}</p>
-                  </section>
-
-                  <section>
-                    <h3 className="text-brand-navy font-bold text-lg mb-3 flex items-center">
-                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs me-3">6</span>
-                      {t.modals.returnsRefunds}
-                    </h3>
-                    <div className="ps-11 space-y-2">
-                      <p>{t.modals.returnsRefundsText1}</p>
-                      <p>{t.modals.returnsRefundsText2}</p>
-                    </div>
-                  </section>
-
-                  <section>
-                    <h3 className="text-brand-navy font-bold text-lg mb-3 flex items-center">
-                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs me-3">7</span>
-                      {t.modals.allergens}
-                    </h3>
-                    <p className="ps-11">{t.modals.allergensText}</p>
-                  </section>
+                  {t.modals.termsContent.map((section: any, idx: number) => (
+                    <section key={idx}>
+                      <h3 className="text-brand-navy font-bold text-lg mb-3 flex items-center">
+                        <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs me-3">{idx + 1}</span>
+                        {section.title}
+                      </h3>
+                      <div className="ps-11 whitespace-pre-wrap leading-relaxed text-gray-600">
+                        {section.content}
+                      </div>
+                    </section>
+                  ))}
 
                   <section className="bg-brand-cream p-6 rounded-2xl border border-brand-navy/5">
                     <h3 className="text-brand-navy font-bold text-lg mb-4">{t.footer.contact}</h3>
@@ -2809,9 +2736,38 @@ const PrivacyModal = ({ isOpen, onClose, t }: { isOpen: boolean, onClose: () => 
             <div className="p-8 overflow-y-auto custom-scrollbar">
               <div className="prose prose-sm max-w-none text-brand-navy/80">
                 <div className="space-y-8">
-                  <p className="leading-relaxed">{t.modals.privacyText1}</p>
-                  <p className="leading-relaxed">{t.modals.privacyText2}</p>
-                  <p className="leading-relaxed">{t.modals.privacyText3}</p>
+                  <div className="bg-brand-orange/5 p-6 rounded-2xl border border-brand-orange/10 mb-8">
+                    <p className="leading-relaxed font-medium text-brand-navy">
+                      {lang === 'ar' 
+                        ? "نحن في شركة حقال للتجارة نلتزم بأقصى درجات الخصوصية وحماية بيانات عملائنا. نجمع الاسم والهاتف والعنوان وتفاصيل الدفع فقط لمعالجة الطلبات وتنفيذها."
+                        : "At Hakkal Trading Company, we are committed to the highest levels of privacy and protection of our customers' data. We collect name, phone, address and payment details solely to process and fulfill orders."
+                      }
+                    </p>
+                  </div>
+
+                  <section>
+                    <h3 className="text-brand-navy font-bold text-lg mb-3 flex items-center">
+                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs me-3">1</span>
+                      {lang === 'ar' ? "جمع البيانات" : "Data Collection"}
+                    </h3>
+                    <p className="ps-11 leading-relaxed">{t.modals.privacyText1}</p>
+                  </section>
+
+                  <section>
+                    <h3 className="text-brand-navy font-bold text-lg mb-3 flex items-center">
+                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs me-3">2</span>
+                      {lang === 'ar' ? "حماية المعلومات" : "Information Protection"}
+                    </h3>
+                    <p className="ps-11 leading-relaxed">{t.modals.privacyText2}</p>
+                  </section>
+
+                  <section>
+                    <h3 className="text-brand-navy font-bold text-lg mb-3 flex items-center">
+                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs me-3">3</span>
+                      {lang === 'ar' ? "مشاركة البيانات" : "Data Sharing"}
+                    </h3>
+                    <p className="ps-11 leading-relaxed">{t.modals.privacyText3}</p>
+                  </section>
 
                   <section className="bg-brand-cream p-6 rounded-2xl border border-brand-navy/5">
                     <h3 className="text-brand-navy font-bold text-lg mb-4">{t.footer.contact}</h3>
@@ -2890,28 +2846,39 @@ const RefundModal = ({ isOpen, onClose, t }: { isOpen: boolean, onClose: () => v
             <div className="p-8 overflow-y-auto custom-scrollbar">
               <div className="prose prose-sm max-w-none text-brand-navy/80">
                 <div className="space-y-8">
+                  <div className="bg-brand-orange/5 p-6 rounded-2xl border border-brand-orange/10 mb-8">
+                    <p className="leading-relaxed font-medium text-brand-navy">
+                      {lang === 'ar' 
+                        ? "تخضع جميع عمليات الضمان والاسترجاع والاستبدال لشروط وأحكام محددة يتم توضيحها في طلب البيع وفاتورة المبيعات."
+                        : "All warranty, return, and exchange processes are subject to specific terms and conditions outlined in the sales order and sales invoice."
+                      }
+                    </p>
+                  </div>
+
                   <section>
                     <h3 className="text-brand-navy font-bold text-lg mb-3 flex items-center">
                       <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs me-3">1</span>
-                      {t.modals.finalSales}
+                      {lang === 'ar' ? "الاسترجاع والاستبدال" : "Returns & Exchange"}
                     </h3>
-                    <p className="ps-11">{t.modals.finalSalesText}</p>
+                    <p className="ps-11 leading-relaxed">
+                      {lang === 'ar'
+                        ? "يلتزم العميل بالاطلاع على هذه الشروط قبل إتمام عملية الشراء وتسليم الرمز الى مندوبنا والتأكد من صحة وسلامة البضاعة المستلمة من مندوبنا قبل تزويد مندوبنا برمز التسليم."
+                        : "The customer is obligated to review these terms before completing the purchase and providing the code to our representative, and to verify the accuracy and integrity of the goods received from our representative before providing our representative with the delivery code."
+                      }
+                    </p>
                   </section>
 
                   <section>
                     <h3 className="text-brand-navy font-bold text-lg mb-3 flex items-center">
                       <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs me-3">2</span>
-                      {t.modals.reportingIssues}
+                      {lang === 'ar' ? "حدود التوصيل" : "Delivery Limits"}
                     </h3>
-                    <p className="ps-11">{t.modals.reportingIssuesText}</p>
-                  </section>
-
-                  <section>
-                    <h3 className="text-brand-navy font-bold text-lg mb-3 flex items-center">
-                      <span className="w-8 h-8 rounded-full bg-brand-orange/10 text-brand-orange flex items-center justify-center text-xs me-3">3</span>
-                      {t.modals.verification}
-                    </h3>
-                    <p className="ps-11">{t.modals.verificationText}</p>
+                    <p className="ps-11 leading-relaxed">
+                      {lang === 'ar'
+                        ? "التوصيل وتسليم البضاعة يكون داخل المملكة العربية السعودية فقط وفي محل العميل (مقر عمل) التي تم فيه فتح الحساب."
+                        : "Delivery and handover of goods are limited to within the Kingdom of Saudi Arabia only and at the customer’s location (place of business) where the account was opened."
+                      }
+                    </p>
                   </section>
 
                   <section className="bg-brand-cream p-6 rounded-2xl border border-brand-navy/5">
@@ -3275,7 +3242,7 @@ const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory, onVie
                       <span className="text-[10px] text-gray-300">-</span>
                     )}
                   </td>
-                  <td className={`py-5 text-xs text-gray-500 ${isRtl ? 'text-right' : 'text-left'}`}>{new Date(order.createdAt).toLocaleDateString(isRtl ? 'ar-SA-u-ca-gregory' : 'en-US')}</td>
+                  <td className={`py-5 text-xs text-gray-500 ${isRtl ? 'text-right' : 'text-left'}`}>{formatRiyadhDate(order.createdAt, isRtl ? 'ar' : 'en')}</td>
                   <td className={`py-5 text-xs font-bold text-brand-navy ${isRtl ? 'text-right' : 'text-left'}`}>{t.products.pricePrefix}{order.total.toLocaleString()}</td>
                   <td className={`py-5 ${isRtl ? 'text-right' : 'text-left'}`}>
                     {(() => {
@@ -3305,7 +3272,7 @@ const CustomerDashboardOverview = ({ orders, user, t, lang, onViewHistory, onVie
                 <div className={`flex justify-between items-start ${isRtl ? 'flex-row-reverse' : ''}`}>
                   <div>
                     <span className="text-[9px] font-mono text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">#{order.firebaseId.slice(0, 8).toUpperCase()}</span>
-                    <p className={`text-[10px] text-gray-500 mt-1 ${isRtl ? 'text-right' : 'text-left'}`}>{new Date(order.createdAt).toLocaleDateString(isRtl ? 'ar-SA-u-ca-gregory' : 'en-US')}</p>
+                    <p className={`text-[10px] text-gray-500 mt-1 ${isRtl ? 'text-right' : 'text-left'}`}>{formatRiyadhDate(order.createdAt, isRtl ? 'ar' : 'en')}</p>
                   </div>
                   <button
                     onClick={() => onViewHistory(order.odooOrderName || '', order.firebaseId, order.status, order.createdAt)}
@@ -3376,11 +3343,14 @@ const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManu
     }
   }, [activePill, cart]);
 
-  const filtered = useMemo(() =>
-    products.filter(p =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.description?.toLowerCase().includes(search.toLowerCase())
-    ), [products, search]);
+  const filtered = useMemo(() => {
+    const term = search.toLowerCase().trim();
+    if (!term) return products;
+    
+    return products.filter(p => 
+      p.name.toLowerCase().includes(term)
+    );
+  }, [products, search]);
 
   const cartTotal = useMemo(() => {
     return cart.reduce((sum, item) => {
@@ -3390,7 +3360,7 @@ const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManu
   }, [cart]);
 
   return (
-    <div className="space-y-6 pb-24">
+    <div className="max-w-7xl mx-auto px-4 md:px-8 space-y-6 pb-24">
       {/* Offers Modal Popup */}
       <AnimatePresence>
         {showOffer && (() => {
@@ -3538,9 +3508,9 @@ const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManu
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.03 }}
-                className="bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-brand-orange/20 transition-all group flex flex-col overflow-hidden relative"
+                className="bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-brand-orange/20 transition-all group flex flex-col overflow-hidden relative mx-auto max-w-sm w-full"
               >
-                <div className="relative overflow-hidden bg-gray-50" style={{ aspectRatio: '1/1' }}>
+                <div className="relative overflow-hidden bg-gray-50 aspect-square w-full">
                   <img
                     src={p.image}
                     alt={p.name}
@@ -3862,7 +3832,7 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
                   <td className={`px-8 py-6 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
                     <span className="text-[10px] font-mono text-gray-400 bg-gray-50 px-2 py-1 rounded">#{order.firebaseId.slice(0, 8).toUpperCase()}</span>
                   </td>
-                  <td className={`px-8 py-6 text-xs text-gray-500 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{new Date(order.createdAt).toLocaleDateString(lang === 'ar' ? 'ar-SA-u-ca-gregory' : 'en-US')}</td>
+                  <td className={`px-8 py-6 text-xs text-gray-500 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>{formatRiyadhDate(order.createdAt, lang)}</td>
                   <td className={`px-8 py-6 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
                     <div className="flex flex-col space-y-1.5">
                       {order.items.map((item, i) => (
@@ -3950,7 +3920,7 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
                   <div className={lang === 'ar' ? 'text-right' : 'text-left'}>
                     <span className="text-[10px] font-mono text-gray-400 bg-gray-50 px-2 py-1 rounded">#{order.firebaseId.slice(0, 8).toUpperCase()}</span>
                     <div className="text-xs text-gray-400 mt-1">
-                      {new Date(order.createdAt).toLocaleDateString(lang === 'ar' ? 'ar-SA-u-ca-gregory' : 'en-US')}
+                      {formatRiyadhDate(order.createdAt, lang)}
                     </div>
                   </div>
                   <button
@@ -4098,7 +4068,7 @@ const CustomerProfile = ({ user, t, lang }: { user: AuthUser | null, t: any, lan
             </div>
             <div className={lang === 'ar' ? 'text-right' : 'text-left'}>
               <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">{t.orders.dashboard.joinedDate}</label>
-              <p className="text-brand-navy font-medium">{profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString(lang === 'ar' ? 'ar-SA-u-ca-gregory' : 'en-US') : 'N/A'}</p>
+              <p className="text-brand-navy font-medium">{formatRiyadhDate(profile?.createdAt, lang)}</p>
             </div>
           </div>
 
@@ -4696,7 +4666,7 @@ const OrderManager = ({
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-xs text-gray-500">{new Date(order.createdAt).toLocaleDateString(isRtl ? 'ar-SA-u-ca-gregory' : 'en-US')}</span>
+                      <span className="text-xs text-gray-500">{formatRiyadhDate(order.createdAt, isRtl ? 'ar' : 'en')}</span>
                     </td>
                     <td className="px-6 py-4">
                       {order.odooOrderName ? (
@@ -4782,7 +4752,7 @@ const OrderManager = ({
                       <span className="text-sm font-medium text-gray-600">{o.partner_id[1]}</span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-xs text-gray-500">{new Date(o.date_order).toLocaleDateString(isRtl ? 'ar-SA-u-ca-gregory' : 'en-US')}</span>
+                      <span className="text-xs text-gray-500">{formatRiyadhDate(o.date_order, isRtl ? 'ar' : 'en')}</span>
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-sm font-bold text-brand-orange">⃁ {o.amount_total?.toLocaleString()}</span>
@@ -5134,7 +5104,7 @@ const CustomerManager = ({ setModalContent }: { setModalContent: (content: { tit
                   <td className="px-8 py-4 text-sm text-gray-600 font-medium">{c.phoneNumber || 'N/A'}</td>
                   <td className="px-8 py-4 text-sm text-gray-600">{c.address || 'N/A'}</td>
                   <td className="px-8 py-4 text-sm text-gray-400">
-                    {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : 'N/A'}
+                    {formatRiyadhDate(c.createdAt, 'ar')}
                   </td>
                   <td className="px-8 py-4 text-right">
                     <button
@@ -6762,9 +6732,12 @@ export default function App() {
             }));
 
             setProducts(prev => {
-              const existingIds = new Set(prev.map(p => p.id));
-              const newItems = odooMapped.filter((p: any) => !existingIds.has(p.id));
-              return [...prev, ...newItems].slice(0, 50);
+              const existingIds = new Set(prev.map(p => Number(p.id)));
+              const newItems = odooMapped.filter((p: any) => !existingIds.has(Number(p.id)));
+              const combined = [...prev, ...newItems].slice(0, 100);
+              // Final safety check for absolute uniqueness
+              const unique = Array.from(new Map(combined.map(p => [Number(p.id), p])).values());
+              return unique;
             });
             console.log(`[Odoo] Loaded ${odooMapped.length} products successfully.`);
           }
@@ -6790,8 +6763,10 @@ export default function App() {
 
       if (allProducts.length > 0) {
         setProducts(prev => {
-          const odooProducts = prev.filter(p => p.isOdoo && !allProducts.some(ap => ap.id === p.id));
-          return [...allProducts, ...odooProducts].slice(0, 50);
+          const odooProducts = prev.filter(p => p.isOdoo && !allProducts.some(ap => Number(ap.id) === Number(p.id)));
+          const combined = [...allProducts, ...odooProducts].slice(0, 100);
+          const unique = Array.from(new Map(combined.map(p => [Number(p.id), p])).values());
+          return unique;
         });
       }
     }, (error) => {
@@ -7073,6 +7048,7 @@ export default function App() {
         setModalContent={setModalContent}
         t={t}
         lang={lang}
+        onOpenTerms={() => setIsTermsOpen(true)}
       />
       <TermsModal
         isOpen={isTermsOpen}
@@ -7324,7 +7300,7 @@ export default function App() {
                                 {(isDone || isActive) && stage.event?.date ? (
                                   <div className="mt-0.5">
                                     <p className="text-sm font-semibold text-gray-600">
-                                      {new Date(stage.event.date).toLocaleString(isRtl ? 'ar-SA' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                      {formatRiyadhDate(stage.event.date, isRtl ? 'ar' : 'en', true)}
                                     </p>
                                     {!stage.event.title && firebaseCreatedAt && stage.event.date === firebaseCreatedAt && idx > 0 && (
                                       <p className="text-[10px] text-gray-400 italic">{t.orders.dashboard.approximateDate}</p>

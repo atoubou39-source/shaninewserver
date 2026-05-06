@@ -1,0 +1,795 @@
+const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalContent, t, lang }: { isOpen: boolean, onClose: () => void, items: CartItem[], onClearCart: () => void, user: AuthUser | null, setModalContent: (content: { title: string; message: string; type: 'success' | 'error' } | null) => void, t: any, lang: string }) => {
+  const [formData, setFormData] = useState({
+    customerName: "",
+    email: "",
+    phone1: "",
+    phone2: "",
+    address: "",
+    city: "",
+    district: "",
+    salesRep: "",
+    salespersonId: null as number | null,
+    paymentMethod: "deferred_invoice" as string,
+    agreed: false
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [blockedMsg, setBlockedMsg] = useState("");
+
+  // Fetch user profile data from Firestore + Odoo
+  useEffect(() => {
+    if (user && isOpen) {
+      const val = (v: any) => (v && v !== false && v !== "false") ? String(v) : "";
+
+      const fetchProfile = async () => {
+        console.log("[Checkout] fetchProfile START", { uid: user.uid, email: user.email });
+
+        // Step 1: Initial population from Auth
+        setFormData(prev => {
+          console.log("[Checkout] Step 1: Initial population", { currentSalesRep: prev.salesRep });
+          return {
+            ...prev,
+            customerName: prev.customerName || user.name || "",
+            email: prev.email || user.email || "",
+            phone1: prev.phone1 || user.phone || "",
+            salesRep: (lang === 'ar' ? "جاري التحميل..." : "Loading..."),
+          };
+        });
+
+        // Step 2: Enrich from Firestore
+        let firestoreData: any = {};
+        try {
+          console.log("[Checkout] Step 2: Fetching Firestore user doc...");
+          const userDocSnap = await getDoc(doc(db, "users", user.uid));
+          if (userDocSnap.exists()) {
+            firestoreData = userDocSnap.data();
+            console.log("[Checkout] Firestore data found:", firestoreData);
+            setFormData(prev => ({
+              ...prev,
+              customerName: firestoreData.facilityName || prev.customerName,
+              email: firestoreData.email || prev.email,
+              phone1: firestoreData.phoneNumber || prev.phone1,
+              address: firestoreData.address || prev.address,
+              city: firestoreData.city || prev.city,
+              district: firestoreData.district || prev.district,
+              phone2: firestoreData.phone2 || prev.phone2,
+            }));
+          } else {
+            console.log("[Checkout] No Firestore user doc found");
+          }
+        } catch (e) {
+          console.error("[Checkout] Firestore error:", e);
+        }
+
+        // Step 3: Enrich from Odoo
+        const email = (firestoreData.email || user.email || "").toLowerCase().trim();
+        const phone = (firestoreData.phoneNumber || user.phone || "").trim();
+
+        console.log("[Checkout] Step 3: Odoo enrichment starting...", { email, phone });
+
+        if (email || phone) {
+          console.log("[Checkout] Initiating Odoo enrichment...", { email, phone });
+          setFormData(prev => ({ ...prev, salesRep: t.orders.dashboard.loading }));
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => {
+              console.warn("[Checkout] Odoo fetch timed out after 15s");
+              controller.abort();
+            }, 15000);
+
+            const apiUrl = getApiUrl("/api/auth/verify-odoo-customer");
+            console.log("[Checkout] Calling API:", apiUrl);
+
+            const odooRes = await fetch(apiUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+              },
+              mode: "cors",
+              cache: "no-cache",
+              signal: controller.signal,
+              body: JSON.stringify({ phone, email })
+            });
+
+            clearTimeout(timeoutId);
+            console.log("[Checkout] API Response status:", odooRes.status);
+
+            const odooResult = await odooRes.json();
+            console.log("[Checkout] API Result success:", odooResult.success);
+
+            if (odooResult.success && odooResult.customer) {
+              const c = odooResult.customer;
+              console.log("[Checkout] Customer found:", c.name, "Salesperson:", c.salesperson_name);
+
+              // Map salesperson name to Arabic if needed
+              let salesRepDisplay = val(c.salesperson_name);
+              if (!salesRepDisplay || salesRepDisplay === "Not Assigned") {
+                salesRepDisplay = lang === 'ar' ? "غير معين" : "Not Assigned";
+              }
+
+              setFormData(prev => ({
+                ...prev,
+                customerName: val(c.name) || prev.customerName,
+                email: val(c.email) || prev.email,
+                phone1: val(c.phone) || prev.phone1,
+                phone2: val(c.mobile) || prev.phone2,
+                address: val(c.street) || prev.address,
+                city: val(c.city) || prev.city,
+                district: val(c.district) || prev.district,
+                salesRep: salesRepDisplay,
+                salespersonId: c.salesperson_id || null,
+              }));
+
+              if (c.sale_warn === 'block') {
+                setIsBlocked(true);
+                setBlockedMsg(val(c.sale_warn_msg) || "");
+                console.log("[Checkout] BLOCKED:", c.sale_warn_msg);
+              } else {
+                setIsBlocked(false);
+                setBlockedMsg("");
+              }
+            } else {
+              console.log("[Checkout] No customer data returned from Odoo or search failed");
+              setFormData(prev => ({
+                ...prev,
+                salesRep: lang === 'ar' ? "غير معين" : "Not Assigned"
+              }));
+            }
+          } catch (e: any) {
+            console.error("[Checkout] Odoo fetch error:", e);
+            const errorDetail = e.name === 'AbortError' ? (lang === 'ar' ? "انتهت المهلة" : "Timeout") : (e.message || "Unknown");
+            setFormData(prev => ({
+              ...prev,
+              salesRep: lang === 'ar' ? `غير متوفر (${errorDetail})` : `Not Available (${errorDetail})`
+            }));
+          }
+        } else {
+          console.log("[Checkout] No email or phone to search Odoo with");
+          setFormData(prev => ({
+            ...prev,
+            salesRep: lang === 'ar' ? "غير معين" : "Not Assigned"
+          }));
+        }
+      };
+      fetchProfile();
+    }
+  }, [user, isOpen]);
+
+  if (items.length === 0 && !isSuccess) return null;
+
+  const total = items.reduce((sum, item) => {
+    const priceStr = item.discountPrice || item.price;
+    const price = parseFloat(priceStr.replace(/[^\d.]/g, ''));
+    return sum + (price * item.quantity);
+  }, 0);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (isBlocked) {
+      setModalContent({
+        title: t.checkout.customerBlocked,
+        message: blockedMsg || t.checkout.customerBlockedMsg,
+        type: 'error'
+      });
+      return;
+    }
+
+    if (!formData.agreed) {
+      setModalContent({
+        title: t.checkout.alert,
+        message: t.checkout.agreeTerms,
+        type: 'error'
+      });
+      return;
+    }
+
+    if (!formData.phone1?.trim()) {
+      setModalContent({
+        title: t.checkout.alert,
+        message: (lang === 'ar' ? "يرجى إدخال رقم الهاتف" : "Please enter your phone number"),
+        type: 'error'
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    const orderStart = Date.now();
+    console.log("[Checkout] START order submission...");
+
+    let cleanOrderData: any = null;
+    try {
+      // Validate mandatory fields (Phone is essential)
+      if (!formData.phone1?.trim()) {
+        throw new Error("Missing required field: phone1");
+      }
+
+      // Robust total calculation to avoid NaN
+      const safeTotal = items.reduce((sum, item) => {
+        try {
+          const priceStr = String(item.discountPrice || item.price || "0");
+          const price = parseFloat(priceStr.replace(/[^\d.]/g, '')) || 0;
+          return sum + (price * (item.quantity || 1));
+        } catch (e) {
+          console.warn("[Checkout] Error calculating item price:", item.name, e);
+          return sum;
+        }
+      }, 0);
+
+      const orderData = {
+        userId: user?.uid || null,
+        customerName: (formData.customerName || "").trim() || (lang === 'ar' ? "عميل جديد" : "New Customer"),
+        email: (formData.email || "").trim(),
+        phone1: formData.phone1.trim(),
+        phone2: (formData.phone2 || "").trim(),
+        address: (formData.address || "").trim(),
+        city: formData.city?.trim() || "Not Provided",
+        district: formData.district?.trim() || "Not Provided",
+        salesRep: (formData.salesRep === t.orders.dashboard.loading || formData.salesRep === (lang === 'ar' ? "جاري التحميل..." : "Loading..."))
+          ? (lang === 'ar' ? "غير معين" : "Not Assigned")
+          : (formData.salesRep || ""),
+        salespersonId: formData.salespersonId || null,
+        paymentMethod: formData.paymentMethod || "deferred_invoice",
+        items: items.map(item => ({
+          id: item.id || 0,
+          name: item.name || "Unknown Product",
+          price: String(item.price || "0"),
+          discountPrice: item.discountPrice ? String(item.discountPrice) : null,
+          quantity: item.quantity || 1,
+          isOdoo: !!item.isOdoo
+        })),
+        total: safeTotal,
+        status: 'pending_approval',
+        createdAt: new Date().toISOString()
+      };
+
+      // Final sanitization: Remove any accidental undefined values that might crash Firestore
+      cleanOrderData = JSON.parse(JSON.stringify(orderData, (key, value) =>
+        value === undefined ? null : value
+      ));
+
+      // Check network status
+      if (!window.navigator.onLine) {
+        throw new Error("Offline: Please check your internet connection.");
+      }
+
+      console.log("[Firebase] Project ID being used:", db.app.options.projectId);
+      console.log("[Checkout] Final sanitized data to send:", JSON.stringify(cleanOrderData, null, 2));
+      // Use setDoc instead of addDoc for better reliability
+      const ordersCol = collection(db, "orders");
+      const docRef = doc(ordersCol); // Manually create a doc reference with a new ID
+
+      try {
+        console.log(`[Checkout] [${Date.now() - orderStart}ms] Saving to Firestore (5s timeout)...`);
+
+        // Wrap setDoc in a 5-second timeout to trigger Emergency Mode if it hangs
+        const savePromise = setDoc(docRef, cleanOrderData);
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("quota-exceeded-timeout")), 5000)
+        );
+
+        await Promise.race([savePromise, timeoutPromise]);
+        console.log(`[Checkout] [${Date.now() - orderStart}ms] Saved to Firestore successfully. ID: ${docRef.id}`);
+      } catch (saveError: any) {
+        const errorMsg = saveError.message || String(saveError);
+        const isQuota = errorMsg.includes("resource-exhausted") ||
+          errorMsg.includes("quota-exceeded") ||
+          errorMsg === "quota-exceeded-timeout";
+
+        if (isQuota) {
+          console.warn("[Checkout] Firestore Quota Exceeded or Timeout! Using Emergency Mode...");
+          // Emergency Odoo Sync...
+          const syncUrl = getApiUrl("/api/odoo/orders");
+          try {
+            const odooResponse = await fetch(syncUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                customerEmail: formData.email,
+                customerName: formData.customerName,
+                phone: formData.phone1,
+                items: cleanOrderData.items,
+                address: `${formData.address}, ${formData.city}, ${formData.district}`,
+                salespersonId: formData.salespersonId,
+                salesRepName: formData.salesRep || ""
+              })
+            });
+
+            if (odooResponse.ok) {
+              const odooResult = await odooResponse.json();
+              if (odooResult.success) {
+                setModalContent({
+                  title: t.checkout.orderReceived + " (Emergency Mode)",
+                  message: t.checkout.orderCreatedSuccess.replace('{orderName}', odooResult.orderName || "NEW") + "\n\n(ملاحظة: تم إرسال الطلب مباشرة لنظام Odoo بسبب امتلاء حصة Firebase)",
+                  type: 'success'
+                });
+                setIsSuccess(true);
+                onClearCart();
+                setIsSubmitting(false);
+                return;
+              }
+            }
+          } catch (e) {
+            console.error("[Emergency Mode] Sync failed:", e);
+          }
+        }
+        throw saveError;
+      }
+
+      // Trigger Odoo Order Creation
+      let odooOrderName = "";
+
+      // Try to sync to Odoo, but don't let it block the success flow if it fails
+      try {
+        const syncUrl = getApiUrl("/api/odoo/orders");
+        console.log(`[Checkout] [${Date.now() - orderStart}ms] Syncing to Odoo...`, syncUrl);
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          console.warn("[Checkout] Odoo sync timed out after 60s");
+          controller.abort();
+        }, 60000);
+
+        const odooResponse = await fetch(syncUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+          },
+          mode: "cors",
+          cache: "no-cache",
+          signal: controller.signal,
+          body: JSON.stringify({
+            customerEmail: formData.email,
+            customerName: formData.customerName,
+            phone: formData.phone1,
+            items: cleanOrderData.items,
+            address: `${formData.address}, ${formData.city}, ${formData.district}`,
+            salespersonId: formData.salespersonId,
+            salesRepName: formData.salesRep || ""
+          })
+        });
+
+        clearTimeout(timeoutId);
+        console.log(`[Checkout] [${Date.now() - orderStart}ms] Odoo sync response status: ${odooResponse.status}`);
+
+        if (odooResponse.ok) {
+          const odooResult = await odooResponse.json();
+          console.log(`[Checkout] [${Date.now() - orderStart}ms] Odoo sync result success: ${odooResult.success}`);
+
+          if (odooResult.success) {
+            odooOrderName = odooResult.orderName || `SO-${odooResult.orderId || 'NEW'}`;
+            const updateData: any = {
+              odooOrderName,
+              invoiceName: odooResult.invoiceName || null,
+              syncStatus: 'success',
+              syncedAt: new Date().toISOString()
+            };
+            if (odooResult.orderId) {
+              updateData.odooOrderId = odooResult.orderId;
+            }
+
+            // Filter out undefined values to prevent Firestore crash
+            const cleanUpdateData = Object.fromEntries(
+              Object.entries(updateData).filter(([_, v]) => v !== undefined)
+            );
+
+            await updateDoc(docRef, cleanUpdateData);
+
+            setModalContent({
+              title: t.checkout.orderReceived,
+              message: t.checkout.orderCreatedSuccess.replace('{orderName}', odooOrderName) + "\n\n" + t.checkout.orderReviewNotice,
+              type: 'success'
+            });
+          } else {
+            console.error("Odoo sync returned failure:", odooResult.error);
+            await updateDoc(docRef, {
+              syncStatus: 'failed',
+              syncError: odooResult.error
+            });
+            // Show success for website but warning for Odoo
+            setModalContent({
+              title: t.checkout.orderReceived,
+              message: t.checkout.orderSentMessage + "\n\n(Odoo Sync: " + (odooResult.error || "Failed") + ")",
+              type: 'success'
+            });
+          }
+        } else if (odooResponse.status === 403) {
+          // Blocked or Not Found in Odoo - This is a hard failure for the user
+          const odooResult = await odooResponse.json().catch(() => ({ message: "عذراً، لا يمكن إتمام الطلب في الوقت الحالي." }));
+          console.error("Odoo sync blocked (403):", odooResult);
+
+          // DO NOT delete from Firestore anymore - keep the record locally
+          await updateDoc(docRef, {
+            syncStatus: 'failed',
+            syncError: odooResult.message || 'Odoo 403 Access Denied'
+          });
+
+          setModalContent({
+            title: "تنبيه من النظام",
+            message: odooResult.message || "عذراً، حسابك محظور من إنشاء طلبات جديدة في النظام. يرجى التواصل مع الإدارة.",
+            type: 'error'
+          });
+          setIsSubmitting(false);
+          return; // Stop the flow here
+        } else {
+          const errorText = await odooResponse.text().catch(() => "Unknown error");
+          console.error("Odoo API returned non-ok status:", odooResponse.status, errorText);
+          throw new Error(`Server Error (${odooResponse.status}): ${errorText.slice(0, 50)}`);
+        }
+      } catch (e: any) {
+        const isTimeout = e.name === 'AbortError';
+        const errorMsg = isTimeout ? "Request Timeout" : (e.message || "Connection Failed");
+        const fullSyncUrl = getApiUrl("/api/odoo/orders");
+
+        console.error("Failed to sync order to Odoo:", {
+          error: e,
+          message: e.message,
+          name: e.name,
+          url: fullSyncUrl,
+          stack: e.stack
+        });
+
+        // Detailed error analysis
+        let detailedError = errorMsg;
+        if (errorMsg === "Failed to fetch") {
+          detailedError = "Failed to fetch (Network Error or CORS). Please check if the backend is running and allows requests from this origin.";
+        }
+
+        await updateDoc(docRef, {
+          syncStatus: 'failed',
+          syncError: `${detailedError} | URL: ${fullSyncUrl}`
+        });
+
+        // We still show success for the website order even if Odoo sync fails
+        setModalContent({
+          title: t.checkout.orderReceived,
+          message: t.checkout.orderSentMessage + "\n\nOdoo Sync Status: " + detailedError + "\nAPI URL: `" + fullSyncUrl + "`",
+          type: 'success'
+        });
+      }
+
+      // Trigger email notification
+      try {
+        console.log("Sending email request to server for order:", docRef.id);
+        await fetch(getApiUrl("/api/send-email"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            orderId: docRef.id,
+            type: "order_confirmation",
+            customerEmail: formData.email,
+            customerName: formData.customerName,
+            total: safeTotal,
+            items: cleanOrderData.items
+          })
+        });
+      } catch (e) {
+        console.error("Email notification failed:", e);
+      }
+
+      setIsSuccess(true);
+      onClearCart();
+    } catch (error: any) {
+      console.error("CRITICAL: Order Save Failed:", error);
+
+      const firestoreError = error.message || String(error);
+      const isQuotaExceeded = firestoreError.includes("resource-exhausted") || firestoreError.includes("quota-exceeded");
+
+      // --- EMERGENCY MODE ---
+      // If Firestore is full (quota exceeded), try to send DIRECTLY to Odoo anyway
+      if (isQuotaExceeded) {
+        console.warn("[Checkout] Firestore Quota Exceeded. Entering EMERGENCY MODE (Direct Odoo Sync)...");
+        try {
+          const syncUrl = getApiUrl("/api/odoo/orders");
+          const odooResponse = await fetch(syncUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              customerEmail: formData.email,
+              customerName: formData.customerName,
+              phone: formData.phone1,
+              items: cleanOrderData.items,
+              address: `${formData.address}, ${formData.city}, ${formData.district}`,
+              salespersonId: formData.salespersonId,
+              salesRepName: formData.salesRep || ""
+            })
+          });
+
+          if (odooResponse.ok) {
+            const odooResult = await odooResponse.json();
+            if (odooResult.success) {
+              setModalContent({
+                title: t.checkout.orderReceived + " (Emergency Mode)",
+                message: t.checkout.orderCreatedSuccess.replace('{orderName}', odooResult.orderName || "NEW") + "\n\n(ملاحظة: تم إرسال الطلب مباشرة لنظام Odoo بسبب امتلاء حصة Firebase)",
+                type: 'success'
+              });
+              setIsSuccess(true);
+              onClearCart();
+              setIsSubmitting(false);
+              return; // Success in emergency mode!
+            }
+          }
+        } catch (e) {
+          console.error("[Emergency Mode] Direct Odoo sync failed too:", e);
+        }
+      }
+
+      // Original error handling if not quota or if emergency mode fails
+      let errorMessage = t.checkout.orderSaveError;
+      if (isQuotaExceeded) {
+        errorMessage = lang === 'ar'
+          ? "عذراً، تم تجاوز الحصة المجانية لليوم في Firebase. يرجى التواصل مع الإدارة لترقية الحساب."
+          : "Firebase Quota Exceeded. Please upgrade your plan or wait until tomorrow.";
+      } else if (firestoreError.includes("permission-denied")) {
+        errorMessage = lang === 'ar'
+          ? "عذراً، ليس لديك صلاحية لإتمام الطلب."
+          : "Permission Denied: You don't have permission to place this order.";
+      }
+
+      setModalContent({
+        title: t.checkout.orderError,
+        message: errorMessage,
+        type: 'error'
+      });
+
+      try {
+        handleFirestoreError(error, OperationType.CREATE, "orders");
+      } catch (e) { }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 md:p-6">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="absolute inset-0 bg-brand-navy/80 backdrop-blur-sm"
+          />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            className="relative w-full max-w-2xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+          >
+            {/* Header */}
+            <div className="p-8 pb-0 flex justify-between items-start">
+              <div>
+                <h2 className="text-3xl font-serif text-brand-navy mb-1">
+                  {isSuccess ? t.checkout.orderPlaced : t.checkout.title}
+                </h2>
+                <p className="text-gray-400 text-sm">
+                  {isSuccess
+                    ? t.checkout.thankYou
+                    : t.checkout.reviewOrder}
+                </p>
+              </div>
+              <button
+                onClick={onClose}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <X size={24} className="text-gray-400" />
+              </button>
+            </div>
+
+            <div className="p-8 pt-6 overflow-y-auto custom-scrollbar">
+              {isSuccess ? (
+                <div className="text-center py-12">
+                  <div className="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <Check size={40} />
+                  </div>
+                  <h3 className="text-2xl font-serif text-brand-navy mb-4">{t.checkout.orderPlaced}</h3>
+                  <p className="text-gray-500 mb-8 max-w-sm mx-auto font-medium">
+                    {t.checkout.orderSentMessage}
+                  </p>
+                  <button
+                    onClick={onClose}
+                    className="bg-brand-navy text-white px-10 py-4 rounded-xl text-[10px] tracking-[0.2em] font-bold hover:bg-brand-orange transition-all"
+                  >
+                    {t.checkout.backToStore}
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleSubmit}>
+                  {/* Order Summary */}
+                  <div className="mb-8">
+                    <div className="flex items-center gap-3 mb-4">
+                      <span className="text-[10px] tracking-[0.3em] uppercase font-bold text-brand-orange">{t.checkout.orderSummary}</span>
+                      <div className="h-[1px] flex-1 bg-gray-100" />
+                    </div>
+                    <div className="bg-brand-cream/50 rounded-2xl p-6">
+                      <div className="space-y-4 mb-4 pb-4 border-b border-brand-orange/10">
+                        {items.map(item => (
+                          <div key={item.id} className="flex justify-between items-center">
+                            <span className="text-brand-navy font-medium">{item.name}</span>
+                            <span className="text-gray-500 text-sm">× {item.quantity} {t.products.pricePrefix}{item.price.replace(/[^\d.]/g, '')}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] tracking-[0.2em] font-bold text-brand-navy uppercase">{t.checkout.totalAmount}</span>
+                        <span className="text-2xl font-serif font-bold text-brand-orange">{t.products.pricePrefix}{total.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Your Details */}
+                  <div className="mb-8">
+                    <div className="flex items-center gap-3 mb-6">
+                      <span className="text-[10px] tracking-[0.3em] uppercase font-bold text-brand-orange">{t.checkout.yourDetails}</span>
+                      <div className="h-[1px] flex-1 bg-gray-100" />
+                    </div>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.facilityName}</label>
+                        <input
+                          readOnly
+                          type="text"
+                          placeholder={t.checkout.facilityPlaceholder}
+                          value={formData.customerName}
+                          className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-gray-600 cursor-not-allowed"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.emailLabel}</label>
+                        <input
+                          readOnly
+                          type="email"
+                          placeholder={t.checkout.emailPlaceholder}
+                          value={formData.email}
+                          className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-gray-600 cursor-not-allowed"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.phoneLabel}</label>
+                          <input
+                            readOnly
+                            type="text"
+                            placeholder={t.checkout.phonePlaceholder}
+                            value={formData.phone1}
+                            className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-gray-600 cursor-not-allowed"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.secondaryPhone}</label>
+                          <input
+                            readOnly
+                            type="text"
+                            placeholder={t.checkout.phonePlaceholder}
+                            value={formData.phone2}
+                            className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-gray-600 cursor-not-allowed"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.addressLabel}</label>
+                        <input
+                          readOnly
+                          type="text"
+                          placeholder={t.checkout.addressPlaceholder}
+                          value={formData.address}
+                          className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-gray-600 cursor-not-allowed"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.cityLabel}</label>
+                          <input
+                            readOnly
+                            type="text"
+                            placeholder={t.checkout.cityPlaceholder}
+                            value={formData.city}
+                            className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-gray-600 cursor-not-allowed"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.districtLabel}</label>
+                          <input
+                            readOnly
+                            type="text"
+                            placeholder={t.checkout.districtPlaceholder}
+                            value={formData.district}
+                            className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-gray-600 cursor-not-allowed"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-brand-navy uppercase mb-2 ms-1">{t.checkout.salesRepLabel}</label>
+                        <input
+                          readOnly
+                          type="text"
+                          placeholder={t.checkout.salesRepPlaceholder}
+                          value={formData.salesRep || (lang === 'ar' ? "غير معين" : "Not Assigned")}
+                          className="w-full p-4 bg-gray-100 border border-gray-100 rounded-xl text-brand-navy font-bold cursor-not-allowed"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Payment Method */}
+                  <div className="mb-8">
+                    <div className="flex items-center gap-3 mb-6">
+                      <span className="text-[10px] tracking-[0.3em] uppercase font-bold text-brand-orange">{t.checkout.paymentMethod}</span>
+                      <div className="h-[1px] flex-1 bg-gray-100" />
+                    </div>
+                    <div className="flex items-center justify-center gap-3 p-4 border-2 border-brand-orange bg-brand-orange/5 rounded-xl">
+                      <Building2 size={20} className="text-brand-orange" />
+                      <span className="text-xs font-bold text-brand-navy">{t.checkout.deferredInvoice}</span>
+                    </div>
+                  </div>
+
+                  {/* Terms */}
+                  <div className="mb-8 flex items-start gap-3 p-4 bg-gray-50 rounded-xl">
+                    <input
+                      required
+                      type="checkbox"
+                      checked={formData.agreed}
+                      onChange={e => setFormData({ ...formData, agreed: e.target.checked })}
+                      className="mt-1 w-4 h-4 rounded border-gray-300 text-brand-orange focus:ring-brand-orange"
+                    />
+                    <p className="text-[10px] text-gray-500 leading-relaxed">
+                      {t.checkout.termsAgree} <span className="text-brand-orange underline">{t.checkout.termsLink}</span>, <span className="text-brand-orange underline">{t.checkout.privacyLink}</span>, <span className="text-brand-orange underline">{t.checkout.refundLink}</span> {t.checkout.ofBrand}
+                    </p>
+                  </div>
+
+                  {/* Blocked Status Warning - Moved here to be near the submit button */}
+                  {isBlocked && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mb-8 p-6 bg-red-50 border border-red-100 rounded-3xl flex items-start gap-4"
+                    >
+                      <div className="w-12 h-12 bg-red-100 rounded-2xl flex items-center justify-center flex-shrink-0">
+                        <Lock className="text-red-500" size={24} />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="text-red-900 font-bold text-sm mb-1">
+                          {t.orders.dashboard.accountBlocked}
+                        </h4>
+                        <p className="text-red-700 text-xs leading-relaxed">
+                          {blockedMsg || t.orders.dashboard.accountBlockedDescription}
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* Confirm Button */}
+                  <button
+                    disabled={isSubmitting || isBlocked}
+                    type="submit"
+                    className={`w-full ${isBlocked ? 'bg-gray-400 cursor-not-allowed' : 'bg-brand-navy hover:bg-brand-orange shadow-brand-navy/10'} text-white py-5 rounded-2xl text-[11px] tracking-[0.2em] font-bold flex items-center justify-center gap-3 transition-all shadow-lg disabled:opacity-50`}
+                  >
+                    {isSubmitting ? (
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : isBlocked ? (
+                      <>
+                        <Lock size={14} className="text-white" />
+                        <span>{t.orders.dashboard.accountBlockedBadge}</span>
+                      </>
+                    ) : (
+                      <>
+                        <div className="bg-green-500 rounded-full p-0.5">
+                          <Check size={14} className="text-white" />
+                        </div>
+                        <span>{t.checkout.confirmOrder}</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              )}
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+};

@@ -152,34 +152,20 @@ export const RegisterPage = () => {
 
       const data = await response.json();
       if (data.success && data.uid) {
-        // New flow: user is created server-side, OTP verified
-        // Now register them in our local auth system
-        try {
-
-          const cleanPhone = sanitizePhone(formData.phone);
-          const regRes = await fetch(`${API_BASE}/api/auth/register`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              phone: cleanPhone,
-              password: formData.password,
-              name: formData.name,
-              email: formData.email || undefined
-            })
-          });
-          const regData = await regRes.json();
-          if (regData.success && regData.token) {
-            saveSession(regData.token, regData.user);
-          }
-        } catch (e) {
-          console.warn('[Register] Could not save JWT session, will need to login manually');
+        // User is created server-side during OTP verification
+        // Save the session if token and user are provided
+        if (data.token && data.user) {
+          saveSession(data.token, data.user);
+          console.log('[Register] Session saved directly from OTP verification');
+        } else {
+          console.warn('[Register] No token returned from verification, user may need to login manually');
         }
 
         setStatus({ 
           type: 'success', 
           message: lang === 'ar' 
-            ? 'تم إنشاء الحساب بنجاح! يرجى تسجيل الدخول باستخدام رقم جوالك وكلمة المرور.' 
-            : 'Account created successfully! Please login with your phone and password.' 
+            ? 'تم إنشاء الحساب بنجاح! جاري تحويلك لوحة التحكم...' 
+            : 'Account created successfully! Redirecting to dashboard...' 
         });
         
         // Redirect to dashboard or login after 3 seconds

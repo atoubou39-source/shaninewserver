@@ -1665,22 +1665,41 @@ const sanitizePhone = (phone: string): string => {
 
     // Create or update user in local auth db if password provided (register flow)
     try {
+      let userRecord = null;
       if (password) {
         const existingUser = authDb.findUserByPhone(cleanPhone);
         if (!existingUser) {
-          authDb.createUser({ phone: cleanPhone, email, password, name: displayName, odooPartnerId: odooId });
+          userRecord = authDb.createUser({ phone: cleanPhone, email, password, name: displayName, odooPartnerId: odooId });
         } else {
           authDb.updatePassword(uid, password);
+          userRecord = authDb.findUserByUid(uid);
         }
+      } else {
+        userRecord = authDb.findUserByPhone(cleanPhone);
       }
 
       // Clean OTP
       otpStore.delete(cleanPhone);
 
       // Generate JWT token for direct login after OTP
-      const token = signToken({ uid, phone: cleanPhone, email, name: displayName, isAdmin: false, role: 'customer' });
+      const token = signToken({ uid, phone: cleanPhone, email, name: displayName, isAdmin: userRecord?.isAdmin || false, role: userRecord?.role || 'customer' });
 
-      res.json({ success: true, uid, token, customToken: token }); // customToken kept for compat
+      res.json({ 
+        success: true, 
+        uid, 
+        token, 
+        customToken: token,
+        user: userRecord ? {
+          uid: userRecord.uid,
+          phone: userRecord.phone,
+          email: userRecord.email,
+          name: userRecord.name,
+          isAdmin: userRecord.isAdmin,
+          role: userRecord.role,
+          accountActivated: userRecord.accountActivated,
+          odooPartnerId: userRecord.odooPartnerId,
+        } : undefined
+      });
     } catch (error: any) {
       console.error("[Verify OTP Error]", error);
       res.status(500).json({ success: false, error: error.message });
@@ -1872,7 +1891,21 @@ const sanitizePhone = (phone: string): string => {
         role: user.role,
       });
 
-      res.json({ success: true, token, uid: user.uid });
+      res.json({ 
+        success: true, 
+        token, 
+        uid: user.uid,
+        user: {
+          uid: user.uid,
+          phone: user.phone,
+          email: user.email,
+          name: user.name,
+          isAdmin: user.isAdmin,
+          role: user.role,
+          accountActivated: user.accountActivated,
+          odooPartnerId: user.odooPartnerId,
+        }
+      });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
     }
