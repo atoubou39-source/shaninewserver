@@ -168,8 +168,8 @@ export const RegisterPage = () => {
             : 'Account created successfully! Redirecting to dashboard...' 
         });
         
-        // Redirect to dashboard or login after 3 seconds
-        setTimeout(() => navigate('/dashboard'), 3000);
+        // Redirect to dashboard after 1.5 seconds
+        setTimeout(() => navigate('/dashboard'), 1500);
       } else {
         setStatus({ 
           type: 'error', 

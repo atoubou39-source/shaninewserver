@@ -1665,40 +1665,47 @@ const sanitizePhone = (phone: string): string => {
 
     // Create or update user in local auth db if password provided (register flow)
     try {
-      let userRecord = null;
+      let user = null;
       if (password) {
         const existingUser = authDb.findUserByPhone(cleanPhone);
         if (!existingUser) {
-          userRecord = authDb.createUser({ phone: cleanPhone, email, password, name: displayName, odooPartnerId: odooId });
+          user = authDb.createUser({ phone: cleanPhone, email, password, name: displayName, odooPartnerId: odooId });
         } else {
-          authDb.updatePassword(uid, password);
-          userRecord = authDb.findUserByUid(uid);
+          user = authDb.updatePassword(uid, password) ? authDb.findUserByPhone(cleanPhone) : null;
         }
       } else {
-        userRecord = authDb.findUserByPhone(cleanPhone);
+        // Just verify OTP without password (could be used for simple login verify)
+        user = authDb.findUserByPhone(cleanPhone);
       }
 
       // Clean OTP
       otpStore.delete(cleanPhone);
 
       // Generate JWT token for direct login after OTP
-      const token = signToken({ uid, phone: cleanPhone, email, name: displayName, isAdmin: userRecord?.isAdmin || false, role: userRecord?.role || 'customer' });
+      const token = signToken({ 
+        uid: user?.uid || uid, 
+        phone: cleanPhone, 
+        email: user?.email || email, 
+        name: user?.name || displayName, 
+        isAdmin: user?.isAdmin || false, 
+        role: user?.role || 'customer' 
+      });
 
       res.json({ 
         success: true, 
-        uid, 
+        uid: user?.uid || uid, 
         token, 
         customToken: token,
-        user: userRecord ? {
-          uid: userRecord.uid,
-          phone: userRecord.phone,
-          email: userRecord.email,
-          name: userRecord.name,
-          isAdmin: userRecord.isAdmin,
-          role: userRecord.role,
-          accountActivated: userRecord.accountActivated,
-          odooPartnerId: userRecord.odooPartnerId,
-        } : undefined
+        user: user ? {
+          uid: user.uid,
+          phone: user.phone,
+          email: user.email,
+          name: user.name,
+          isAdmin: user.isAdmin,
+          role: user.role,
+          accountActivated: user.accountActivated,
+          odooPartnerId: user.odooPartnerId,
+        } : null
       });
     } catch (error: any) {
       console.error("[Verify OTP Error]", error);
