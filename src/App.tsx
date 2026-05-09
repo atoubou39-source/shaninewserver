@@ -4186,6 +4186,7 @@ const DashboardLayout = ({ children, user, role, t, lang, onToggleLang, cartCoun
   const adminMenuItems = [
     { name: t.orders.dashboard.overview, icon: <LayoutDashboard size={20} />, path: "/admin" },
     { name: t.orders.dashboard.orders, icon: <ShoppingBag size={20} />, path: "/admin/orders" },
+    { name: t.orders.dashboard.customers, icon: <Users size={20} />, path: "/admin/customers" },
     { name: t.orders.dashboard.products, icon: <Package size={20} />, path: "/admin/products" },
     { name: t.orders.dashboard.discounts, icon: <Percent size={20} />, path: "/admin/discounts" },
     { name: t.orders.dashboard.odooSync, icon: <RefreshCw size={20} />, path: "/admin/odoo" },
@@ -4201,7 +4202,8 @@ const DashboardLayout = ({ children, user, role, t, lang, onToggleLang, cartCoun
     { name: t.orders.dashboard.myProfile, icon: <UserIcon size={20} />, path: "/dashboard/profile" },
   ];
 
-  const menuItems = role === 'admin' ? adminMenuItems : customerMenuItems;
+  const isAdminPath = location.pathname.startsWith('/admin');
+  const menuItems = (role === 'admin' || isAdminPath) ? adminMenuItems : customerMenuItems;
 
   useEffect(() => {
     if (!user) {
@@ -4322,7 +4324,7 @@ const DashboardLayout = ({ children, user, role, t, lang, onToggleLang, cartCoun
             </button>
 
             {/* Cart Button */}
-            {role !== 'admin' && onOpenCart && (
+            {role !== 'admin' && !isAdminPath && onOpenCart && (
               <button
                 onClick={onOpenCart}
                 className={`relative flex items-center gap-2 bg-brand-navy text-white hover:bg-brand-orange transition-all duration-200 px-4 py-2.5 rounded-2xl shadow-md ${isRtl ? 'md:ml-4' : 'md:mr-4'}`}
@@ -4373,7 +4375,7 @@ const DashboardLayout = ({ children, user, role, t, lang, onToggleLang, cartCoun
         </header>
 
         <div className="p-10">
-          {role !== 'admin' && <DashboardCarousel lang={lang} t={t} />}
+          {role !== 'admin' && !isAdminPath && <DashboardCarousel lang={lang} t={t} />}
           {children}
         </div>
 
@@ -5337,9 +5339,9 @@ const DashboardOverview = ({ products, orders }: { products: Product[], orders: 
         ]);
 
         setOdooStats({
-          prodCount: prod.success ? prod.data.length : 0,
-          orderCount: ord.success ? ord.data.length : 0,
-          custCount: cust.success ? cust.data.length : 0
+          prodCount: prod.success && Array.isArray(prod.data) ? prod.data.length : 0,
+          orderCount: ord.success && Array.isArray(ord.data) ? ord.data.length : 0,
+          custCount: cust.success && Array.isArray(cust.data) ? cust.data.length : 0
         });
       } catch (e) {
         console.error("Failed to fetch Odoo stats for overview", e);
@@ -5349,17 +5351,17 @@ const DashboardOverview = ({ products, orders }: { products: Product[], orders: 
   }, []);
 
   const stats = [
-    { name: "Store Orders", value: orders.length, icon: <ShoppingBag className="text-brand-orange" />, sub: `Live from Firestore` },
-    { name: "Odoo ERP", value: odooStats.orderCount, icon: <RefreshCw className="text-blue-500" />, sub: "Synced Quotations" },
-    { name: "Total Customers", value: odooStats.custCount, icon: <Users className="text-purple-500" />, sub: "CRM Synced" },
-    { name: "Completed", value: orders.filter(o => o.status === 'completed').length, icon: <Check className="text-emerald-500" />, sub: "Store goal" },
+    { name: t.orders.dashboard.storeOrders, value: orders.length, icon: <ShoppingBag className="text-brand-orange" />, sub: "Live from Firestore" },
+    { name: t.orders.dashboard.odooErpOrders, value: odooStats.orderCount, icon: <RefreshCw className="text-blue-500" />, sub: "Synced Quotations" },
+    { name: t.orders.dashboard.customers, value: odooStats.custCount, icon: <Users className="text-purple-500" />, sub: "CRM Synced" },
+    { name: t.orders.dashboard.completed, value: orders.filter(o => o.status === 'completed').length, icon: <Check className="text-emerald-500" />, sub: "Store goal" },
   ];
 
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-serif text-brand-navy font-bold">Dashboard Overview</h1>
-        <p className="text-gray-500 mt-2 text-sm">Welcome back, Hakkal Admin. Here's what's happening today.</p>
+        <h1 className="text-3xl font-serif text-brand-navy font-bold">{t.orders.dashboard.overview}</h1>
+        <p className="text-gray-500 mt-2 text-sm">{t.orders.dashboard.adminDescription}</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -5378,7 +5380,7 @@ const DashboardOverview = ({ products, orders }: { products: Product[], orders: 
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
-          <h3 className="text-lg font-bold text-brand-navy mb-6">Recent Products</h3>
+          <h3 className="text-lg font-bold text-brand-navy mb-6">{t.orders.dashboard.recentProducts || 'Recent Products'}</h3>
           <div className="space-y-4">
             {products.slice(0, 4).map((p) => (
               <div key={p.id} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-xl transition-colors">
@@ -5396,7 +5398,7 @@ const DashboardOverview = ({ products, orders }: { products: Product[], orders: 
         </div>
 
         <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
-          <h3 className="text-lg font-bold text-brand-navy mb-6">Recent Orders</h3>
+          <h3 className="text-lg font-bold text-brand-navy mb-6">{t.orders.dashboard.recentOrders || 'Recent Orders'}</h3>
           <div className="space-y-4">
             {orders.slice(0, 4).map((order) => (
               <div key={order.firebaseId} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-xl transition-colors">
@@ -6916,7 +6918,7 @@ export default function App() {
         <Route path="/admin/discounts" element={
           <ProtectedRoute>
             <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
-              <DiscountsManager />
+              <DiscountsManager t={t} lang={lang} />
             </DashboardLayout>
           </ProtectedRoute>
         } />
@@ -6946,6 +6948,13 @@ export default function App() {
             </DashboardLayout>
           </ProtectedRoute>
         } />
+        <Route path="/admin/customers" element={
+          <ProtectedRoute>
+            <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
+              <CustomerSyncDashboard />
+            </DashboardLayout>
+          </ProtectedRoute>
+        } />
 
         <Route path="/admin/seo" element={
           <ProtectedRoute>
@@ -6959,8 +6968,8 @@ export default function App() {
             <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
               <div className="text-center py-20">
                 <FileText size={64} className="mx-auto text-gray-200 mb-6" />
-                <h1 className="text-3xl font-serif text-brand-navy font-bold">Blog Management</h1>
-                <p className="text-gray-500 mt-2">This feature is coming soon in the next update.</p>
+                <h1 className="text-3xl font-serif text-brand-navy font-bold">{t.orders.dashboard.blog}</h1>
+                <p className="text-gray-500 mt-2">{t.orders.dashboard.comingSoon || 'This feature is coming soon in the next update.'}</p>
               </div>
             </DashboardLayout>
           </ProtectedRoute>
@@ -6970,8 +6979,8 @@ export default function App() {
             <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
               <div className="text-center py-20">
                 <Settings size={64} className="mx-auto text-gray-200 mb-6" />
-                <h1 className="text-3xl font-serif text-brand-navy font-bold">General Settings</h1>
-                <p className="text-gray-500 mt-2">Configure your store's general information here.</p>
+                <h1 className="text-3xl font-serif text-brand-navy font-bold">{t.orders.dashboard.settings}</h1>
+                <p className="text-gray-500 mt-2">{t.orders.dashboard.settingsDescription || 'Configure your store\'s general information here.'}</p>
               </div>
             </DashboardLayout>
           </ProtectedRoute>

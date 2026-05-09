@@ -34,7 +34,8 @@ interface DiscountInput {
   [key: string]: string;
 }
 
-export function DiscountsManager() {
+export function DiscountsManager({ t, lang }: { t: any, lang: Language }) {
+  const isRtl = lang === 'ar';
   const [products, setProducts] = useState<Product[]>([]);
   const [discountInputs, setDiscountInputs] = useState<DiscountInput>({});
   const [loading, setLoading] = useState(false);
@@ -172,10 +173,10 @@ export function DiscountsManager() {
       <div className="bg-white p-8 rounded-3xl text-center">
         <AlertCircle className="w-12 h-12 text-brand-orange/40 mx-auto mb-4" />
         <h3 className="text-lg font-serif text-brand-navy mb-2">
-          لا توجد منتجات
+          {t.orders.dashboard.noProductsFound || 'No products found'}
         </h3>
         <p className="text-brand-navy/60">
-          يرجى مزامنة المنتجات من النظام أولاً
+          {t.orders.dashboard.syncProductsFirst || 'Please sync products from the system first'}
         </p>
       </div>
     );
@@ -184,18 +185,17 @@ export function DiscountsManager() {
   return (
     <div className="max-w-4xl mx-auto">
       {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center space-x-3 space-x-reverse mb-4">
+      <div className="mb-8" dir={isRtl ? 'rtl' : 'ltr'}>
+        <div className={`flex items-center space-x-3 ${isRtl ? 'space-x-reverse' : ''} mb-4`}>
           <div className="p-2 bg-brand-orange/10 rounded-lg">
             <Percent className="w-5 h-5 text-brand-orange" />
           </div>
-          <h2 className="text-3xl font-serif text-brand-navy">
-            إدارة التخفيضات
+          <h2 className="text-3xl font-serif text-brand-navy font-bold">
+            {t.orders.dashboard.discounts}
           </h2>
         </div>
         <p className="text-brand-navy/60">
-          عيّن أسعار مخفضة للمنتجات. ستظهر الأسعار المخفضة للعملاء في الموقع وفي
-          نظام شركة حقال للتجارة
+          {t.orders.dashboard.discountsDescription || 'Set discounted prices for products. These prices will be visible to customers on the website.'}
         </p>
       </div>
 

@@ -1307,6 +1307,25 @@ const sanitizePhone = (phone: string): string => {
     }
   });
 
+  app.get("/api/odoo/customers", async (req, res) => {
+    try {
+      const uid = await authenticateOdoo();
+      if (!uid) return res.status(401).json({ success: false, message: "Odoo Auth Failed" });
+      const customers = await callOdoo("object", "execute_kw", odooConfig.db, uid, getOdooCredential(), "res.partner", "search_read",
+        [[["customer_rank", ">", 0]]],
+        { 
+          fields: ["id", "name", "email", "phone", "mobile", "city", "street", "create_date", "user_id"],
+          order: "write_date desc",
+          limit: 100
+        }
+      );
+      res.json({ success: true, data: Array.isArray(customers) ? customers : [] });
+    } catch (e: any) {
+      console.error("[Odoo Customers] Error:", e);
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
   // Lookup Order by email and total
   app.post("/api/odoo/lookup-order", async (req, res) => {
     const { email, total, createdAt } = req.body;

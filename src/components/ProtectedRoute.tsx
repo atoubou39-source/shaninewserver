@@ -26,9 +26,18 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     return <Navigate to="/register" state={{ from: location }} replace />;
   }
 
-  // Admin bypass
+  // Admin check
+  const isAdminPath = location.pathname.startsWith('/admin');
+  if (isAdminPath && !isAdmin) {
+    return <Navigate to="/unauthorized" replace />;
+  }
+
   if (isAdmin) return <>{children}</>;
 
-  // Anyone logged in is now a customer
+  // Customer checks
+  if (requireActivation && !isActivated) {
+    return <Navigate to="/pending-activation" replace />;
+  }
+
   return <>{children}</>;
 };
