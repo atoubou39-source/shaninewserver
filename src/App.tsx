@@ -310,6 +310,9 @@ const INITIAL_SEO: SiteSettings["seo"] = {
 // --- Helpers ---
 
 const getStatusDetails = (status: string, t: any) => {
+  if (!t?.orders?.statuses) {
+    return { label: status, color: 'bg-gray-50 text-gray-700 border-gray-200' };
+  }
   const statusKey = status as keyof typeof t.orders.statuses;
   const label = t.orders.statuses[statusKey] || status;
 
@@ -4601,7 +4604,7 @@ const OrderManager = ({
   };
 
   const getStatusLabel = (status: string) => {
-    return t.orders.statuses[status] || status;
+    return t?.orders?.statuses?.[status] || status;
   };
 
   return (
@@ -6802,7 +6805,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const isDashboardRoute = window.location.pathname.startsWith('/dashboard') || window.location.pathname.startsWith('/my-orders');
+    const isDashboardRoute = window.location.pathname.startsWith('/dashboard') || window.location.pathname.startsWith('/my-orders') || window.location.pathname.startsWith('/admin');
     if (!isAuthReady || !user || !isDashboardRoute) {
       if (!user) setOrders([]);
       return;
