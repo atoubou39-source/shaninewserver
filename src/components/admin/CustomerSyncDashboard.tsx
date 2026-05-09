@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getApiUrl } from '../../auth';
+import { getApiUrl, getToken } from '../../auth';
 import { Language } from '../../translations';
 import { db } from '../../firebase';
 import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestore';
@@ -30,12 +30,16 @@ interface Customer {
   createdAt: string;
   activatedAt?: string;
   role: string;
+  status?: 'blocked' | 'active';
+  isFirebase?: boolean;
 }
 
 
 
 export const CustomerSyncDashboard = ({ t, lang }: { t: any, lang: Language }) => {
+  if (!t || !t.orders) return <div className="p-10 text-center animate-pulse text-brand-navy font-bold">Loading Customers...</div>;
   const [customers, setCustomers] = useState<Customer[]>([]);
+
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'pending' | 'activated'>('all');
   const [loading, setLoading] = useState(true);
@@ -83,37 +87,150 @@ export const CustomerSyncDashboard = ({ t, lang }: { t: any, lang: Language }) =
     }
   };
 
+  const fetchCustomers = async () => {
+    try {
+      // 1. Fetch Backend users
+      const response = await fetch(getApiUrl('/api/auth/users'), {
+        headers: { 'Authorization': `Bearer ${getToken()}` }
+      });
+      const result = await response.json();
+      let backendData: Customer[] = [];
+      if (result.success) {
+        backendData = result.data.map((u: any) => ({
+          id: u.uid,
+          facilityName: u.name,
+          email: u.email,
+          phoneNumber: u.phone,
+          odooPartnerId: u.odooPartnerId,
+          accountActivated: u.accountActivated,
+          createdAt: u.createdAt,
+          role: u.role,
+          status: u.status
+        })) as Customer[];
+      }
+
+      // 2. Fetch Firebase users (legacy fallback)
+      const { getDocs } = await import('firebase/firestore');
+      const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
+      const snapshot = await getDocs(q);
+      const firebaseData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        isFirebase: true
+      })) as any as Customer[];
+
+      // 3. Merge avoiding duplicates (backend takes precedence)
+      const allCustomers = [...backendData];
+      const existingPhones = new Set(backendData.map(c => String(c.phoneNumber).replace(/[^\d]/g, '')));
+      
+      firebaseData.forEach(c => {
+        const cPhone = String(c.phoneNumber || '').replace(/[^\d]/g, '');
+        if (!existingPhones.has(cPhone) && c.role === 'customer') {
+          allCustomers.push(c);
+          existingPhones.add(cPhone);
+        }
+      });
+
+      // 4. Sort by newest
+      allCustomers.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      setCustomers(allCustomers.filter(c => c.role === 'customer'));
+    } catch (e) {
+      console.error("Failed to load users:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBlockCustomer = async (customerId: string, currentStatus: string, isFirebase?: boolean) => {
+    if (window.confirm(currentStatus === 'blocked' ? "هل أنت متأكد من فك حظر هذا الحساب؟" : "هل أنت متأكد من حظر هذا الحساب؟ لن يتمكن العميل من تسجيل الدخول.")) {
+      try {
+        setActionLoading(customerId);
+        const newStatus = currentStatus === 'blocked' ? 'active' : 'blocked';
+        
+        if (isFirebase) {
+          const { updateDoc, doc } = await import('firebase/firestore');
+          await updateDoc(doc(db, "users", customerId), { status: newStatus });
+        } else {
+          const response = await fetch(getApiUrl(`/api/auth/user/${customerId}/block`), {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${getToken()}`
+            },
+            body: JSON.stringify({ status: newStatus })
+          });
+          const result = await response.json();
+          if (!result.success) throw new Error(result.error);
+        }
+        
+        fetchCustomers();
+      } catch (error) {
+        console.error("Failed to block/unblock user:", error);
+        alert("فشل في تعديل حالة الحساب.");
+      } finally {
+        setActionLoading(null);
+      }
+    }
+  };
+
+  const handleDeleteCustomer = async (customerId: string, isFirebase?: boolean) => {
+    if (window.confirm("تحذير: هل أنت متأكد من حذف هذا الحساب نهائياً؟ هذا الإجراء لا يمكن التراجع عنه.")) {
+      try {
+        setActionLoading(customerId);
+        
+        if (isFirebase) {
+          const { deleteDoc, doc } = await import('firebase/firestore');
+          await deleteDoc(doc(db, "users", customerId));
+        } else {
+          const response = await fetch(getApiUrl(`/api/auth/user/${customerId}`), {
+            method: 'DELETE',
+            headers: { 
+              'Authorization': `Bearer ${getToken()}`
+            }
+          });
+          const result = await response.json();
+          if (!result.success) throw new Error(result.error);
+        }
+        
+        fetchCustomers();
+      } catch (error) {
+        console.error("Failed to delete user:", error);
+        alert("فشل في حذف الحساب.");
+      } finally {
+        setActionLoading(null);
+      }
+    }
+  };
+
   const refreshData = () => {
     setLoading(true);
-    // onSnapshot handles the real-time update, but we can manually trigger a small delay to show feedback
-    setTimeout(() => setLoading(false), 500);
+    fetchCustomers();
   };
 
   useEffect(() => {
-    const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Customer[];
-      setCustomers(data.filter(c => c.role === 'customer'));
-      setLoading(false);
-    });
-
-    return unsubscribe;
+    fetchCustomers();
   }, []);
 
-  const handleActivate = async (uid: string) => {
+  const handleActivate = async (uid: string, isFirebase?: boolean) => {
     setActionLoading(uid);
     try {
-      const response = await fetch(getApiUrl('/api/admin/activate-customer'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uid })
-      });
-      const result = await response.json();
-      if (!result.success) throw new Error(result.error);
+      if (isFirebase) {
+        const { updateDoc, doc } = await import('firebase/firestore');
+        await updateDoc(doc(db, "users", uid), { accountActivated: true, activatedAt: new Date().toISOString() });
+      } else {
+        const response = await fetch(getApiUrl('/api/auth/activate'), {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${getToken()}`
+          },
+          body: JSON.stringify({ uid })
+        });
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error);
+      }
+      fetchCustomers();
     } catch (error) {
       console.error("Activation failed:", error);
       alert("فشل في تفعيل الحساب.");
@@ -141,7 +258,7 @@ export const CustomerSyncDashboard = ({ t, lang }: { t: any, lang: Language }) =
             </div>
             <h1 className="text-3xl font-serif text-brand-navy font-bold">إدارة العملاء</h1>
           </div>
-          <p className="text-gray-400 text-sm font-medium pr-1">مزامنة وإدارة حسابات عملاء النظام في Firebase</p>
+          <p className="text-gray-400 text-sm font-medium pr-1">إدارة وتأمين حسابات العملاء عبر قاعدة بيانات JWT المحلية</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-4">
@@ -219,7 +336,7 @@ export const CustomerSyncDashboard = ({ t, lang }: { t: any, lang: Language }) =
             >
               <div className="text-center">
                 <h3 className="text-2xl font-serif text-brand-navy font-bold">إضافة عميل يدوياً</h3>
-                <p className="text-gray-400 text-sm mt-2">أدخل بيانات العميل لمزامنته مع Firebase</p>
+                <p className="text-gray-400 text-sm mt-2">أدخل بيانات العميل لإضافته لقاعدة بيانات JWT الموحدة</p>
               </div>
 
               <form onSubmit={handleAddCustomer} className="space-y-5">
@@ -357,7 +474,11 @@ export const CustomerSyncDashboard = ({ t, lang }: { t: any, lang: Language }) =
                       </div>
                     </td>
                     <td className="px-8 py-6">
-                      {customer.accountActivated ? (
+                      {customer.status === 'blocked' ? (
+                        <span className="inline-flex items-center px-3 py-1.5 bg-red-50 text-red-600 rounded-full text-[10px] font-bold">
+                          محظور
+                        </span>
+                      ) : customer.accountActivated ? (
                         <span className="inline-flex items-center px-3 py-1.5 bg-green-50 text-green-600 rounded-full text-[10px] font-bold">
                           <CheckCircle2 size={14} className="ml-1.5" />
                           مفعل
@@ -376,17 +497,29 @@ export const CustomerSyncDashboard = ({ t, lang }: { t: any, lang: Language }) =
                     </td>
                     <td className="px-8 py-6">
                       <div className="flex items-center gap-3">
-                        {!customer.accountActivated && (
+                        {!customer.accountActivated && customer.status !== 'blocked' && (
                           <button 
-                            onClick={() => handleActivate(customer.id)}
+                            onClick={() => handleActivate(customer.id, customer.isFirebase)}
                             disabled={actionLoading === customer.id}
                             className="bg-brand-navy text-white px-5 py-2.5 rounded-xl text-[10px] font-bold tracking-widest hover:bg-brand-orange transition-all disabled:opacity-50"
                           >
                             {actionLoading === customer.id ? "جاري..." : "تفعيل الحساب"}
                           </button>
                         )}
-                        <button className="p-2 text-gray-400 hover:text-brand-navy transition-colors">
-                          <MoreVertical size={18} />
+                        <button 
+                          onClick={() => handleBlockCustomer(customer.id, customer.status || 'active', customer.isFirebase)}
+                          disabled={actionLoading === customer.id}
+                          className={`px-5 py-2.5 rounded-xl text-[10px] font-bold tracking-widest transition-all disabled:opacity-50 ${customer.status === 'blocked' ? 'bg-gray-100 text-brand-navy hover:bg-gray-200' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}
+                        >
+                          {customer.status === 'blocked' ? 'فك الحظر' : 'حظر الحساب'}
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteCustomer(customer.id, customer.isFirebase)}
+                          disabled={actionLoading === customer.id}
+                          className="p-2 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
+                          title="حذف نهائي"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
                         </button>
                       </div>
                     </td>

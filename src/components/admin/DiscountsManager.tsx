@@ -37,9 +37,10 @@ interface DiscountInput {
   [key: string]: string;
 }
 
-export function DiscountsManager({ t, lang }: { t: any, lang: 'en' | 'ar' }) {
+export function DiscountsManager({ products, t, lang }: { products: Product[], t: any, lang: 'en' | 'ar' }) {
+  if (!t || !t.orders) return <div className="p-10 text-center animate-pulse text-brand-navy font-bold">Loading Discounts...</div>;
   const isRtl = lang === 'ar';
-  const [products, setProducts] = useState<Product[]>([]);
+
   const [discountInputs, setDiscountInputs] = useState<DiscountInput>({});
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{
@@ -48,35 +49,20 @@ export function DiscountsManager({ t, lang }: { t: any, lang: 'en' | 'ar' }) {
   } | null>(null);
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
 
-  // Load products from Firestore
   useEffect(() => {
-    const q = query(
-      collection(db, "products"),
-      orderBy("name", "asc")
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const productsData = snapshot.docs.map((doc) => ({
-        ...doc.data(),
-        firebaseId: doc.id,
-      })) as Product[];
-      setProducts(productsData);
-
-      // Initialize discount inputs
-      const inputs: DiscountInput = {};
-      productsData.forEach((p) => {
-        if (p.discountPrice) {
-          inputs[p.firebaseId || p.id.toString()] = String(p.discountPrice).replace(
-            /[^\d.]/g,
-            ""
-          );
-        }
-      });
-      setDiscountInputs(inputs);
+    // Initialize discount inputs
+    const inputs: DiscountInput = {};
+    products.forEach((p) => {
+      if (p.discountPrice) {
+        inputs[p.firebaseId || p.id.toString()] = String(p.discountPrice).replace(
+          /[^\d.]/g,
+          ""
+        );
+      }
     });
+    setDiscountInputs(inputs);
+  }, [products]);
 
-    return () => unsubscribe();
-  }, []);
 
   const parsePrice = (priceStr: any): number => {
     if (!priceStr || priceStr === "undefined" || priceStr === "null") return 0;

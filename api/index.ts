@@ -1569,6 +1569,12 @@ const sanitizePhone = (phone: string): string => {
       // Check local auth db for register/reset validation
       if (reason === 'register' || reason === 'reset') {
         const existingUser = authDb.findUserByPhone(cleanPhone);
+        if (existingUser && existingUser.status === 'blocked') {
+          return res.status(403).json({
+            success: false,
+            error: "تم حظر هذا الحساب من قبل الإدارة. يرجى التواصل مع الدعم."
+          });
+        }
         if (reason === 'register' && existingUser) {
           return res.status(400).json({
             success: false,
@@ -1768,6 +1774,10 @@ const sanitizePhone = (phone: string): string => {
         return res.status(401).json({ success: false, error: "Invalid credentials" });
       }
 
+      if (user.status === 'blocked') {
+        return res.status(403).json({ success: false, error: "تم حظر هذا الحساب من قبل الإدارة" });
+      }
+
       if (!user.accountActivated && !user.isAdmin) {
         return res.status(403).json({ success: false, error: "Account pending activation", pendingActivation: true });
       }
@@ -1952,6 +1962,7 @@ const sanitizePhone = (phone: string): string => {
       role: u.role,
       isAdmin: u.isAdmin,
       accountActivated: u.accountActivated,
+      status: u.status || 'active',
       odooPartnerId: u.odooPartnerId,
       createdAt: u.createdAt,
     }));
@@ -1964,6 +1975,15 @@ const sanitizePhone = (phone: string): string => {
     const ok = authDb.activateUser(uid);
     if (!ok) return res.status(404).json({ success: false, error: "User not found" });
     res.json({ success: true, message: "User activated" });
+  });
+
+  // POST /api/auth/user/:uid/block (admin only)
+  app.post("/api/auth/user/:uid/block", requireAdmin, (req: any, res) => {
+    const { uid } = req.params;
+    const { status } = req.body; // 'blocked' | 'active'
+    const user = authDb.updateUser(uid, { status });
+    if (!user) return res.status(404).json({ success: false, error: "User not found" });
+    res.json({ success: true, message: `User status updated to ${status}` });
   });
 
   // DELETE /api/auth/user (admin or self)

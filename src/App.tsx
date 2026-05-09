@@ -1,7 +1,9 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ * Admin Stability Patch v2.0
  */
+
 
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -145,6 +147,7 @@ interface Product {
   image: string;
   firebaseId?: string;
   isOdoo?: boolean;
+  syncStatus?: 'draft' | 'published';
 }
 
 interface CartItem extends Product {
@@ -2928,10 +2931,10 @@ const RefundModal = ({ isOpen, onClose, t }: { isOpen: boolean, onClose: () => v
 // --- Customer Dashboard Components ---
 const DashboardCarousel = ({ lang, t }: { lang: Language, t: any }) => {
   const banners = [
-    "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&q=80&w=1200",
-    "https://images.unsplash.com/photo-1532336414038-cf19250c5757?auto=format&fit=crop&q=80&w=1200",
-    "https://images.unsplash.com/photo-1506368249639-73a05d6f6488?auto=format&fit=crop&q=80&w=1200",
-    "https://images.unsplash.com/photo-1599940824399-b87987ceb72a?auto=format&fit=crop&q=80&w=1200"
+    "https://images.unsplash.com/photo-1620626011761-996317b8d101?auto=format&fit=crop&q=80&w=1200",
+    "https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?auto=format&fit=crop&q=80&w=1200",
+    "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&q=80&w=1200",
+    "https://images.unsplash.com/photo-1616486029423-aaa4789e8c9a?auto=format&fit=crop&q=80&w=1200"
   ];
 
   const isRtl = lang === 'ar';
@@ -3347,10 +3350,11 @@ const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManu
   }, [activePill, cart]);
 
   const filtered = useMemo(() => {
+    const visible = products.filter(p => p.syncStatus !== 'draft');
     const term = search.toLowerCase().trim();
-    if (!term) return products;
+    if (!term) return visible;
     
-    return products.filter(p => 
+    return visible.filter(p => 
       p.name.toLowerCase().includes(term)
     );
   }, [products, search]);
@@ -4075,7 +4079,7 @@ const CustomerProfile = ({ user, t, lang }: { user: AuthUser | null, t: any, lan
             </div>
           </div>
 
-          <div className="bg-brand-cream/50 p-6 rounded-2xl border border-brand-orange/10">
+          <div className="bg-brand-cream/50 p-6 rounded-2xl border border-brand-orange/10 mt-8">
             <div className={`flex items-center gap-2 mb-3 ${lang === 'ar' ? 'flex-row-reverse' : ''}`}>
               <div className="w-1.5 h-1.5 bg-brand-orange rounded-full" />
               <p className="text-[10px] text-brand-orange font-bold uppercase tracking-widest">{t.orders.dashboard.note}</p>
@@ -4084,83 +4088,8 @@ const CustomerProfile = ({ user, t, lang }: { user: AuthUser | null, t: any, lan
               {t.orders.dashboard.profileNote}
             </p>
           </div>
-
-          {/* Account Management Section */}
-          <div className="pt-10 border-t border-gray-100 mt-8">
-            <h4 className={`text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-6 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
-              {t.orders.dashboard.deleteAccountTitle}
-            </h4>
-
-            <div className={`flex flex-col md:flex-row items-start md:items-center justify-between gap-6 p-6 rounded-[1.5rem] bg-red-50/30 border border-red-100 ${lang === 'ar' ? 'flex-row-reverse' : ''}`}>
-              <div className={lang === 'ar' ? 'text-right' : 'text-left'}>
-                <p className="text-sm font-bold text-red-600 mb-1">{t.orders.dashboard.deleteAccount}</p>
-                <p className="text-xs text-red-500/70 max-w-sm">{t.orders.dashboard.deleteAccountWarning}</p>
-              </div>
-              <button
-                onClick={() => setShowDeleteModal(true)}
-                className="px-6 py-3 bg-white text-red-600 border-2 border-red-100 hover:bg-red-600 hover:text-white transition-all duration-300 rounded-xl text-[10px] font-black tracking-widest uppercase shadow-sm"
-              >
-                {t.orders.dashboard.deleteAccountBtn}
-              </button>
-            </div>
-          </div>
         </div>
       </motion.div>
-
-      {/* Delete Confirmation Modal */}
-      <AnimatePresence>
-        {showDeleteModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowDeleteModal(false)}
-              className="absolute inset-0 bg-brand-navy/60 backdrop-blur-sm"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative bg-white rounded-[2.5rem] shadow-2xl p-8 md:p-12 max-w-md w-full overflow-hidden"
-            >
-              <div className="flex flex-col items-center text-center">
-                <div className="w-20 h-20 bg-red-50 rounded-3xl flex items-center justify-center text-red-600 mb-6">
-                  <AlertTriangle size={40} />
-                </div>
-                <h3 className="text-2xl font-serif text-brand-navy font-bold mb-4">
-                  {t.orders.dashboard.deleteAccount}
-                </h3>
-                <p className="text-gray-500 leading-relaxed mb-8">
-                  {t.orders.dashboard.deleteAccountConfirm}
-                </p>
-
-                <div className="flex flex-col gap-3 w-full">
-                  <button
-                    disabled={isDeleting}
-                    onClick={handleDeleteAccount}
-                    className="w-full py-4 bg-red-600 text-white rounded-2xl font-bold text-sm hover:bg-red-700 transition-all shadow-lg shadow-red-200 disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {isDeleting ? (
-                      <>
-                        <RefreshCw className="animate-spin" size={18} />
-                        {lang === 'ar' ? 'جاري الحذف...' : 'DELETING...'}
-                      </>
-                    ) : t.orders.dashboard.deleteAccountBtn}
-                  </button>
-                  <button
-                    disabled={isDeleting}
-                    onClick={() => setShowDeleteModal(false)}
-                    className="w-full py-4 bg-gray-100 text-gray-600 rounded-2xl font-bold text-sm hover:bg-gray-200 transition-all"
-                  >
-                    {t.orders.dashboard.close}
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   );
 };
@@ -4909,6 +4838,8 @@ const OrderManager = ({
 };
 
 const CustomerManager = ({ setModalContent, t, lang }: { setModalContent: (content: { title: string; message: string; type: 'success' | 'error' } | null) => void, t: any, lang: Language }) => {
+  if (!t) return null;
+
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingCustomer, setEditingCustomer] = useState<any | null>(null);
@@ -5320,7 +5251,12 @@ const CustomerManager = ({ setModalContent, t, lang }: { setModalContent: (conte
   );
 };
 
-const DashboardOverview = ({ products, orders, t, lang }: { products: Product[], orders: Order[], t: any, lang: Language }) => {
+const AdminDashboardOverview = ({ products, orders, t, lang }: { products: Product[], orders: Order[], t: any, lang: Language }) => {
+  if (!t || !t.orders || !t.orders.dashboard) {
+    return <div className="p-20 text-center text-brand-navy font-bold animate-pulse">Initializing Dashboard Data...</div>;
+  }
+
+
   const [odooStats, setOdooStats] = useState({ prodCount: 0, orderCount: 0, custCount: 0 });
 
   useEffect(() => {
@@ -5351,18 +5287,20 @@ const DashboardOverview = ({ products, orders, t, lang }: { products: Product[],
   }, []);
 
   const stats = [
-    { name: t.orders.dashboard.storeOrders, value: orders.length, icon: <ShoppingBag className="text-brand-orange" />, sub: "Live from Firestore" },
-    { name: t.orders.dashboard.odooErpOrders, value: odooStats.orderCount, icon: <RefreshCw className="text-blue-500" />, sub: "Synced Quotations" },
-    { name: t.orders.dashboard.customers, value: odooStats.custCount, icon: <Users className="text-purple-500" />, sub: "CRM Synced" },
-    { name: t.orders.dashboard.completed, value: orders.filter(o => o.status === 'completed').length, icon: <Check className="text-emerald-500" />, sub: "Store goal" },
+    { name: t.orders.dashboard.storeOrders, value: orders.length, icon: <ShoppingBag className="text-brand-orange" />, sub: t.orders.dashboard.liveFromStore },
+    { name: t.orders.dashboard.odooErpOrders, value: odooStats.orderCount, icon: <RefreshCw className="text-blue-500" />, sub: t.orders.dashboard.syncedQuotations },
+    { name: t.orders.dashboard.customers, value: odooStats.custCount, icon: <Users className="text-purple-500" />, sub: t.orders.dashboard.crmSynced },
+    { name: t.orders.dashboard.completed, value: orders.filter(o => o.status === 'completed').length, icon: <Check className="text-emerald-500" />, sub: t.orders.dashboard.storeGoal },
   ];
+
 
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-serif text-brand-navy font-bold">{t.orders.dashboard.overview}</h1>
+        <h1 className="text-3xl font-serif text-brand-navy font-bold">{t.orders.dashboard.menuOverview || 'Overview'}</h1>
         <p className="text-gray-500 mt-2 text-sm">{t.orders.dashboard.adminDescription}</p>
       </div>
+
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat) => (
@@ -5428,10 +5366,39 @@ const DashboardOverview = ({ products, orders, t, lang }: { products: Product[],
 };
 
 const ProductManager = ({ products, setModalContent, t, lang }: { products: Product[], setModalContent: (content: { title: string; message: string; type: 'success' | 'error' } | null) => void, t: any, lang: Language }) => {
+  if (!t) return null;
+
   const [isAdding, setIsAdding] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [newProduct, setNewProduct] = useState<Partial<Product>>({ name: "", description: "", price: "", image: "" });
   const [editingDiscount, setEditingDiscount] = useState<string | null>(null);
   const [discountValue, setDiscountValue] = useState("");
+
+  const handleUpdateProduct = async () => {
+    if (editingProduct && editingProduct.firebaseId) {
+      try {
+        await updateDoc(doc(db, "products", editingProduct.firebaseId), {
+          name: editingProduct.name,
+          description: editingProduct.description || "",
+          price: editingProduct.price,
+          image: editingProduct.image || "https://picsum.photos/seed/spice/400/400",
+        });
+        setEditingProduct(null);
+        setModalContent({ title: "Updated", message: "Product updated successfully.", type: 'success' });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `products/${editingProduct.firebaseId}`);
+      }
+    }
+  };
+
+  const handlePublish = async (firebaseId: string) => {
+    try {
+      await updateDoc(doc(db, "products", firebaseId), { syncStatus: "published" });
+      setModalContent({ title: "Published", message: "Product is now visible to customers.", type: 'success' });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `products/${firebaseId}`);
+    }
+  };
 
   const handleSaveDiscount = async (product: Product) => {
     try {
@@ -5636,12 +5603,26 @@ const ProductManager = ({ products, setModalContent, t, lang }: { products: Prod
                   )}
                 </td>
                 <td className="px-8 py-4">
-                  <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${p.isOdoo ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
-                    {p.isOdoo ? 'Odoo ERP' : 'Manual'}
-                  </span>
+                  <div className="flex flex-col gap-2">
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase w-fit ${p.isOdoo ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
+                      {p.isOdoo ? 'Odoo ERP' : 'Manual'}
+                    </span>
+                    {p.syncStatus === 'draft' ? (
+                      <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase w-fit bg-amber-100 text-amber-700">
+                        Draft (Hidden)
+                      </span>
+                    ) : (
+                      <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase w-fit bg-green-100 text-green-700">
+                        Published
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-8 py-4 text-right space-x-3">
-                  <button className="text-gray-400 hover:text-brand-navy transition-colors"><Edit size={16} /></button>
+                  {p.syncStatus === 'draft' && (
+                    <button onClick={() => handlePublish(p.firebaseId || "")} className="text-brand-orange hover:text-brand-orange-hover text-xs font-bold transition-colors">Publish</button>
+                  )}
+                  <button onClick={() => setEditingProduct(p)} className="text-gray-400 hover:text-brand-navy transition-colors"><Edit size={16} /></button>
                   <button onClick={() => handleDelete(p.firebaseId || "")} className="text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
                 </td>
               </tr>
@@ -5649,11 +5630,44 @@ const ProductManager = ({ products, setModalContent, t, lang }: { products: Prod
           </tbody>
         </table>
       </div>
+
+      {editingProduct && (
+        <div className="fixed inset-0 bg-brand-navy/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-3xl w-full max-w-xl overflow-hidden shadow-2xl">
+            <div className="p-8 border-b border-gray-100 flex justify-between items-center">
+              <h2 className="text-2xl font-serif text-brand-navy font-bold">Edit Product</h2>
+              <button onClick={() => setEditingProduct(null)} className="text-gray-400 hover:text-brand-navy transition-colors"><X size={24} /></button>
+            </div>
+            <div className="p-8 space-y-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-400 uppercase">Product Name</label>
+                <input required value={editingProduct.name} onChange={e => setEditingProduct({ ...editingProduct, name: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-400 uppercase">Price</label>
+                <input required value={editingProduct.price} onChange={e => setEditingProduct({ ...editingProduct, price: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-400 uppercase">Image URL</label>
+                <input value={editingProduct.image} onChange={e => setEditingProduct({ ...editingProduct, image: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-400 uppercase">Description</label>
+                <textarea required rows={4} value={editingProduct.description} onChange={e => setEditingProduct({ ...editingProduct, description: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange resize-none" />
+              </div>
+              <button onClick={handleUpdateProduct} className="w-full bg-brand-orange text-white py-4 rounded-xl font-bold shadow-lg hover:shadow-brand-orange/20 transition-all">SAVE CHANGES</button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 };
 
+
 const OdooManager = ({ products, setModalContent, t, lang }: { products: Product[], setModalContent: (content: { title: string; message: string; type: 'success' | 'error' } | null) => void, t: any, lang: Language }) => {
+  if (!t) return null;
+
   const [odooProducts, setOdooProducts] = useState<any[]>([]);
   const [odooOrders, setOdooOrders] = useState<any[]>([]);
   const [odooCustomers, setOdooCustomers] = useState<any[]>([]);
@@ -5735,9 +5749,18 @@ const OdooManager = ({ products, setModalContent, t, lang }: { products: Product
         };
 
         if (existingProduct?.firebaseId) {
-          await setDoc(doc(db, "products", existingProduct.firebaseId), productData, { merge: true });
+          // Do NOT overwrite user modifications (prices, description, images). Only update Odoo status flags.
+          await setDoc(doc(db, "products", existingProduct.firebaseId), { 
+            isOdoo: true, 
+            updatedAt: new Date().toISOString() 
+          }, { merge: true });
         } else {
-          await addDoc(collection(db, "products"), { ...productData, createdAt: new Date().toISOString() });
+          // New products from sync start as "draft" so they don't immediately publish to the storefront
+          await addDoc(collection(db, "products"), { 
+            ...productData, 
+            syncStatus: 'draft', 
+            createdAt: new Date().toISOString() 
+          });
         }
         successCount++;
       }
@@ -6008,6 +6031,8 @@ const OdooManager = ({ products, setModalContent, t, lang }: { products: Product
 };
 
 const SEOManager = ({ seo, setModalContent, t, lang }: { seo: SiteSettings["seo"], setModalContent: (content: { title: string; message: string; type: 'success' | 'error' } | null) => void, t: any, lang: Language }) => {
+  if (!t) return null;
+
   const [activeTab, setActiveTab] = useState<keyof SiteSettings["seo"]>("home");
   const [tempData, setTempData] = useState(seo[activeTab]);
 
@@ -6102,6 +6127,225 @@ const SEOManager = ({ seo, setModalContent, t, lang }: { seo: SiteSettings["seo"
           <p className="text-[#1a0dab] text-xl font-medium hover:underline cursor-pointer mb-1">{tempData.title}</p>
           <p className="text-[#006621] text-sm mb-1">https://hakkal.com › {activeTab}</p>
           <p className="text-[#4d5156] text-sm line-clamp-2">{tempData.description}</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+const BlogManager = ({ t, lang }: { t: any, lang: Language }) => {
+  if (!t) return null;
+  const [posts, setPosts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isAdding, setIsAdding] = useState(false);
+  const [newPost, setNewPost] = useState({ title: "", content: "", image: "", date: new Date().toISOString() });
+
+  useEffect(() => {
+    const q = query(collection(db, "blog"), orderBy("date", "desc"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setPosts(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleAddPost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await addDoc(collection(db, "blog"), { ...newPost, date: new Date().toISOString() });
+    setIsAdding(false);
+    setNewPost({ title: "", content: "", image: "", date: new Date().toISOString() });
+  };
+
+  const handleDeletePost = async (id: string) => {
+    if (window.confirm("Are you sure?")) {
+      await deleteDoc(doc(db, "blog", id));
+    }
+  };
+
+  return (
+    <div className="space-y-8">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-serif text-brand-navy font-bold">{t.orders.dashboard.menuBlog || 'Blog'}</h1>
+          <p className="text-gray-500 mt-2 text-sm">Manage your store's articles and updates.</p>
+        </div>
+        <button
+          onClick={() => setIsAdding(true)}
+          className="bg-brand-orange text-white px-6 py-3 rounded-xl text-xs font-bold flex items-center space-x-2 transition-all hover:shadow-lg"
+        >
+          <Plus size={16} />
+          <span>NEW POST</span>
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {posts.map(post => (
+          <div key={post.id} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 group">
+            <div className="h-48 bg-gray-100 overflow-hidden relative">
+              <img src={post.image || "https://picsum.photos/seed/blog/800/600"} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" alt="" />
+              <button
+                onClick={() => handleDeletePost(post.id)}
+                className="absolute top-4 right-4 p-2 bg-white/90 backdrop-blur rounded-lg text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="text-[10px] font-bold text-brand-orange uppercase tracking-widest mb-2">{new Date(post.date).toLocaleDateString()}</p>
+              <h3 className="text-lg font-bold text-brand-navy mb-3 line-clamp-1">{post.title}</h3>
+              <p className="text-gray-500 text-sm line-clamp-3 mb-6">{post.content}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {isAdding && (
+        <div className="fixed inset-0 bg-brand-navy/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-3xl w-full max-w-xl overflow-hidden shadow-2xl">
+            <div className="p-8 border-b border-gray-100 flex justify-between items-center">
+              <h2 className="text-2xl font-serif text-brand-navy font-bold">New Blog Post</h2>
+              <button onClick={() => setIsAdding(false)} className="text-gray-400 hover:text-brand-navy transition-colors"><X size={24} /></button>
+            </div>
+            <form onSubmit={handleAddPost} className="p-8 space-y-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-400 uppercase">Title</label>
+                <input required value={newPost.title} onChange={e => setNewPost({ ...newPost, title: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-400 uppercase">Image URL</label>
+                <input value={newPost.image} onChange={e => setNewPost({ ...newPost, image: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-400 uppercase">Content</label>
+                <textarea required rows={6} value={newPost.content} onChange={e => setNewPost({ ...newPost, content: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange resize-none" />
+              </div>
+              <button type="submit" className="w-full bg-brand-orange text-white py-4 rounded-xl font-bold shadow-lg hover:shadow-brand-orange/20 transition-all">PUBLISH POST</button>
+            </form>
+          </motion.div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const SettingsManager = ({ t, lang }: { t: any, lang: Language }) => {
+  if (!t) return null;
+  const [settings, setSettings] = useState<any>({
+    storeName: "Hakkal Trading",
+    contactEmail: "info@hakkal-est.com",
+    contactPhone: "+966 57 5151 507",
+    address: "Jeddah, Saudi Arabia",
+    currency: "⃁",
+    odooUrl: "",
+    odooDb: "",
+    odooUsername: ""
+  });
+
+  useEffect(() => {
+    getDoc(doc(db, "settings", "general")).then(snap => {
+      if (snap.exists()) setSettings(snap.data());
+    });
+  }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await setDoc(doc(db, "settings", "general"), settings);
+    alert("Settings saved successfully!");
+  };
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-3xl font-serif text-brand-navy font-bold">{t.orders.dashboard.menuSettings || 'Settings'}</h1>
+        <p className="text-gray-500 mt-2 text-sm">Configure your store's core identity and integrations.</p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <form onSubmit={handleSave} className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 space-y-6">
+          <h2 className="text-xl font-bold text-brand-navy flex items-center space-x-3 mb-4">
+            <Building2 size={20} className="text-brand-orange" />
+            <span>Store Profile</span>
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-400 uppercase">Store Name</label>
+              <input value={settings.storeName} onChange={e => setSettings({ ...settings, storeName: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-400 uppercase">Contact Email</label>
+              <input value={settings.contactEmail} onChange={e => setSettings({ ...settings, contactEmail: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-400 uppercase">Contact Phone</label>
+              <input value={settings.contactPhone} onChange={e => setSettings({ ...settings, contactPhone: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-400 uppercase">Currency Symbol</label>
+              <input value={settings.currency} onChange={e => setSettings({ ...settings, currency: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-gray-400 uppercase">Physical Address</label>
+            <textarea rows={3} value={settings.address} onChange={e => setSettings({ ...settings, address: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange resize-none" />
+          </div>
+
+          <div className="pt-6 border-t border-gray-100">
+            <h2 className="text-xl font-bold text-brand-navy flex items-center space-x-3 mb-6">
+              <RefreshCw size={20} className="text-blue-500" />
+              <span>Odoo ERP Integration</span>
+            </h2>
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-400 uppercase">Odoo Instance URL</label>
+                <input value={settings.odooUrl} onChange={e => setSettings({ ...settings, odooUrl: e.target.value })} placeholder="https://your-odoo-site.com" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange" />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-400 uppercase">Database Name</label>
+                  <input value={settings.odooDb} onChange={e => setSettings({ ...settings, odooDb: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-400 uppercase">API Username / Login</label>
+                  <input value={settings.odooUsername} onChange={e => setSettings({ ...settings, odooUsername: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:border-brand-orange" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" className="w-full bg-brand-navy text-white py-4 rounded-xl font-bold shadow-xl hover:bg-black transition-all flex items-center justify-center space-x-3">
+            <Save size={20} />
+            <span>SAVE SYSTEM SETTINGS</span>
+          </button>
+        </form>
+
+        <div className="space-y-8">
+          <div className="bg-brand-navy text-white p-8 rounded-3xl shadow-xl overflow-hidden relative">
+            <div className="relative z-10">
+              <h3 className="text-2xl font-serif font-bold mb-4">Security & Access</h3>
+              <p className="text-white/60 text-sm leading-relaxed mb-6">Manage administrative roles and access keys for API integrations.</p>
+              <button className="bg-white/10 backdrop-blur text-white px-6 py-3 rounded-xl text-xs font-bold border border-white/20 hover:bg-white/20 transition-all">MANAGE ROLES</button>
+            </div>
+            <Lock size={120} className="absolute -bottom-10 -right-10 text-white/5" />
+          </div>
+
+          <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
+            <h3 className="text-lg font-bold text-brand-navy mb-4">System Status</h3>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center p-4 bg-green-50 rounded-2xl border border-green-100">
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-ping" />
+                  <span className="text-xs font-bold text-green-700">JWT Auth Database</span>
+                </div>
+                <span className="text-[10px] font-bold text-green-600 bg-white px-2 py-1 rounded">ACTIVE</span>
+              </div>
+              <div className="flex justify-between items-center p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                <div className="flex items-center space-x-3">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                  <span className="text-xs font-bold text-blue-700">Odoo Bridge Status</span>
+                </div>
+                <span className="text-[10px] font-bold text-blue-600 bg-white px-2 py-1 rounded">CONNECTED</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -6904,7 +7148,8 @@ export default function App() {
         <Route path="/admin" element={
           <ProtectedRoute>
             <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
-              <DashboardOverview products={products} orders={orders} t={t} lang={lang} />
+              <AdminDashboardOverview products={products} orders={orders} t={t} lang={lang} />
+
             </DashboardLayout>
           </ProtectedRoute>
         } />
@@ -6918,7 +7163,7 @@ export default function App() {
         <Route path="/admin/discounts" element={
           <ProtectedRoute>
             <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
-              <DiscountsManager t={t} lang={lang} />
+              <DiscountsManager products={products} t={t} lang={lang} />
             </DashboardLayout>
           </ProtectedRoute>
         } />
@@ -6966,25 +7211,18 @@ export default function App() {
         <Route path="/admin/blog" element={
           <ProtectedRoute>
             <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
-              <div className="text-center py-20">
-                <FileText size={64} className="mx-auto text-gray-200 mb-6" />
-                <h1 className="text-3xl font-serif text-brand-navy font-bold">{t.orders.dashboard.blog}</h1>
-                <p className="text-gray-500 mt-2">{t.orders.dashboard.comingSoon || 'This feature is coming soon in the next update.'}</p>
-              </div>
+              <BlogManager t={t} lang={lang} />
             </DashboardLayout>
           </ProtectedRoute>
         } />
         <Route path="/admin/settings" element={
           <ProtectedRoute>
             <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
-              <div className="text-center py-20">
-                <Settings size={64} className="mx-auto text-gray-200 mb-6" />
-                <h1 className="text-3xl font-serif text-brand-navy font-bold">{t.orders.dashboard.settings}</h1>
-                <p className="text-gray-500 mt-2">{t.orders.dashboard.settingsDescription || 'Configure your store\'s general information here.'}</p>
-              </div>
+              <SettingsManager t={t} lang={lang} />
             </DashboardLayout>
           </ProtectedRoute>
         } />
+
         <Route path="/dashboard" element={
           <ProtectedRoute>
             <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>

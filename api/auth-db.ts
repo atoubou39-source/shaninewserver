@@ -27,6 +27,7 @@ export interface UserRecord {
   isAdmin: boolean;
   accountActivated: boolean;
   odooPartnerId?: number;
+  status?: 'active' | 'blocked';
   createdAt: string;
   updatedAt: string;
 }
@@ -118,6 +119,7 @@ export function createUser(data: {
     isAdmin,
     accountActivated: true, // Auto-activated on registration
     odooPartnerId: data.odooPartnerId,
+    status: 'active',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
