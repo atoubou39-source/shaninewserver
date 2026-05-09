@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getApiUrl } from '../../auth';
+import { Language } from '../../translations';
 import { db } from '../../firebase';
 import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
@@ -33,7 +34,7 @@ interface Customer {
 
 
 
-export const CustomerSyncDashboard = () => {
+export const CustomerSyncDashboard = ({ t, lang }: { t: any, lang: Language }) => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'pending' | 'activated'>('all');

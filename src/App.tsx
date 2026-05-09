@@ -4908,7 +4908,7 @@ const OrderManager = ({
   );
 };
 
-const CustomerManager = ({ setModalContent }: { setModalContent: (content: { title: string; message: string; type: 'success' | 'error' } | null) => void }) => {
+const CustomerManager = ({ setModalContent, t, lang }: { setModalContent: (content: { title: string; message: string; type: 'success' | 'error' } | null) => void, t: any, lang: Language }) => {
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingCustomer, setEditingCustomer] = useState<any | null>(null);
@@ -5320,7 +5320,7 @@ const CustomerManager = ({ setModalContent }: { setModalContent: (content: { tit
   );
 };
 
-const DashboardOverview = ({ products, orders }: { products: Product[], orders: Order[] }) => {
+const DashboardOverview = ({ products, orders, t, lang }: { products: Product[], orders: Order[], t: any, lang: Language }) => {
   const [odooStats, setOdooStats] = useState({ prodCount: 0, orderCount: 0, custCount: 0 });
 
   useEffect(() => {
@@ -5427,7 +5427,7 @@ const DashboardOverview = ({ products, orders }: { products: Product[], orders: 
   );
 };
 
-const ProductManager = ({ products, setModalContent }: { products: Product[], setModalContent: (content: { title: string; message: string; type: 'success' | 'error' } | null) => void }) => {
+const ProductManager = ({ products, setModalContent, t, lang }: { products: Product[], setModalContent: (content: { title: string; message: string; type: 'success' | 'error' } | null) => void, t: any, lang: Language }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newProduct, setNewProduct] = useState<Partial<Product>>({ name: "", description: "", price: "", image: "" });
   const [editingDiscount, setEditingDiscount] = useState<string | null>(null);
@@ -5653,7 +5653,7 @@ const ProductManager = ({ products, setModalContent }: { products: Product[], se
   );
 };
 
-const OdooManager = ({ products, setModalContent, t }: { products: Product[], setModalContent: (content: { title: string; message: string; type: 'success' | 'error' } | null) => void, t: any }) => {
+const OdooManager = ({ products, setModalContent, t, lang }: { products: Product[], setModalContent: (content: { title: string; message: string; type: 'success' | 'error' } | null) => void, t: any, lang: Language }) => {
   const [odooProducts, setOdooProducts] = useState<any[]>([]);
   const [odooOrders, setOdooOrders] = useState<any[]>([]);
   const [odooCustomers, setOdooCustomers] = useState<any[]>([]);
@@ -6007,7 +6007,7 @@ const OdooManager = ({ products, setModalContent, t }: { products: Product[], se
   );
 };
 
-const SEOManager = ({ seo, setModalContent }: { seo: SiteSettings["seo"], setModalContent: (content: { title: string; message: string; type: 'success' | 'error' } | null) => void }) => {
+const SEOManager = ({ seo, setModalContent, t, lang }: { seo: SiteSettings["seo"], setModalContent: (content: { title: string; message: string; type: 'success' | 'error' } | null) => void, t: any, lang: Language }) => {
   const [activeTab, setActiveTab] = useState<keyof SiteSettings["seo"]>("home");
   const [tempData, setTempData] = useState(seo[activeTab]);
 
@@ -6904,14 +6904,14 @@ export default function App() {
         <Route path="/admin" element={
           <ProtectedRoute>
             <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
-              <DashboardOverview products={products} orders={orders} />
+              <DashboardOverview products={products} orders={orders} t={t} lang={lang} />
             </DashboardLayout>
           </ProtectedRoute>
         } />
         <Route path="/admin/products" element={
           <ProtectedRoute>
             <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
-              <ProductManager products={products} setModalContent={setModalContent} />
+              <ProductManager products={products} setModalContent={setModalContent} t={t} lang={lang} />
             </DashboardLayout>
           </ProtectedRoute>
         } />
@@ -6925,7 +6925,7 @@ export default function App() {
         <Route path="/admin/odoo" element={
           <ProtectedRoute>
             <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
-              <OdooManager products={products} setModalContent={setModalContent} t={t} />
+              <OdooManager products={products} setModalContent={setModalContent} t={t} lang={lang} />
             </DashboardLayout>
           </ProtectedRoute>
         } />
@@ -6951,7 +6951,7 @@ export default function App() {
         <Route path="/admin/customers" element={
           <ProtectedRoute>
             <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
-              <CustomerSyncDashboard />
+              <CustomerSyncDashboard t={t} lang={lang} />
             </DashboardLayout>
           </ProtectedRoute>
         } />
@@ -6959,7 +6959,7 @@ export default function App() {
         <Route path="/admin/seo" element={
           <ProtectedRoute>
             <DashboardLayout user={user} role={userRole} t={t} lang={lang} onToggleLang={toggleLang} cartCount={cart.length} onOpenCart={() => setIsCartOpen(true)} onOpenTerms={() => setIsTermsOpen(true)} onOpenPrivacy={() => setIsPrivacyOpen(true)} onOpenRefund={() => setIsRefundOpen(true)}>
-              <SEOManager seo={seo} setModalContent={setModalContent} />
+              <SEOManager seo={seo} setModalContent={setModalContent} t={t} lang={lang} />
             </DashboardLayout>
           </ProtectedRoute>
         } />
