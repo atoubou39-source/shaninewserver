@@ -34,7 +34,7 @@ interface DiscountInput {
   [key: string]: string;
 }
 
-export function DiscountsManager({ t, lang }: { t: any, lang: Language }) {
+export function DiscountsManager({ t, lang }: { t: any, lang: 'en' | 'ar' }) {
   const isRtl = lang === 'ar';
   const [products, setProducts] = useState<Product[]>([]);
   const [discountInputs, setDiscountInputs] = useState<DiscountInput>({});
@@ -236,7 +236,7 @@ export function DiscountsManager({ t, lang }: { t: any, lang: Language }) {
         {products.map((product) => {
           const productId = product.firebaseId || product.id.toString();
           const currentDiscount = discountInputs[productId] || "";
-          const originalPrice = parsePrice(product.price);
+          const originalPrice = parsePrice(String(product.price || "0"));
           const discountPrice = currentDiscount
             ? parseFloat(currentDiscount)
             : null;
