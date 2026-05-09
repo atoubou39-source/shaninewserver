@@ -785,7 +785,7 @@ const Products = ({
                       />
                       {p.discountPrice && (
                         <div className="absolute top-3 start-3 bg-red-500 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-lg">
-                          {Math.round((1 - parseFloat(p.discountPrice.replace(/[^\d.]/g, '')) / parseFloat(p.price.replace(/[^\d.]/g, ''))) * 100)}% {t.products.off || 'OFF'}
+                          {Math.round((1 - parseFloat(String(p.discountPrice).replace(/[^\d.]/g, '')) / parseFloat(String(p.price).replace(/[^\d.]/g, ''))) * 100)}% {t.products.off || 'OFF'}
                         </div>
                       )}
 
@@ -821,15 +821,15 @@ const Products = ({
                               {p.discountPrice ? (
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="text-brand-orange font-serif font-bold text-lg">
-                                    {t.products.pricePrefix}{p.discountPrice.replace(/[^\d.]/g, '')}
+                                    {t.products.pricePrefix}{String(p.discountPrice).replace(/[^\d.]/g, '')}
                                   </span>
                                   <span className="text-gray-400 font-serif text-xs line-through">
-                                    {t.products.pricePrefix}{p.price.replace(/[^\d.]/g, '')}
+                                    {t.products.pricePrefix}{String(p.price).replace(/[^\d.]/g, '')}
                                   </span>
                                 </div>
                               ) : (
                                 <p className="text-brand-orange font-serif font-bold text-lg">
-                                  {t.products.pricePrefix}{p.price.replace(/[^\d.]/g, '')}
+                                  {t.products.pricePrefix}{String(p.price).replace(/[^\d.]/g, '')}
                                 </p>
                               )}
                             </div>
@@ -1660,9 +1660,9 @@ const CartDrawer = ({
                         </div>
                         <p className="text-gray-400 text-[10px] mb-3">
                           {item.discountPrice ? (
-                            <><span className="text-brand-orange font-bold">{t.products.pricePrefix}{item.discountPrice.replace(/[^\d,.]/g, '')}</span> <span className="line-through">{t.products.pricePrefix}{item.price.replace(/[^\d,.]/g, '')}</span></>
+                            <><span className="text-brand-orange font-bold">{t.products.pricePrefix}{String(item.discountPrice).replace(/[^\d,.]/g, '')}</span> <span className="line-through">{t.products.pricePrefix}{String(item.price).replace(/[^\d,.]/g, '')}</span></>
                           ) : (
-                            <>{t.products.pricePrefix}{item.price.replace(/[^\d,.]/g, '')} {t.products.priceSuffix || ''}</>
+                            <>{t.products.pricePrefix}{String(item.price).replace(/[^\d,.]/g, '')} {t.products.priceSuffix || ''}</>
                           )}
                         </p>
                         <div className="flex justify-between items-center">
@@ -2551,18 +2551,18 @@ const ProductDetailModal = ({
                 {product.discountPrice ? (
                   <div className="flex items-center gap-3 mb-6 flex-wrap">
                     <span className="text-brand-orange font-serif font-bold text-2xl">
-                      {t.products.pricePrefix}{product.discountPrice.replace(/[^\d.]/g, '')}
+                      {t.products.pricePrefix}{String(product.discountPrice).replace(/[^\d.]/g, '')}
                     </span>
                     <span className="text-gray-400 font-serif text-lg line-through">
-                      {t.products.pricePrefix}{product.price.replace(/[^\d.]/g, '')}
+                      {t.products.pricePrefix}{String(product.price).replace(/[^\d.]/g, '')}
                     </span>
                     <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                      {Math.round((1 - parseFloat(product.discountPrice.replace(/[^\d.]/g, '')) / parseFloat(product.price.replace(/[^\d.]/g, ''))) * 100)}% {t.products.off}
+                      {Math.round((1 - parseFloat(String(product.discountPrice).replace(/[^\d.]/g, '')) / parseFloat(String(product.price).replace(/[^\d.]/g, ''))) * 100)}% {t.products.off}
                     </span>
                   </div>
                 ) : (
                   <p className="text-brand-orange font-serif font-bold text-2xl mb-6">
-                    {t.products.pricePrefix}{product.price.replace(/[^\d.]/g, '')}
+                    {t.products.pricePrefix}{String(product.price).replace(/[^\d.]/g, '')}
                   </p>
                 )}
                 <div className="h-[1px] w-full bg-gray-100 mb-6" />
@@ -3415,8 +3415,8 @@ const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManu
                 <div className="overflow-y-auto flex-1 p-4 space-y-3">
                   {discounted.map(p => {
                     const cartItem = cart.find(ci => ci.id === p.id);
-                    const orig = parseFloat(p.price.replace(/[^\d.]/g, ''));
-                    const disc = parseFloat(p.discountPrice!.replace(/[^\d.]/g, ''));
+                    const orig = parseFloat(String(p.price).replace(/[^\d.]/g, ''));
+                    const disc = parseFloat(String(p.discountPrice || p.price).replace(/[^\d.]/g, ''));
                     const pct = Math.round((1 - disc / orig) * 100);
                     return (
                       <div key={p.id} className={`flex items-center gap-4 bg-gray-50 rounded-2xl p-3 hover:bg-orange-50 transition-colors ${isRtl ? 'flex-row-reverse' : ''}`}>
@@ -5625,7 +5625,7 @@ const ProductManager = ({ products, setModalContent }: { products: Product[], se
                       <button onClick={() => setEditingDiscount(null)} className="text-gray-400 hover:text-red-500"><X size={16} /></button>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setEditingDiscount(p.firebaseId || String(p.id)); setDiscountValue(p.discountPrice ? p.discountPrice.replace(/[^\d.]/g, '') : ''); }}>
+                    <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setEditingDiscount(p.firebaseId || String(p.id)); setDiscountValue(p.discountPrice ? String(p.discountPrice).replace(/[^\d.]/g, '') : ''); }}>
                       {p.discountPrice ? (
                         <span className="text-sm font-bold text-red-500">{String(p.discountPrice).replace(/SAR|ر\.س|SR|ريال/gi, "").replace(/[^\d.]/g, "").trim()}</span>
                       ) : (

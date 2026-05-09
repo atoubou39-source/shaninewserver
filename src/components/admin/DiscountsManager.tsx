@@ -63,7 +63,7 @@ export function DiscountsManager({ t, lang }: { t: any, lang: Language }) {
       const inputs: DiscountInput = {};
       productsData.forEach((p) => {
         if (p.discountPrice) {
-          inputs[p.firebaseId || p.id.toString()] = p.discountPrice.replace(
+          inputs[p.firebaseId || p.id.toString()] = String(p.discountPrice).replace(
             /[^\d.]/g,
             ""
           );
@@ -75,8 +75,9 @@ export function DiscountsManager({ t, lang }: { t: any, lang: Language }) {
     return () => unsubscribe();
   }, []);
 
-  const parsePrice = (priceStr: string): number => {
-    return parseFloat(priceStr.replace(/[^\d.]/g, ""));
+  const parsePrice = (priceStr: string | undefined | null): number => {
+    if (!priceStr) return 0;
+    return parseFloat(String(priceStr).replace(/[^\d.]/g, ""));
   };
 
   const formatPrice = (price: number): string => {
@@ -98,7 +99,7 @@ export function DiscountsManager({ t, lang }: { t: any, lang: Language }) {
 
   const handleDiscountChange = (productId: string, value: string) => {
     // Only allow numbers and decimal point
-    const cleaned = value.replace(/[^\d.]/g, "");
+    const cleaned = String(value).replace(/[^\d.]/g, "");
     setDiscountInputs((prev) => ({
       ...prev,
       [productId]: cleaned,
@@ -117,10 +118,10 @@ export function DiscountsManager({ t, lang }: { t: any, lang: Language }) {
         });
         setMessage({
           type: "success",
-          text: `التخفيض تم حذفه من "${product.name}"`,
+          text: t.orders.dashboard.discountDeleted || `Discount removed from "${product.name}"`,
         });
       } catch (error) {
-        setMessage({ type: "error", text: "حدث خطأ في الحذف" });
+        setMessage({ type: "error", text: t.orders.dashboard.errorDeleting || "Error deleting discount" });
       }
       return;
     }
@@ -129,14 +130,14 @@ export function DiscountsManager({ t, lang }: { t: any, lang: Language }) {
     const originalPrice = parsePrice(product.price);
 
     if (isNaN(discountPrice) || discountPrice < 0) {
-      setMessage({ type: "error", text: "السعر غير صحيح" });
+      setMessage({ type: "error", text: t.orders.dashboard.invalidPrice || "Invalid price" });
       return;
     }
 
     if (discountPrice >= originalPrice) {
       setMessage({
         type: "error",
-        text: "سعر التخفيض يجب أن يكون أقل من السعر الأصلي",
+        text: t.orders.dashboard.discountPriceHigher || "Discount price must be lower than original price",
       });
       return;
     }
@@ -150,11 +151,11 @@ export function DiscountsManager({ t, lang }: { t: any, lang: Language }) {
 
       setMessage({
         type: "success",
-        text: `تم تعديل التخفيض على "${product.name}"`,
+        text: t.orders.dashboard.discountSaved || `Discount updated for "${product.name}"`,
       });
       setExpandedProduct(null);
     } catch (error) {
-      setMessage({ type: "error", text: "حدث خطأ في الحفظ" });
+      setMessage({ type: "error", text: t.orders.dashboard.errorSaving || "Error saving discount" });
     } finally {
       setLoading(false);
     }
@@ -275,14 +276,14 @@ export function DiscountsManager({ t, lang }: { t: any, lang: Language }) {
                       {product.discountPrice && (
                         <>
                           <span className="text-brand-navy/40 line-through">
-                            السعر الأصلي
+                            {t.orders.dashboard.originalPrice || 'Original Price'}
                           </span>
                           <span className="px-2.5 py-1 bg-red-50 text-red-600 rounded-full text-xs font-bold">
                             {calculateDiscount(
                               originalPrice,
-                              parsePrice(product.discountPrice)
+                              parsePrice(String(product.discountPrice))
                             )}
-                            % تخفيض
+                            % {t.orders.dashboard.discount || 'discount'}
                           </span>
                         </>
                       )}
@@ -310,7 +311,7 @@ export function DiscountsManager({ t, lang }: { t: any, lang: Language }) {
                       {/* Original Price Display */}
                       <div className="bg-white p-4 rounded-xl border border-brand-navy/5">
                         <label className="text-xs font-bold text-brand-navy/60 uppercase tracking-widest block mb-2">
-                          السعر الأصلي
+                          {t.orders.dashboard.originalPrice || 'Original Price'}
                         </label>
                         <div className="flex items-center space-x-2 space-x-reverse">
                           <DollarSign className="w-4 h-4 text-brand-navy/40" />
@@ -323,7 +324,7 @@ export function DiscountsManager({ t, lang }: { t: any, lang: Language }) {
                       {/* Discount Price Input */}
                       <div className="space-y-2">
                         <label className="text-xs font-bold text-brand-navy/60 uppercase tracking-widest block">
-                          سعر التخفيض
+                          {t.orders.dashboard.discountPrice || 'Discount Price'}
                         </label>
                         <div className="flex items-center space-x-2">
                           <span className="text-brand-navy/40">⃁</span>
@@ -333,7 +334,7 @@ export function DiscountsManager({ t, lang }: { t: any, lang: Language }) {
                             onChange={(e) =>
                               handleDiscountChange(productId, e.target.value)
                             }
-                            placeholder="أدخل السعر المخفض"
+                            placeholder={t.orders.dashboard.enterDiscountPrice || "Enter discount price"}
                             className="flex-1 px-4 py-3 border-2 border-brand-navy/10 rounded-xl focus:outline-none focus:border-brand-orange transition-colors"
                             step="0.01"
                             min="0"
@@ -343,7 +344,7 @@ export function DiscountsManager({ t, lang }: { t: any, lang: Language }) {
                           <div className="pt-2 space-y-2">
                             <div className="flex items-center justify-between text-sm">
                               <span className="text-brand-navy/60">
-                                نسبة التخفيض:
+                                {t.orders.dashboard.discountRate || 'Discount Rate:'}
                               </span>
                               <span className="font-bold text-red-600">
                                 {discountPercent}%
@@ -351,7 +352,7 @@ export function DiscountsManager({ t, lang }: { t: any, lang: Language }) {
                             </div>
                             <div className="flex items-center justify-between text-sm">
                               <span className="text-brand-navy/60">
-                                السعر بعد التخفيض:
+                                {t.orders.dashboard.priceAfterDiscount || 'Price after discount:'}
                               </span>
                               <span className="font-bold text-green-600">
                                 {formatPrice(parseFloat(currentDiscount))}
@@ -359,7 +360,7 @@ export function DiscountsManager({ t, lang }: { t: any, lang: Language }) {
                             </div>
                             <div className="flex items-center justify-between text-sm">
                               <span className="text-brand-navy/60">
-                                المدخرات:
+                                {t.orders.dashboard.savings || 'Savings:'}
                               </span>
                               <span className="font-bold text-brand-orange">
                                 {formatPrice(
@@ -379,7 +380,7 @@ export function DiscountsManager({ t, lang }: { t: any, lang: Language }) {
                           className="flex-1 flex items-center justify-center space-x-2 space-x-reverse bg-brand-orange hover:bg-brand-orange-hover disabled:bg-brand-orange/40 text-white px-6 py-3 rounded-xl font-bold transition-all disabled:cursor-not-allowed"
                         >
                           <Save className="w-4 h-4" />
-                          <span>حفظ التخفيض</span>
+                          <span>{t.orders.dashboard.saveDiscount || 'Save Discount'}</span>
                         </button>
                         {currentDiscount && (
                           <button
@@ -405,11 +406,11 @@ export function DiscountsManager({ t, lang }: { t: any, lang: Language }) {
         <div className="flex space-x-4 space-x-reverse">
           <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
           <div className="text-sm text-blue-800">
-            <p className="font-semibold mb-2">كيفية عمل التخفيضات:</p>
+            <p className="font-semibold mb-2">{t.orders.dashboard.howDiscountsWork || 'How discounts work:'}</p>
             <ul className="space-y-1 text-xs">
-              <li>• العميل سيرى السعر المخفض في الموقع</li>
-              <li>• الطلب سيُرسل إلى النظام بسعر التخفيض كسعر الوحدة</li>
-              <li>• يمكنك تحديث أو حذف التخفيضات في أي وقت</li>
+              <li>• {t.orders.dashboard.discountTip1 || 'Customers will see the discounted price on the website'}</li>
+              <li>• {t.orders.dashboard.discountTip2 || 'Orders will be sent to the system with the discounted price as the unit price'}</li>
+              <li>• {t.orders.dashboard.discountTip3 || 'You can update or delete discounts at any time'}</li>
             </ul>
           </div>
         </div>
