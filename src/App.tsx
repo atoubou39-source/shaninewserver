@@ -1140,7 +1140,7 @@ const CustomerLoginPage = () => {
     setError("");
     try {
       // Sanitize phone for email
-      const justDigits = phone.replace(/\D/g, "");
+      const justDigits = String(phone || '').replace(/\D/g, "");
       const email = `${justDigits}@hakkal.com`;
       await authLogin(email, password);
       navigate("/dashboard");
@@ -1598,8 +1598,8 @@ const CartDrawer = ({
   t: any
 }) => {
   const total = items.reduce((sum, item) => {
-    const priceStr = item.discountPrice || item.price;
-    const price = parseFloat(priceStr.replace(/[^\d.]/g, ''));
+    const priceStr = item.discountPrice || item.price || "0";
+    const price = parseFloat(String(priceStr).replace(/[^\d.]/g, ''));
     return sum + (price * item.quantity);
   }, 0);
 
@@ -1839,7 +1839,7 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
   const total = items.reduce((sum, item) => {
     try {
       const priceStr = String(item.discountPrice || item.price || "0");
-      const price = parseFloat(priceStr.replace(/[^\d.]/g, '')) || 0;
+      const price = parseFloat(String(priceStr || "0").replace(/[^\d.]/g, '')) || 0;
       return sum + (price * (item.quantity || 1));
     } catch (e) {
       return sum;
@@ -1891,7 +1891,7 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
       const safeTotal = items.reduce((sum, item) => {
         try {
           const priceStr = String(item.discountPrice || item.price || "0");
-          const price = parseFloat(priceStr.replace(/[^\d.]/g, '')) || 0;
+          const price = parseFloat(String(priceStr || "0").replace(/[^\d.]/g, '')) || 0;
           return sum + (price * (item.quantity || 1));
         } catch (e) {
           console.warn("[Checkout] Error calculating item price:", item.name, e);
@@ -3357,7 +3357,7 @@ const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManu
 
   const cartTotal = useMemo(() => {
     return cart.reduce((sum, item) => {
-      const p = parseFloat((item.discountPrice || item.price).replace(/[^\d.]/g, ''));
+      const p = parseFloat(String(item.discountPrice || item.price || "0").replace(/[^\d.]/g, ''));
       return sum + (p * item.quantity);
     }, 0);
   }, [cart]);
@@ -5442,7 +5442,7 @@ const ProductManager = ({ products, setModalContent }: { products: Product[], se
         await updateDoc(doc(db, "products", fbId), { discountPrice: deleteField() });
         setModalContent({ title: "Updated", message: `Discount removed from ${product.name}`, type: 'success' });
       } else {
-        const numVal = parseFloat(trimmed.replace(/[^\d.]/g, ''));
+        const numVal = parseFloat(String(trimmed || '0').replace(/[^\d.]/g, ''));
         if (isNaN(numVal) || numVal <= 0) {
           setModalContent({ title: "Error", message: "Invalid discount price", type: 'error' });
           return;
