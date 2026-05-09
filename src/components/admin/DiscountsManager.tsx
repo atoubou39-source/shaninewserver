@@ -75,9 +75,11 @@ export function DiscountsManager({ t, lang }: { t: any, lang: 'en' | 'ar' }) {
     return () => unsubscribe();
   }, []);
 
-  const parsePrice = (priceStr: string | undefined | null): number => {
-    if (!priceStr) return 0;
-    return parseFloat(String(priceStr).replace(/[^\d.]/g, ""));
+  const parsePrice = (priceStr: any): number => {
+    if (!priceStr || priceStr === "undefined" || priceStr === "null") return 0;
+    const cleaned = String(priceStr).replace(/[^\d.]/g, "");
+    const parsed = parseFloat(cleaned);
+    return isNaN(parsed) ? 0 : parsed;
   };
 
   const formatPrice = (price: number): string => {
@@ -89,9 +91,9 @@ export function DiscountsManager({ t, lang }: { t: any, lang: 'en' | 'ar' }) {
 
   const calculateDiscount = (
     originalPrice: number,
-    discountPrice: number
+    discountPrice: number | null | undefined
   ): number => {
-    if (originalPrice <= 0) return 0;
+    if (!originalPrice || originalPrice <= 0 || !discountPrice || isNaN(discountPrice)) return 0;
     return Math.round(
       ((originalPrice - discountPrice) / originalPrice) * 100
     );
@@ -316,7 +318,7 @@ export function DiscountsManager({ t, lang }: { t: any, lang: 'en' | 'ar' }) {
                         <div className="flex items-center space-x-2 space-x-reverse">
                           <DollarSign className="w-4 h-4 text-brand-navy/40" />
                           <span className="text-2xl font-bold text-brand-orange">
-                            {product.price}
+                            {product.price || '0'}
                           </span>
                         </div>
                       </div>

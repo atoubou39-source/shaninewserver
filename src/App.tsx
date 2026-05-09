@@ -5412,7 +5412,7 @@ const DashboardOverview = ({ products, orders }: { products: Product[], orders: 
                   </div>
                 </div>
                 <div className="flex items-center space-x-3">
-                  <span className="text-[8px] font-bold uppercase tracking-widest text-gray-400">{order.status.replace('_', ' ')}</span>
+                  <span className="text-[8px] font-bold uppercase tracking-widest text-gray-400">{(order.status || 'pending').replace('_', ' ')}</span>
                   <ChevronRight size={16} className="text-gray-300" />
                 </div>
               </div>
