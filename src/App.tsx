@@ -4184,15 +4184,15 @@ const DashboardLayout = ({ children, user, role, t, lang, onToggleLang, cartCoun
   };
 
   const adminMenuItems = [
-    { name: t.orders.dashboard.overview, icon: <LayoutDashboard size={20} />, path: "/admin" },
-    { name: t.orders.dashboard.orders, icon: <ShoppingBag size={20} />, path: "/admin/orders" },
-    { name: t.orders.dashboard.customers, icon: <Users size={20} />, path: "/admin/customers" },
-    { name: t.orders.dashboard.products, icon: <Package size={20} />, path: "/admin/products" },
-    { name: t.orders.dashboard.discounts, icon: <Percent size={20} />, path: "/admin/discounts" },
-    { name: t.orders.dashboard.odooSync, icon: <RefreshCw size={20} />, path: "/admin/odoo" },
-    { name: t.orders.dashboard.seoSettings, icon: <Search size={20} />, path: "/admin/seo" },
-    { name: t.orders.dashboard.blog, icon: <FileText size={20} />, path: "/admin/blog" },
-    { name: t.orders.dashboard.settings, icon: <Settings size={20} />, path: "/admin/settings" },
+    { name: t.orders.dashboard.menuOverview, icon: <LayoutDashboard size={20} />, path: "/admin" },
+    { name: t.orders.dashboard.menuOrders, icon: <ShoppingBag size={20} />, path: "/admin/orders" },
+    { name: t.orders.dashboard.menuCustomers, icon: <Users size={20} />, path: "/admin/customers" },
+    { name: t.orders.dashboard.menuProducts, icon: <Package size={20} />, path: "/admin/products" },
+    { name: t.orders.dashboard.menuDiscounts, icon: <Percent size={20} />, path: "/admin/discounts" },
+    { name: t.orders.dashboard.menuOdooSync, icon: <RefreshCw size={20} />, path: "/admin/odoo" },
+    { name: t.orders.dashboard.menuSeoSettings, icon: <Search size={20} />, path: "/admin/seo" },
+    { name: t.orders.dashboard.menuBlog, icon: <FileText size={20} />, path: "/admin/blog" },
+    { name: t.orders.dashboard.menuSettings, icon: <Settings size={20} />, path: "/admin/settings" },
   ];
 
   const customerMenuItems = [
