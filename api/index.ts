@@ -776,49 +776,65 @@ const sanitizePhone = (phone: string): string => {
       const uid = await authenticateOdoo();
       if (!uid) return res.status(401).json({ success: false, message: "Odoo Auth Failed" });
 
-      // Search 1: Exact Name Match
-      let invoices = await callOdoo(
-        "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
-        "account.move", "search_read",
-        [[["name", "=", invoiceName]]],
-        { fields: ["name", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "partner_id", "invoice_line_ids"], limit: 1 }
-      );
-
-      // Search 2: Exact Origin Match (Fallback)
-      if (!Array.isArray(invoices) || invoices.length === 0) {
-        invoices = await callOdoo(
+      // Search 1: Exact Name Match in Invoices
+      let invoices: any[] = [];
+      try {
+        console.log(`[Invoice Details] Searching Invoices for: ${invoiceName}`);
+        const result = await callOdoo(
           "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
           "account.move", "search_read",
-          [[["invoice_origin", "=", invoiceName], ["state", "=", "posted"]]],
-          { fields: ["name", "invoice_date", "amount_untaxed", "amount_tax", "amount_total", "partner_id", "invoice_line_ids"], limit: 1 }
+          [[["name", "=", invoiceName]]],
+          { fields: ["name", "invoice_date", "amount_total", "partner_id", "invoice_line_ids"], limit: 1 }
         );
+        if (Array.isArray(result)) invoices = result;
+      } catch (e: any) {
+        console.warn("[Invoice Details] Search 1 Failed:", e.message);
       }
 
-      // Search 3: Sale Order Match (Fallback for Quotations)
-      if (!Array.isArray(invoices) || invoices.length === 0) {
-        const saleOrders = await callOdoo(
-          "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
-          "sale.order", "search_read",
-          [[["name", "=", invoiceName]]],
-          { fields: ["name", "date_order", "amount_untaxed", "amount_tax", "amount_total", "partner_id", "order_line"], limit: 1 }
-        );
-        if (Array.isArray(saleOrders) && saleOrders.length > 0) {
-          const so = saleOrders[0];
-          invoices = [{
-            name: so.name,
-            invoice_date: so.date_order,
-            amount_untaxed: so.amount_untaxed,
-            amount_tax: so.amount_tax,
-            amount_total: so.amount_total,
-            partner_id: so.partner_id,
-            invoice_line_ids: so.order_line,
-            is_sale_order: true
-          }];
+      // Search 2: Origin Match (Fallback)
+      if (invoices.length === 0) {
+        try {
+          console.log(`[Invoice Details] Searching Invoices by Origin: ${invoiceName}`);
+          const result = await callOdoo(
+            "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
+            "account.move", "search_read",
+            [[["invoice_origin", "=", invoiceName], ["state", "=", "posted"]]],
+            { fields: ["name", "invoice_date", "amount_total", "partner_id", "invoice_line_ids"], limit: 1 }
+          );
+          if (Array.isArray(result)) invoices = result;
+        } catch (e: any) {
+          console.warn("[Invoice Details] Search 2 Failed:", e.message);
         }
       }
 
-      if (!Array.isArray(invoices) || invoices.length === 0) {
-        return res.status(404).json({ success: false, message: "Document not found" });
+      // Search 3: Sale Order Match (Fallback)
+      if (invoices.length === 0) {
+        try {
+          console.log(`[Invoice Details] Searching Sale Orders for: ${invoiceName}`);
+          const result = await callOdoo(
+            "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
+            "sale.order", "search_read",
+            [[["name", "=", invoiceName]]],
+            { fields: ["name", "date_order", "amount_total", "partner_id", "order_line"], limit: 1 }
+          );
+          if (Array.isArray(result) && result.length > 0) {
+            const so = result[0];
+            invoices = [{
+              name: so.name,
+              invoice_date: so.date_order,
+              amount_total: so.amount_total,
+              partner_id: so.partner_id,
+              invoice_line_ids: so.order_line,
+              is_sale_order: true
+            }];
+          }
+        } catch (e: any) {
+          console.warn("[Invoice Details] Search 3 Failed:", e.message);
+        }
+      }
+
+      if (invoices.length === 0) {
+        return res.status(404).json({ success: false, message: "Document not found in Odoo" });
       }
 
       const invoice = invoices[0];
