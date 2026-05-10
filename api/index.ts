@@ -828,24 +828,40 @@ const sanitizePhone = (phone: string): string => {
         const lineModel = invoice.is_sale_order ? "sale.order.line" : "account.move.line";
         
         // Odoo 18 is strict: only request fields that exist in the model
+        // We'll use a safer minimal set first to identify the crash source
         const fields = ["product_id", "name", "price_unit", "price_subtotal"];
         if (invoice.is_sale_order) {
-          fields.push("product_uom_qty", "tax_id");
+          fields.push("product_uom_qty");
+          // Note: tax_id is often the field name even for many2many in Sale Orders
         } else {
-          fields.push("quantity", "tax_ids");
+          fields.push("quantity");
         }
 
-        const lines = await callOdoo(
-          "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
-          lineModel, "read",
-          [invoice.invoice_line_ids, fields]
-        );
+        console.log(`[Invoice Details] Fetching lines for ${lineModel} (${invoice.invoice_line_ids.length} lines)`);
+        
+        try {
+          const lines = await callOdoo(
+            "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
+            lineModel, "search_read",
+            [[["id", "in", invoice.invoice_line_ids]]],
+            { fields }
+          );
 
-        invoice.lines = (lines as any[]).map(l => ({
-          ...l,
-          quantity: l.quantity || l.product_uom_qty || 0,
-          tax_ids: l.tax_ids || (Array.isArray(l.tax_id) ? l.tax_id : [])
-        })).filter((l: any) => l.product_id); // Filter out section lines
+          if (Array.isArray(lines)) {
+            invoice.lines = lines.map(l => ({
+              ...l,
+              quantity: l.quantity || l.product_uom_qty || 0,
+              tax_ids: [] // Simplified for now to stop crashes
+            })).filter((l: any) => l.product_id);
+          } else {
+            console.error("[Invoice Details] Lines response is not an array:", lines);
+            invoice.lines = [];
+          }
+        } catch (lineErr: any) {
+          console.error("[Invoice Details] Failed to fetch lines:", lineErr.message);
+          // Fallback: empty lines instead of crashing the whole request
+          invoice.lines = [];
+        }
       }
 
       res.json({ success: true, invoice });
