@@ -2027,13 +2027,11 @@ app.post("/api/send-email", async (req, res) => {
 // Serve static files from the 'dist' directory in production
 const distPath = path.resolve(process.cwd(), 'dist');
 console.log(`[Static] Serving files from: ${distPath}`);
-console.log(`[Static] Current Directory (cwd): ${process.cwd()}`);
 
 app.use(express.static(distPath));
 
 // Catch-all for API routes to prevent HTML responses
 app.all('/api/*', (req, res) => {
-  console.log(`[API 404] Method: ${req.method}, Path: ${req.path}`);
   res.status(404).json({ success: false, error: "API endpoint not found" });
 });
 
@@ -2055,7 +2053,6 @@ if (!process.env.VERCEL) {
   const PORT = Number(process.env.PORT) || 3000;
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port: ${PORT}`);
-    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
   });
 }
 
