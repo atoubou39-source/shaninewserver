@@ -1810,8 +1810,8 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
             const result = await odooRes.json();
             if (result.success && result.customer) {
               const c = result.customer;
-              const salesRepName = c.salesperson_name && c.salesperson_name !== "Not Assigned" 
-                ? c.salesperson_name 
+              const salesRepName = c.salesperson_name && c.salesperson_name !== "Not Assigned"
+                ? c.salesperson_name
                 : (lang === 'ar' ? "غير معين" : "Not Assigned");
 
               setFormData(prev => ({
@@ -2423,7 +2423,7 @@ const CheckoutModal = ({ isOpen, onClose, items, onClearCart, user, setModalCont
                       className="mt-1 w-4 h-4 rounded border-gray-300 text-brand-orange focus:ring-brand-orange"
                     />
                     <p className="text-[10px] text-gray-500 leading-relaxed">
-                      {lang === 'ar' 
+                      {lang === 'ar'
                         ? <>لقد قرأت وأوافق على <span className="text-brand-orange underline cursor-pointer hover:text-brand-navy transition-colors font-bold" onClick={onOpenTerms}>{t.checkout.termsLink}</span> الخاصة بشركة حقال للتجارة.</>
                         : <>I have read and agree to the <span className="text-brand-orange underline cursor-pointer hover:text-brand-navy transition-colors font-bold" onClick={onOpenTerms}>{t.checkout.termsLink}</span> of Hakkal Trading Company.</>
                       }
@@ -2742,7 +2742,7 @@ const PrivacyModal = ({ isOpen, onClose, t }: { isOpen: boolean, onClose: () => 
                 <div className="space-y-8">
                   <div className="bg-brand-orange/5 p-6 rounded-2xl border border-brand-orange/10 mb-8">
                     <p className="leading-relaxed font-medium text-brand-navy">
-                      {lang === 'ar' 
+                      {lang === 'ar'
                         ? "نحن في شركة حقال للتجارة نلتزم بأقصى درجات الخصوصية وحماية بيانات عملائنا. نجمع الاسم والهاتف والعنوان وتفاصيل الدفع فقط لمعالجة الطلبات وتنفيذها."
                         : "At Hakkal Trading Company, we are committed to the highest levels of privacy and protection of our customers' data. We collect name, phone, address and payment details solely to process and fulfill orders."
                       }
@@ -2852,7 +2852,7 @@ const RefundModal = ({ isOpen, onClose, t }: { isOpen: boolean, onClose: () => v
                 <div className="space-y-8">
                   <div className="bg-brand-orange/5 p-6 rounded-2xl border border-brand-orange/10 mb-8">
                     <p className="leading-relaxed font-medium text-brand-navy">
-                      {lang === 'ar' 
+                      {lang === 'ar'
                         ? "تخضع جميع عمليات الضمان والاسترجاع والاستبدال لشروط وأحكام محددة يتم توضيحها في طلب البيع وفاتورة المبيعات."
                         : "All warranty, return, and exchange processes are subject to specific terms and conditions outlined in the sales order and sales invoice."
                       }
@@ -3351,8 +3351,8 @@ const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManu
     const visible = products.filter(p => p.syncStatus !== 'draft');
     const term = search.toLowerCase().trim();
     if (!term) return visible;
-    
-    return visible.filter(p => 
+
+    return visible.filter(p =>
       p.name.toLowerCase().includes(term)
     );
   }, [products, search]);
@@ -3680,7 +3680,7 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
   const filteredOrders = useMemo(() => {
     const term = orderSearch.trim().toLowerCase();
     if (!term) return customerOrders;
-    return customerOrders.filter(o => 
+    return customerOrders.filter(o =>
       o.firebaseId.toLowerCase().includes(term) ||
       (o.odooOrderName && o.odooOrderName.toLowerCase().includes(term))
     );
@@ -4598,8 +4598,8 @@ const OrderManager = ({
           <p className="text-gray-500">{t.orders.dashboard.adminDescription}</p>
         </div>
         <div className={`flex ${isRtl ? 'flex-row-reverse space-x-reverse space-x-3' : 'space-x-3'}`}>
-        {/* Admin Sync Buttons Hidden */}
-      </div>
+          {/* Admin Sync Buttons Hidden */}
+        </div>
       </div>
 
       <div className={`flex space-x-4 mb-8 border-b border-gray-100 ${isRtl ? 'flex-row-reverse space-x-reverse' : ''}`}>
@@ -5424,7 +5424,7 @@ const ProductManager = ({ products, setModalContent, t, lang }: { products: Prod
   const [discountValue, setDiscountValue] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
 
-  const filteredProducts = products.filter(p => 
+  const filteredProducts = products.filter(p =>
     p.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -5505,7 +5505,7 @@ const ProductManager = ({ products, setModalContent, t, lang }: { products: Prod
     if (!id) {
       setModalContent({
         title: lang === 'ar' ? "خطأ" : "Error",
-        message: lang === 'ar' 
+        message: lang === 'ar'
           ? "هذا المنتج مرتبط بالنظام (Odoo) ولم يتم رفعه لقاعدة بيانات المتجر بعد، لذا لا يمكن حذفه من هنا."
           : "This product is from Odoo and hasn't been synced to the store database yet, so it cannot be deleted from here.",
         type: 'error'
@@ -5557,7 +5557,7 @@ const ProductManager = ({ products, setModalContent, t, lang }: { products: Prod
         <div className="flex-1 w-full">
           <h1 className="text-3xl font-serif text-brand-navy font-bold">Product Management</h1>
           <p className="text-gray-500 mt-2 text-sm">Add, edit, or remove products from your collection.</p>
-          
+
           <div className="mt-4 relative max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
             <input
@@ -5837,16 +5837,16 @@ const OdooManager = ({ products, setModalContent, t, lang }: { products: Product
 
         if (existingProduct?.firebaseId) {
           // Do NOT overwrite user modifications (prices, description, images). Only update Odoo status flags.
-          await setDoc(doc(db, "products", existingProduct.firebaseId), { 
-            isOdoo: true, 
-            updatedAt: new Date().toISOString() 
+          await setDoc(doc(db, "products", existingProduct.firebaseId), {
+            isOdoo: true,
+            updatedAt: new Date().toISOString()
           }, { merge: true });
         } else {
           // New products from sync start as "draft" so they don't immediately publish to the storefront
-          await addDoc(collection(db, "products"), { 
-            ...productData, 
-            syncStatus: 'draft', 
-            createdAt: new Date().toISOString() 
+          await addDoc(collection(db, "products"), {
+            ...productData,
+            syncStatus: 'draft',
+            createdAt: new Date().toISOString()
           });
         }
         successCount++;
@@ -6952,62 +6952,20 @@ export default function App() {
     if (!docName) return;
 
     setSelectedDocType(type);
+    setSelectedInvoiceOrder(order);
     setInvoiceDetails(null);
     setLoadingInvoice(true);
 
-    const maxRetries = 5;
-    let attempt = 0;
-    let success = false;
-
-    while (attempt < maxRetries && !success) {
-      try {
-        const resp = await fetch(getApiUrl(`/api/odoo/invoice-details/${encodeURIComponent(docName)}`));
-        const text = await resp.text();
-        
-        // Try to parse JSON regardless of status code to see if there's a specific error message
-        let data: any = null;
-        try {
-          data = JSON.parse(text);
-        } catch (e) {
-          // Not JSON - likely Render startup page or raw error
-        }
-
-        if (resp.ok && data && data.success) {
-          if (data.invoice) setInvoiceDetails(data.invoice);
-          setSelectedInvoiceOrder(order);
-          success = true;
-          break;
-        } else if (data && !data.success) {
-          // The server is UP and returned a JSON error. Don't retry.
-          setModalContent({
-            title: lang === 'ar' ? "خطأ من النظام" : "System Error",
-            message: data.error || data.message || (lang === 'ar' ? "فشل في تحميل البيانات" : "Failed to load data"),
-            type: 'error'
-          });
-          setLoadingInvoice(false);
-          return;
-        } else {
-          // Not OK or Not JSON. Wait and retry (might be cold start)
-          await new Promise(r => setTimeout(r, 4000));
-          attempt++;
-        }
-      } catch (e) {
-        console.error(`[Invoice Modal] Attempt ${attempt + 1} failed:`, e);
-        await new Promise(r => setTimeout(r, 4000));
-        attempt++;
+    try {
+      const resp = await fetch(getApiUrl(`/api/odoo/invoice-details/${encodeURIComponent(docName)}`));
+      const data = await resp.json();
+      if (data.success && data.invoice) {
+        setInvoiceDetails(data.invoice);
       }
-    }
-
-    setLoadingInvoice(false);
-
-    if (!success) {
-      setModalContent({
-        title: lang === 'ar' ? "الخادم يحتاج وقتًا أطول" : "Server Needs More Time",
-        message: lang === 'ar' 
-          ? "الخادم لا يزال في مرحلة الاستيقاظ أو هناك مشكلة في الاتصال. يرجى المحاولة مرة أخرى."
-          : "The server is still waking up or there is a connection issue. Please try again.",
-        type: 'error'
-      });
+    } catch (e) {
+      console.error("[Invoice Modal] Error fetching details:", e);
+    } finally {
+      setLoadingInvoice(false);
     }
   };
 
@@ -7483,30 +7441,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Loading Overlay for Invoices/Server Wake-up */}
-      <AnimatePresence>
-        {loadingInvoice && (
-          <div className="fixed inset-0 z-[1000] flex flex-col items-center justify-center bg-brand-navy/60 backdrop-blur-md">
-            <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.8, opacity: 0 }}
-              className="flex flex-col items-center space-y-6"
-            >
-              <div className="w-16 h-16 border-4 border-brand-orange border-t-transparent rounded-full animate-spin shadow-lg" />
-              <div className="text-center">
-                <p className="text-white font-serif text-2xl font-bold mb-2">
-                  {lang === 'ar' ? 'جاري تجهيز المستند...' : 'Preparing Document...'}
-                </p>
-                <p className="text-white/70 text-sm animate-pulse">
-                  {lang === 'ar' ? 'الخادم يستيقظ، يرجى الانتظار ثواني قليلة' : 'Server is waking up, please wait a few seconds'}
-                </p>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
       {/* Order History Modal */}
       <AnimatePresence>
         {historyOrder && (
@@ -7797,8 +7731,8 @@ export default function App() {
                     <span>PRINT</span>
                   </button>
                   <span className="text-[11px] font-bold text-gray-500 uppercase">
-                    {selectedDocType === 'invoice' 
-                      ? (invoiceDetails?.name || selectedInvoiceOrder.invoiceName || 'Draft Invoice') 
+                    {selectedDocType === 'invoice'
+                      ? (invoiceDetails?.name || selectedInvoiceOrder.invoiceName || 'Draft Invoice')
                       : (selectedInvoiceOrder.odooOrderName || 'Draft Quotation')}
                   </span>
                 </div>
