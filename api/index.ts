@@ -901,25 +901,33 @@ const sanitizePhone = (phone: string): string => {
         : ["account.report_invoice_with_payments", "account.report_invoice"];
 
       // 1. Find the document ID
-      const docs = await callOdoo(
-        "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
-        model, "search",
-        [[["name", "=", docName]]],
-        { limit: 1 }
-      );
-
-      let foundDocId = Array.isArray(docs) && docs.length > 0 ? docs[0] : null;
+      let foundDocId: number | null = null;
+      try {
+        console.log(`[Invoice PDF] Searching ID for: ${docName} in model: ${model}`);
+        const docs = await callOdoo(
+          "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
+          model, "search",
+          [[["name", "=", docName]]],
+          { limit: 1 }
+        );
+        if (Array.isArray(docs) && docs.length > 0) foundDocId = docs[0];
+      } catch (e: any) {
+        console.warn("[Invoice PDF] Initial search failed:", e.message);
+      }
 
       // Fallback for invoices: search by origin (Sale Order name)
       if (!foundDocId && !isQuotation) {
-        const fallback = await callOdoo(
-          "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
-          "account.move", "search",
-          [[["invoice_origin", "=", docName], ["state", "=", "posted"]]],
-          { limit: 1 }
-        );
-        if (Array.isArray(fallback) && fallback.length > 0) {
-           foundDocId = fallback[0];
+        try {
+          console.log(`[Invoice PDF] Fallback Search by Origin: ${docName}`);
+          const fallback = await callOdoo(
+            "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
+            "account.move", "search",
+            [[["invoice_origin", "=", docName], ["state", "=", "posted"]]],
+            { limit: 1 }
+          );
+          if (Array.isArray(fallback) && fallback.length > 0) foundDocId = fallback[0];
+        } catch (e: any) {
+          console.warn("[Invoice PDF] Fallback search failed:", e.message);
         }
       }
 
