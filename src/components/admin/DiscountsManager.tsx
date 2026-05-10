@@ -18,7 +18,8 @@ import {
   DollarSign,
   Trash2,
   Package,
-  RefreshCw
+  RefreshCw,
+  Search
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -48,6 +49,11 @@ export function DiscountsManager({ products, t, lang }: { products: Product[], t
     text: string;
   } | null>(null);
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const filteredProducts = products.filter(p => 
+    p.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   useEffect(() => {
     // Initialize discount inputs
@@ -215,6 +221,24 @@ export function DiscountsManager({ products, t, lang }: { products: Product[], t
             </div>
           </div>
         </motion.div>
+
+        {/* Search Bar */}
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mt-8 relative max-w-2xl"
+        >
+          <div className={`absolute inset-y-0 ${isRtl ? 'right-6' : 'left-6'} flex items-center pointer-events-none text-brand-navy/20`}>
+            <Search size={20} />
+          </div>
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder={isRtl ? "ابحث عن منتج لتعديل خصمه..." : "Search product to edit discount..."}
+            className={`w-full ${isRtl ? 'pr-14 pl-6' : 'pl-14 pr-6'} py-5 bg-white border-2 border-brand-navy/5 rounded-[2rem] shadow-xl focus:outline-none focus:border-brand-orange focus:ring-4 focus:ring-brand-orange/5 transition-all text-lg font-medium text-brand-navy`}
+          />
+        </motion.div>
       </div>
 
       {/* Global Alerts */}
@@ -240,7 +264,7 @@ export function DiscountsManager({ products, t, lang }: { products: Product[], t
 
       {/* Products Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {products.map((product) => {
+        {filteredProducts.map((product) => {
           const productId = product.firebaseId || product.id.toString();
           const currentDiscount = discountInputs[productId] || "";
           const originalPrice = parsePrice(String(product.price || "0"));

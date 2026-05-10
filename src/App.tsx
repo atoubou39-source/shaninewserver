@@ -818,25 +818,28 @@ const Products = ({
                       </p>
 
                       <div className="mt-auto">
+                        <div className="mb-6">
+                          {p.discountPrice ? (
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-brand-orange font-serif font-bold text-lg">
+                                {t.products.pricePrefix}{String(p.discountPrice).replace(/[^\d.]/g, '')}
+                              </span>
+                              <span className="text-gray-400 font-serif text-xs line-through">
+                                {t.products.pricePrefix}{String(p.price).replace(/[^\d.]/g, '')}
+                              </span>
+                              <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                {Math.round((1 - parseFloat(String(p.discountPrice).replace(/[^\d.]/g, '')) / parseFloat(String(p.price).replace(/[^\d.]/g, ''))) * 100)}% {t.products.off || 'OFF'}
+                              </span>
+                            </div>
+                          ) : (
+                            <p className="text-brand-orange font-serif font-bold text-lg">
+                              {t.products.pricePrefix}{String(p.price).replace(/[^\d.]/g, '')}
+                            </p>
+                          )}
+                        </div>
+
                         {user ? (
                           <>
-                            <div className="mb-6">
-                              {p.discountPrice ? (
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="text-brand-orange font-serif font-bold text-lg">
-                                    {t.products.pricePrefix}{String(p.discountPrice).replace(/[^\d.]/g, '')}
-                                  </span>
-                                  <span className="text-gray-400 font-serif text-xs line-through">
-                                    {t.products.pricePrefix}{String(p.price).replace(/[^\d.]/g, '')}
-                                  </span>
-                                </div>
-                              ) : (
-                                <p className="text-brand-orange font-serif font-bold text-lg">
-                                  {t.products.pricePrefix}{String(p.price).replace(/[^\d.]/g, '')}
-                                </p>
-                              )}
-                            </div>
-
                             {cartItem ? (
                               <div className="flex items-center justify-center">
                                 {activePill === p.id ? (
@@ -889,21 +892,16 @@ const Products = ({
                             )}
                           </>
                         ) : (
-                          <div className="space-y-4">
-                            <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest">
-                              {t.products.loginMessage}
-                            </p>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onOpenAuth();
-                              }}
-                              className="w-full border-2 border-brand-navy text-brand-navy py-4 rounded-xl text-[11px] tracking-[0.1em] font-bold flex items-center justify-center space-x-2 space-x-reverse hover:bg-brand-navy hover:text-white transition-all duration-300"
-                            >
-                              <Lock size={16} />
-                              <span>{t.products.loginToOrder}</span>
-                            </button>
-                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenAuth();
+                            }}
+                            className="w-full border-2 border-brand-navy text-brand-navy py-4 rounded-xl text-[11px] tracking-[0.1em] font-bold flex items-center justify-center space-x-2 space-x-reverse hover:bg-brand-navy hover:text-white transition-all duration-300"
+                          >
+                            <Lock size={16} />
+                            <span>{t.products.loginToOrder}</span>
+                          </button>
                         )}
                       </div>
                     </div>
@@ -3524,6 +3522,12 @@ const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManu
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
 
+                  {p.discountPrice && (
+                    <div className="absolute top-1.5 start-1.5 bg-red-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-sm z-10">
+                      {Math.round((1 - parseFloat(String(p.discountPrice).replace(/[^\d.]/g, '')) / parseFloat(String(p.price).replace(/[^\d.]/g, ''))) * 100)}% {t.products.off || 'OFF'}
+                    </div>
+                  )}
+
                   {/* Brand badge */}
                   <div className="absolute bottom-1.5 start-1.5 bg-white/90 backdrop-blur-sm rounded-lg shadow-sm p-1">
                     <img
@@ -3550,9 +3554,22 @@ const CustomerShop = ({ products, cart, onAddToCart, onUpdateQuantity, onSetManu
                     {p.name}
                   </p>
                   <div className={`flex items-center justify-between mt-auto pt-1.5 border-t border-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                    <span className="text-brand-orange font-bold text-sm">
-                      {t.products.pricePrefix}{String(p.price).replace(/SAR|ر\.س|SR|ريال/gi, "").replace(/[^\d.]/g, "").trim()}
-                    </span>
+                    <div className="flex flex-col">
+                      {p.discountPrice ? (
+                        <>
+                          <span className="text-brand-orange font-bold text-sm">
+                            {t.products.pricePrefix}{String(p.discountPrice).replace(/SAR|ر\.س|SR|ريال/gi, "").replace(/[^\d.]/g, "").trim()}
+                          </span>
+                          <span className="text-gray-400 text-[10px] line-through">
+                            {t.products.pricePrefix}{String(p.price).replace(/SAR|ر\.س|SR|ريال/gi, "").replace(/[^\d.]/g, "").trim()}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-brand-orange font-bold text-sm">
+                          {t.products.pricePrefix}{String(p.price).replace(/SAR|ر\.س|SR|ريال/gi, "").replace(/[^\d.]/g, "").trim()}
+                        </span>
+                      )}
+                    </div>
                     {!cartItem ? (
                       <button
                         onClick={(e) => { e.stopPropagation(); onAddToCart(p); setActivePill(p.id); }}
@@ -3657,6 +3674,17 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
     o.userId === user?.uid ||
     o.email?.toLowerCase() === user?.email?.toLowerCase()
   ), [orders, user]);
+
+  const [orderSearch, setOrderSearch] = useState("");
+
+  const filteredOrders = useMemo(() => {
+    const term = orderSearch.trim().toLowerCase();
+    if (!term) return customerOrders;
+    return customerOrders.filter(o => 
+      o.firebaseId.toLowerCase().includes(term) ||
+      (o.odooOrderName && o.odooOrderName.toLowerCase().includes(term))
+    );
+  }, [customerOrders, orderSearch]);
 
   const isRtl = lang === 'ar';
 
@@ -3800,7 +3828,7 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-center">
+      <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-4`}>
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -3810,7 +3838,16 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
           <p className="text-gray-500 mt-2">{t.orders.dashboard.ordersSubtitle}</p>
         </motion.div>
 
-        {/* Manual Sync Button Hidden - Runs in background */}
+        <div className="relative max-w-xs w-full">
+          <Search size={16} className={`absolute top-1/2 -translate-y-1/2 text-gray-400 ${lang === 'ar' ? 'right-4' : 'left-4'}`} />
+          <input
+            type="text"
+            value={orderSearch}
+            onChange={(e) => setOrderSearch(e.target.value)}
+            placeholder={lang === 'ar' ? 'بحث برقم الطلب...' : 'Search order number...'}
+            className={`w-full bg-white border border-gray-100 rounded-2xl py-3.5 px-11 text-sm focus:outline-none focus:border-brand-orange transition-all shadow-sm ${lang === 'ar' ? 'text-right' : 'text-left'}`}
+          />
+        </div>
       </div>
 
       <motion.div
@@ -3834,7 +3871,7 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {customerOrders.map((order) => (
+              {filteredOrders.map((order) => (
                 <tr key={order.firebaseId} className="hover:bg-gray-50/50 transition-colors group">
                   <td className={`px-8 py-6 ${lang === 'ar' ? 'text-right' : 'text-left'}`}>
                     <span className="text-[10px] font-mono text-gray-400 bg-gray-50 px-2 py-1 rounded">#{order.firebaseId.slice(0, 8).toUpperCase()}</span>
@@ -3898,6 +3935,13 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
                   </td>
                 </tr>
               ))}
+              {filteredOrders.length === 0 && customerOrders.length > 0 && (
+                <tr>
+                  <td colSpan={8} className="px-8 py-20 text-center text-gray-400 italic">
+                    {lang === 'ar' ? 'لا توجد نتائج مطابقة لبحثك' : 'No matching results found'}
+                  </td>
+                </tr>
+              )}
               {customerOrders.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-8 py-32 text-center">
@@ -3919,7 +3963,7 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
 
         {/* Mobile View: Cards */}
         <div className="md:hidden divide-y divide-gray-100">
-          {customerOrders.map((order) => {
+          {filteredOrders.map((order) => {
             const { label, color } = getStatusDetails(order.status, t);
             return (
               <div key={order.firebaseId} className="p-6 space-y-4">
@@ -3982,6 +4026,11 @@ const CustomerOrders = ({ orders, user, t, lang, onViewHistory, loadingHistory, 
               </div>
             );
           })}
+          {filteredOrders.length === 0 && customerOrders.length > 0 && (
+            <div className="p-10 text-center text-gray-400 italic">
+              {lang === 'ar' ? 'لا توجد نتائج مطابقة لبحثك' : 'No matching results found'}
+            </div>
+          )}
           {customerOrders.length === 0 && (
             <div className="p-12 text-center space-y-4">
               <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center text-gray-200 mx-auto">
@@ -5373,6 +5422,11 @@ const ProductManager = ({ products, setModalContent, t, lang }: { products: Prod
   const [newProduct, setNewProduct] = useState<Partial<Product>>({ name: "", description: "", price: "", image: "" });
   const [editingDiscount, setEditingDiscount] = useState<string | null>(null);
   const [discountValue, setDiscountValue] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const filteredProducts = products.filter(p => 
+    p.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   const handleUpdateProduct = async () => {
     if (editingProduct && editingProduct.firebaseId) {
@@ -5446,12 +5500,34 @@ const ProductManager = ({ products, setModalContent, t, lang }: { products: Prod
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm("Are you sure you want to delete this product?")) {
+  const handleDelete = async (product: Product) => {
+    const id = product.firebaseId;
+    if (!id) {
+      setModalContent({
+        title: lang === 'ar' ? "خطأ" : "Error",
+        message: lang === 'ar' 
+          ? "هذا المنتج مرتبط بالنظام (Odoo) ولم يتم رفعه لقاعدة بيانات المتجر بعد، لذا لا يمكن حذفه من هنا."
+          : "This product is from Odoo and hasn't been synced to the store database yet, so it cannot be deleted from here.",
+        type: 'error'
+      });
+      return;
+    }
+
+    if (confirm(lang === 'ar' ? "هل أنت متأكد من حذف هذا المنتج؟" : "Are you sure you want to delete this product?")) {
       try {
         await deleteDoc(doc(db, "products", id));
-      } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, `products/${id}`);
+        setModalContent({
+          title: lang === 'ar' ? "تم الحذف" : "Deleted",
+          message: lang === 'ar' ? "تم حذف المنتج بنجاح." : "Product deleted successfully.",
+          type: 'success'
+        });
+      } catch (error: any) {
+        console.error("Delete Error:", error);
+        setModalContent({
+          title: lang === 'ar' ? "خطأ في الحذف" : "Delete Error",
+          message: error.message || "Failed to delete product.",
+          type: 'error'
+        });
       }
     }
   };
@@ -5477,12 +5553,23 @@ const ProductManager = ({ products, setModalContent, t, lang }: { products: Prod
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-end">
-        <div>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+        <div className="flex-1 w-full">
           <h1 className="text-3xl font-serif text-brand-navy font-bold">Product Management</h1>
           <p className="text-gray-500 mt-2 text-sm">Add, edit, or remove products from your collection.</p>
+          
+          <div className="mt-4 relative max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={lang === 'ar' ? "بحث باسم المنتج..." : "Search products..."}
+              className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-brand-orange text-sm"
+            />
+          </div>
         </div>
-        <div className="flex space-x-4">
+        <div className="flex space-x-4 w-full md:w-auto">
           <button
             onClick={handleSeed}
             className="border border-brand-navy text-brand-navy px-6 py-3 rounded-xl text-xs font-bold flex items-center space-x-2 hover:bg-gray-50 transition-all"
@@ -5567,7 +5654,7 @@ const ProductManager = ({ products, setModalContent, t, lang }: { products: Prod
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {products.map((p) => (
+            {filteredProducts.map((p) => (
               <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
                 <td className="px-8 py-4">
                   <div className="flex items-center space-x-4">
@@ -5623,7 +5710,7 @@ const ProductManager = ({ products, setModalContent, t, lang }: { products: Prod
                     <button onClick={() => handlePublish(p.firebaseId || "")} className="text-brand-orange hover:text-brand-orange-hover text-xs font-bold transition-colors">Publish</button>
                   )}
                   <button onClick={() => setEditingProduct(p)} className="text-gray-400 hover:text-brand-navy transition-colors"><Edit size={16} /></button>
-                  <button onClick={() => handleDelete(p.firebaseId || "")} className="text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
+                  <button onClick={() => handleDelete(p)} className="text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
                 </td>
               </tr>
             ))}
@@ -6865,20 +6952,62 @@ export default function App() {
     if (!docName) return;
 
     setSelectedDocType(type);
-    setSelectedInvoiceOrder(order);
     setInvoiceDetails(null);
     setLoadingInvoice(true);
 
-    try {
-      const resp = await fetch(getApiUrl(`/api/odoo/invoice-details/${encodeURIComponent(docName)}`));
-      const data = await resp.json();
-      if (data.success && data.invoice) {
-        setInvoiceDetails(data.invoice);
+    const maxRetries = 5;
+    let attempt = 0;
+    let success = false;
+
+    while (attempt < maxRetries && !success) {
+      try {
+        const resp = await fetch(getApiUrl(`/api/odoo/invoice-details/${encodeURIComponent(docName)}`));
+        const text = await resp.text();
+        
+        // Try to parse JSON regardless of status code to see if there's a specific error message
+        let data: any = null;
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          // Not JSON - likely Render startup page or raw error
+        }
+
+        if (resp.ok && data && data.success) {
+          if (data.invoice) setInvoiceDetails(data.invoice);
+          setSelectedInvoiceOrder(order);
+          success = true;
+          break;
+        } else if (data && !data.success) {
+          // The server is UP and returned a JSON error. Don't retry.
+          setModalContent({
+            title: lang === 'ar' ? "خطأ من النظام" : "System Error",
+            message: data.error || data.message || (lang === 'ar' ? "فشل في تحميل البيانات" : "Failed to load data"),
+            type: 'error'
+          });
+          setLoadingInvoice(false);
+          return;
+        } else {
+          // Not OK or Not JSON. Wait and retry (might be cold start)
+          await new Promise(r => setTimeout(r, 4000));
+          attempt++;
+        }
+      } catch (e) {
+        console.error(`[Invoice Modal] Attempt ${attempt + 1} failed:`, e);
+        await new Promise(r => setTimeout(r, 4000));
+        attempt++;
       }
-    } catch (e) {
-      console.error("[Invoice Modal] Error fetching details:", e);
-    } finally {
-      setLoadingInvoice(false);
+    }
+
+    setLoadingInvoice(false);
+
+    if (!success) {
+      setModalContent({
+        title: lang === 'ar' ? "الخادم يحتاج وقتًا أطول" : "Server Needs More Time",
+        message: lang === 'ar' 
+          ? "الخادم لا يزال في مرحلة الاستيقاظ أو هناك مشكلة في الاتصال. يرجى المحاولة مرة أخرى."
+          : "The server is still waking up or there is a connection issue. Please try again.",
+        type: 'error'
+      });
     }
   };
 
@@ -7353,6 +7482,30 @@ export default function App() {
           </motion.div>
         </div>
       )}
+
+      {/* Loading Overlay for Invoices/Server Wake-up */}
+      <AnimatePresence>
+        {loadingInvoice && (
+          <div className="fixed inset-0 z-[1000] flex flex-col items-center justify-center bg-brand-navy/60 backdrop-blur-md">
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              className="flex flex-col items-center space-y-6"
+            >
+              <div className="w-16 h-16 border-4 border-brand-orange border-t-transparent rounded-full animate-spin shadow-lg" />
+              <div className="text-center">
+                <p className="text-white font-serif text-2xl font-bold mb-2">
+                  {lang === 'ar' ? 'جاري تجهيز المستند...' : 'Preparing Document...'}
+                </p>
+                <p className="text-white/70 text-sm animate-pulse">
+                  {lang === 'ar' ? 'الخادم يستيقظ، يرجى الانتظار ثواني قليلة' : 'Server is waking up, please wait a few seconds'}
+                </p>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Order History Modal */}
       <AnimatePresence>

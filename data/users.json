@@ -3,7 +3,7 @@
     "uid": "966500000000",
     "phone": "966500000000",
     "email": "atoubou39@gmail.com",
-    "passwordHash": "$2b$12$Qp6mCtg.DuYIdUCsrU/6bOjCtAY/mlWgmbcN03vyVVh5xWMd02yXG",
+    "passwordHash": "$2b$10$arzDkeyM2RdKABXMAqMSyuXYvCn7oHAFOZKHpcQdacDdxkLWdlPO6",
     "name": "Admin User",
     "role": "admin",
     "isAdmin": true,

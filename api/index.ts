@@ -826,15 +826,25 @@ const sanitizePhone = (phone: string): string => {
       // Fetch invoice/order lines
       if (invoice.invoice_line_ids && invoice.invoice_line_ids.length > 0) {
         const lineModel = invoice.is_sale_order ? "sale.order.line" : "account.move.line";
+        
+        // Odoo 18 is strict: only request fields that exist in the model
+        const fields = ["product_id", "name", "price_unit", "price_subtotal"];
+        if (invoice.is_sale_order) {
+          fields.push("product_uom_qty", "tax_id");
+        } else {
+          fields.push("quantity", "tax_ids");
+        }
+
         const lines = await callOdoo(
           "object", "execute_kw", odooConfig.db, uid, getOdooCredential(),
           lineModel, "read",
-          [invoice.invoice_line_ids, ["product_id", "name", "product_uom_qty", "quantity", "price_unit", "tax_id", "tax_ids", "price_subtotal"]]
+          [invoice.invoice_line_ids, fields]
         );
+
         invoice.lines = (lines as any[]).map(l => ({
           ...l,
           quantity: l.quantity || l.product_uom_qty || 0,
-          tax_ids: l.tax_ids || l.tax_id || []
+          tax_ids: l.tax_ids || (Array.isArray(l.tax_id) ? l.tax_id : [])
         })).filter((l: any) => l.product_id); // Filter out section lines
       }
 
